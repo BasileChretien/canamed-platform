@@ -904,12 +904,12 @@ arising from the termination itself, without prejudice to accrued rights.
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
 | G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; a sweep was built on 2026-10-07 and is **not yet scheduled**. Disclosure and the Art. 15 route are untouched |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | Narrowed for ANONYMOUS accounts only by the G13 job; unchanged for signed-in ones |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | Narrowed by the G13 job for an ANONYMOUS account's `users/` node only. Scenarios and moderation reports are deliberately left in place, for everyone |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
 | G12 withdrawal does not produce erasure | BLOCKING | [OWNER] | [DATE] | |
-| G13 anonymous sign-in account: undisclosed, never deleted | HIGH — **MECHANISM BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED** | [OWNER] | [DATE] | `scripts/cleanup-anonymous-accounts.js` removes an anonymous account idle ≥ 90 days that no live session names, with the records keyed by it. It runs only on manual dispatch and is a dry run unless confirmed. **Until it is scheduled, retention is still indefinite and the notice still omits the identifier** — the cron, the armed confirm and the notice must land in one change. This item closes then, not now |
+| G13 anonymous sign-in account: undisclosed, never deleted | HIGH — **MECHANISM BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED** | [OWNER] | [DATE] | `scripts/cleanup-anonymous-accounts.js` removes an anonymous account idle ≥ 90 days that no live session names, with its `users/` node. It runs only on manual dispatch and is a dry run unless confirmed. **Until it is scheduled, retention is still indefinite and the notice still omits the identifier** — the cron, the armed confirm and the notice must land in one change. This item closes then, not now |
 | Annex IV — EEA → Hugging Face mechanism | BLOCKING | [OWNER] | [DATE] | |
 | Annex IV — Google / GitHub DPA evidence | BLOCKING | [OWNER] | [DATE] | |
 
@@ -2981,9 +2981,11 @@ is deliberate rather than incidental.
 
 **G8 — MEDIUM. Account profiles, admin secrets, recovery records, authored
 scenarios, abuse reports and moderation records** have no automated deletion.
-*(Narrowed 2026-10-07 for anonymous accounts only: the G13 job removes
-`users/<uid>`, `scenarios/<uid>` and that account's reports along with the
-account. For a signed-in account nothing here has changed — and the client's own
+*(Narrowed 2026-10-07 for anonymous accounts only, and only for `users/<uid>`,
+which the G13 job removes along with the account. It deliberately leaves
+`scenarios/<uid>` and moderation reports in place — see G13 for why — so those
+two limbs are unchanged for everyone. For a signed-in account nothing here has
+changed at all — and the client's own
 `accountDelete()` removes `users/<uid>` but not `scenarios/<uid>`, which is then
 unreadable by anyone and kept for ever.)*
 
@@ -3257,9 +3259,9 @@ Three things were wrong, and only the third has a mechanism:
    to, and still there (issue #347).
 
 *The mechanism.* `scripts/cleanup-anonymous-accounts.js` removes an anonymous
-account that has gone 90 days without use, together with what is keyed by it
-outside a session: `users/<uid>`, `scenarios/<uid>`, `rateLimits/uid/<uid>` and
-its `reports/scenarios/*/<uid>`. Two properties matter for what may be told to
+account that has gone 90 days without use, together with its `users/<uid>`
+node. Its chat counters need no rule of their own: every one is swept on its own
+clock within days (G7). Three properties matter for what may be told to
 participants:
 
 - **"90 days" is a floor, and the true bound is about 120.** An account that a
@@ -3267,10 +3269,22 @@ participants:
   because a session closed on its 89th day lives another 30 and would otherwise
   point at a UID nobody can sign in as. The notice must state the period with
   that qualification, not as a bare 90.
-- **Only accounts POSITIVELY identified as anonymous are touched.** An account
-  is deleted because its own record shows no sign-in provider, never because a
-  UID is absent from the listing. A signed-in account is out of scope however
-  long it has been idle; its retention is G8's subject, not this item's.
+- **Only accounts POSITIVELY identified as anonymous AND idle are touched, and
+  anything that cannot be shown is kept.** An account is deleted because its own
+  record shows no sign-in provider and a readable last-refresh date that is old
+  — never because a UID is absent from the listing, and never on a date that is
+  missing or unreadable. The listing as a whole must contain signed-in accounts,
+  or the run is refused. Each candidate is fetched again immediately before
+  deletion and dropped if it has signed in or returned. A signed-in account is
+  out of scope however long it has been idle; its retention is G8's subject.
+- **Two things keyed by the UID are deliberately NOT deleted, and "everything
+  recorded against the identifier is removed" must therefore not be said.**
+  `scenarios/<uid>`: the client saves a scenario only for a signed-in user, so
+  one found under an "anonymous" UID is treated as evidence that the account is
+  not anonymous, and spares it. `reports/scenarios/<shareId>/<uid>`: a
+  moderation report may concern content still published and not yet reviewed.
+  **[CONTROLLER TO DECIDE: how long an unactioned report is kept, and whether a
+  report outlives its reporter's account.]** Both remain under G8.
 
 It also removes, for anonymous accounts that still exist, the session history
 described in Annex I §5 — written for every anonymous joiner until 2026-08-25.
@@ -3280,8 +3294,10 @@ account, signed-in ones included: the UID, the three timestamps, and the **name*
 of each sign-in provider. **No e-mail address and no display name** — the
 listing asks Google for a partial response and aborts if anything else comes
 back (`scripts/lib/auth-accounts.js`). In addition: the member and creator UIDs
-of each live session, the keys of the four trees above, and the rate-limit
-counters. That is a new category crossing to the United States and must be added
+of each live session; the keys of `users/` and `scenarios/`, and of each quiet
+anonymous account's `users/` node (the words "history" and "profile", never
+their contents); and the keys of the rate-limit tree — UID or session code, and
+the time buckets. That is a new category crossing to the United States and must be added
 to the transfer description in the same change that schedules the job.
 
 *What is NOT established.* The job has never run against production. Whether the

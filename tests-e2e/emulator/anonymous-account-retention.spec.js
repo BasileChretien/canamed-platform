@@ -42,7 +42,9 @@
 // @ts-check
 const { test, expect, useEmulator, PROJECT, dbReadAsOwner } = require("./fixtures");
 const { runAnonymousRetention } = require("../../scripts/lib/anonymous-retention-job");
-const { listAccounts, deleteAccounts, normaliseAccount } = require("../../scripts/lib/auth-accounts");
+const {
+  listAccounts, lookupAccounts, deleteAccounts, normaliseAccount
+} = require("../../scripts/lib/auth-accounts");
 const { DAY_MS } = require("../../scripts/lib/anonymous-retention");
 
 const AUTH_API = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1";
@@ -81,6 +83,18 @@ async function emulatorAccounts() {
   return (await res.json()).users || [];
 }
 
+/** A signed-in (e-mail/password) account. The job refuses a listing that has
+ *  none, and this is also the account it must never touch. */
+async function createSignedInAccount(label) {
+  const email = label + "-" + Date.now() + "@example.test";
+  const res = await fetch(AUTH_API + "/accounts:signUp?key=fake-emulator-key", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password: "Emu-Passw0rd!", returnSecureToken: true })
+  });
+  if (res.status !== 200) throw new Error("could not create an e-mail account: HTTP " + res.status);
+  return { email, uid: (await res.json()).localId };
+}
+
 test.describe("anonymous-account retention against the emulators (#347)", () => {
 
   test("the lister REFUSES a server that hands back an e-mail address", async () => {
@@ -91,12 +105,7 @@ test.describe("anonymous-account retention against the emulators (#347)", () => 
        came back, without repeating it.
        If the emulator ever learns to honour the mask, the first expectation
        below fails; that is the signal to make this a test of the masked path. */
-    const address = "masked-" + Date.now() + "@example.test";
-    const signUp = await fetch(AUTH_API + "/accounts:signUp?key=fake-emulator-key", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: address, password: "Emu-Passw0rd!", returnSecureToken: true })
-    });
-    expect(signUp.status, "could not create the e-mail account this test needs").toBe(200);
+    const { email: address } = await createSignedInAccount("masked");
 
     const held = (await emulatorAccounts()).find((u) => u.email === address);
     expect(held, "the emulator should hold the address it was just given").toBeTruthy();
@@ -126,6 +135,10 @@ test.describe("anonymous-account retention against the emulators (#347)", () => 
     expect(wrote).toBe("ALLOWED");
     expect(await dbReadAsOwner("users/" + uidA + "/history/EMUHIST")).toBeTruthy();
 
+    /* A signed-in account, exactly as old as A by the job's clock. The job
+       refuses a listing with none, and this is the one it must leave alone. */
+    const namedAccount = await createSignedInAccount("signedin");
+
     // ── B: just as idle, but a live session still names them ────────────────
     const ctxB = await browser.newContext();
     const pageB = await ctxB.newPage();
@@ -134,6 +147,16 @@ test.describe("anonymous-account retention against the emulators (#347)", () => 
     await signedIn(pageB);
     const uidB = await uidOf(pageB);
     expect(uidB, "a second CONTEXT must be a second user").not.toBe(uidA);
+    /* B carries the same bug-written history. B's ACCOUNT will survive; the
+       history should not. */
+    const wroteB = await pageB.evaluate(async (uid) => {
+      try {
+        await firebase.database().ref("users/" + uid + "/history/EMUHIST")
+          .set({ code: "EMUHIST", joinedAt: Date.now() });
+        return "ALLOWED";
+      } catch (e) { return (e && e.code) || "DENIED"; }
+    }, uidB);
+    expect(wroteB).toBe("ALLOWED");
 
     const code = "ANONRET" + Date.now().toString(36).toUpperCase();
     await dbWrite("PUT", "sessions/" + code, {
@@ -151,7 +174,11 @@ test.describe("anonymous-account retention against the emulators (#347)", () => 
           lastRefreshAt: u.lastRefreshAt,
           providerUserInfo: (u.providerUserInfo || []).map((p) => ({ providerId: p.providerId }))
         })),
-        deleteAccounts: (uids) => deleteAccounts(authDeps, uids),     // the REAL request
+        /* The REAL re-check and the REAL delete. The candidates are all
+           anonymous, and the emulator's record for an anonymous account holds
+           nothing beyond the masked fields, so the strict check passes. */
+        lookupAccounts: (uids) => lookupAccounts(authDeps, uids),
+        deleteAccounts: (uids) => deleteAccounts(authDeps, uids),
         fetchShallow: (p) => dbGet(p, "&shallow=true"),
         readValue: (p) => dbGet(p),
         updateRoot: (update) => dbWrite("PATCH", "", update)
@@ -171,10 +198,14 @@ test.describe("anonymous-account retention against the emulators (#347)", () => 
       /* The control that makes the line above mean something: B was exactly as
          idle, and survives only because a live session names them. */
       expect(remaining, "B is still in a live session and must survive").toContain(uidB);
-      /* And the signed-in account the previous test created is as old as A by
-         this clock. It has a provider, so it is not this job's to touch. */
-      expect((await emulatorAccounts()).some((u) => u.email),
-        "a signed-in account was deleted by a job that only removes anonymous ones").toBe(true);
+      /* ...but the history the bug wrote under B goes, account or no account. */
+      expect(await dbReadAsOwner("users/" + uidB), "B's bug-written history must be gone").toBeNull();
+      /* And the signed-in account is as idle as A by this clock. It has a
+         provider, so it is not this job's to touch. */
+      expect(remaining,
+        "a signed-in account was deleted by a job that only removes anonymous ones")
+        .toContain(namedAccount.uid);
+      expect(report.accounts.named).toBeGreaterThanOrEqual(1);
 
       // ── A's next visit ────────────────────────────────────────────────────
       expect(await uidOf(page), "the open tab has not noticed, and need not").toBe(uidA);

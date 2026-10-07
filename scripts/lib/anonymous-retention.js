@@ -9,24 +9,43 @@
  * The oldest were 101 days old when anyone looked (2026-08-25), still present,
  * never returned to. Auto-deletion of anonymous users is an Identity Platform
  * feature this project does not have, so retention was indefinite by absence of
- * any mechanism. The account is a persistent identifier; the records keyed by
- * it outside a session are what this file reaches:
+ * any mechanism. The account is a persistent identifier; what this reaches,
+ * outside any session, is:
  *
- *   users/<uid>                          history written by a since-fixed bug
- *   scenarios/<uid>                      the rules permit an anonymous owner
- *   rateLimits/uid/<uid>                 the chat's usage counters
- *   reports/scenarios/<shareId>/<uid>    a moderation report, keyed by reporter
+ *   users/<uid>              history written by a since-fixed bug (#348)
+ *
+ * (The chat's usage counters, rateLimits/uid/<uid>/…, are also keyed by it.
+ * They need no rule here: every one is swept on its own clock within days —
+ * see rate-limit-retention.js — long before its account could expire.)
  *
  * Everything INSIDE a session (members, roomOf, clientMapping, …) is already on
  * the session clock and is not touched here.
  *
- * THE RULE THAT SHAPES EVERYTHING BELOW: an account is deleted only when it has
- * been POSITIVELY identified as anonymous from its own Auth record. Never by
- * elimination. A uid that merely fails to appear in the listing is an "orphan",
- * counted and — unless an operator asks — left alone, because "not in the list"
- * is also what a truncated listing looks like, and acting on that would delete
- * signed-in users' profiles and authored scenarios. Under-deleting is
- * recoverable on the next run. Over-deleting is not.
+ * THE RULE THAT SHAPES EVERYTHING BELOW: an account is deleted only on
+ * POSITIVE evidence, at every step, and anything that cannot be shown is kept.
+ *
+ *   - anonymous: its own Auth record lists no sign-in provider — never
+ *     because a uid merely failed to appear in the listing;
+ *   - idle: it carries a readable last-refresh date and that date is old. A
+ *     missing or unreadable date is not "old", it is unknown, and unknown
+ *     stays (classifyAccounts);
+ *   - not contradicted: the database holds nothing only a signed-in user
+ *     could have put there (findContradictions in the job);
+ *   - still so a moment before the delete: fetched again, by a different
+ *     endpoint (recheck).
+ *
+ * And the listing as a whole has to look like a listing (listingSanity),
+ * because every one of those checks reads fields the server chose to send.
+ * Under-deleting is recoverable on the next run. Over-deleting is not.
+ *
+ * WHAT IS DELIBERATELY LEFT ALONE:
+ *   - `scenarios/<uid>`. The client refuses to save a scenario for an
+ *     anonymous user, so one existing under an "anonymous" uid is evidence the
+ *     account is not what the listing says. It protects the account instead
+ *     of being deleted with it.
+ *   - `reports/scenarios/<shareId>/<uid>`. A moderation report may concern content
+ *     that is still published and that nobody has reviewed. Deleting evidence
+ *     on a timer is a product decision, not a retention default.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -40,16 +59,20 @@ const MIN_RETENTION_DAYS = 7;
    deletes sooner. Same reasoning as MAX_FALLBACK_DAYS in credential-retention. */
 const MAX_RETENTION_DAYS = 90;
 
+/* An account used within the last day is left entirely alone, including its
+   bug-written history: its owner may be in the middle of creating an account,
+   and a job that runs for minutes must not race someone who is typing. */
+const QUIET_MS = DAY_MS;
+
 /* Firebase-generated uids are 28 base-62 characters. Anything outside this set
    is never turned into a database path: an empty or slash-bearing "uid" in a
    multi-path update would address a parent node. */
 const UID_RE = /^[A-Za-z0-9:_-]{1,128}$/;
-/* sharedScenarios ids, as the rules validate them. */
-const SHARE_ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
 /* One RTDB key: no path separators and none of the characters RTDB forbids. */
 const RTDB_KEY = "[^/.$#\\[\\]\\u0000-\\u001f\\u007f]+";
 
 const isUid = (v) => typeof v === "string" && UID_RE.test(v);
+const usableMs = (v) => typeof v === "number" && Number.isFinite(v) && v > 0;
 
 function validateWindowDays(days) {
   if (typeof days !== "number" || !Number.isSafeInteger(days)) {
@@ -78,13 +101,23 @@ function isAnonymous(acct) {
   return !!acct && Array.isArray(acct.providers) && acct.providers.length === 0;
 }
 
+/**
+ * Can this account's idleness be measured at all?
+ *
+ * It needs a readable LAST-REFRESH date ("when an ID token was last minted for
+ * this account", so every account that ever signed in has one), and no date
+ * field that was present but garbled. The sign-in date alone is not enough: for
+ * a returning participant it never moves.
+ */
+function isDated(acct) {
+  return !!acct && !acct.dateFault && usableMs(acct.lastRefreshMs);
+}
+
 /** The most recent sign of use, or null when the record carries no usable date. */
 function lastActivityMs(acct) {
   let best = null;
   for (const v of [acct.createdMs, acct.lastLoginMs, acct.lastRefreshMs]) {
-    if (typeof v === "number" && Number.isFinite(v) && v > 0 && (best === null || v > best)) {
-      best = v;
-    }
+    if (usableMs(v) && (best === null || v > best)) best = v;
   }
   return best;
 }
@@ -94,18 +127,20 @@ function lastActivityMs(acct) {
  *
  * @param {Array} accounts normalised accounts (see auth-accounts.js)
  * @param {object} opts { nowMs, windowMs, protectedUids:Set }
- * @returns {{total:number, named:number, anonymous:number, expired:string[],
- *            kept:number, protected:number, undated:number, unusable:number,
- *            anonymousUids:Set<string>, authUids:Set<string>}}
+ * @returns {{total:number, named:number, anonymous:number, withRefresh:number,
+ *            expired:string[], kept:number, protected:number, undated:number,
+ *            unusable:number, anonymousUids:Set<string>, quietUids:Set<string>,
+ *            authUids:Set<string>}}
  *   `protected`, `undated` and `unusable` are subsets of what is kept.
+ *   `quietUids` are the anonymous accounts shown idle for at least a day.
  */
 function classifyAccounts(accounts, opts) {
   const { nowMs, windowMs } = opts;
   const protectedUids = opts.protectedUids || new Set();
   const out = {
-    total: 0, named: 0, anonymous: 0, expired: [], kept: 0,
+    total: 0, named: 0, anonymous: 0, withRefresh: 0, expired: [], kept: 0,
     protected: 0, undated: 0, unusable: 0,
-    anonymousUids: new Set(), authUids: new Set()
+    anonymousUids: new Set(), quietUids: new Set(), authUids: new Set()
   };
 
   for (const acct of accounts || []) {
@@ -116,18 +151,20 @@ function classifyAccounts(accounts, opts) {
 
     if (!isAnonymous(acct)) { out.named++; continue; }
     out.anonymous++;
+    if (usableMs(acct.lastRefreshMs)) out.withRefresh++;
 
     if (!isUid(acct.uid)) { out.unusable++; out.kept++; continue; }
     out.anonymousUids.add(acct.uid);
 
-    const last = lastActivityMs(acct);
-    if (last === null) {
-      /* Undated: kept, and reported. Treating it as infinitely old would
-         delete exactly the records understood least. */
+    if (!isDated(acct)) {
+      /* Kept, and reported. Treating it as infinitely old would delete exactly
+         the records understood least. */
       out.undated++; out.kept++;
       continue;
     }
-    if (nowMs - last < windowMs) { out.kept++; continue; }
+    const idleMs = nowMs - lastActivityMs(acct);
+    if (idleMs >= QUIET_MS) out.quietUids.add(acct.uid);
+    if (idleMs < windowMs) { out.kept++; continue; }
     if (protectedUids.has(acct.uid)) { out.protected++; out.kept++; continue; }
     out.expired.push(acct.uid);
   }
@@ -135,26 +172,118 @@ function classifyAccounts(accounts, opts) {
   return out;
 }
 
+/* Does the listing look like a listing of THIS project? Every check above
+   reads a field the server chose to send, so a response that silently dropped
+   one would make every account look anonymous, or every account look idle.
+   These are the three shapes that would take, and each refuses the run. */
+const UNDATED_FLOOR = 10;
+
+function listingSanity(cls) {
+  if (cls.total > 0 && cls.named === 0) {
+    return {
+      ok: false,
+      error: "no account in the listing has a sign-in provider. This project has " +
+        "signed-in facilitators, so that means the provider field is missing " +
+        "from the response — and without it every account looks anonymous. " +
+        "Nothing was deleted."
+    };
+  }
+  if (cls.anonymous > 0 && cls.withRefresh === 0) {
+    return {
+      ok: false,
+      error: "no anonymous account carries a last-refresh date. That date is the " +
+        "only sign that a returning participant is still active, so without " +
+        "it idleness cannot be judged. Nothing was deleted."
+    };
+  }
+  if (cls.undated > Math.max(UNDATED_FLOOR, cls.anonymous / 2)) {
+    return {
+      ok: false,
+      error: cls.undated + " of " + cls.anonymous + " anonymous accounts have no " +
+        "readable last-use date. A few is noise; this many means the date " +
+        "format changed. Nothing was deleted."
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * A copy of `cls` in which some uids are SPARED: taken out of `expired` if they
+ * were in it, and remembered so that no later step touches anything of theirs.
+ * Used for each check that finds a reason to leave an account alone; `counter`
+ * records how many it found.
+ */
+function sparing(cls, uids, counter) {
+  const spare = new Set(uids);
+  const expired = cls.expired.filter((u) => !spare.has(u));
+  const sparedUids = new Set(cls.sparedUids || []);
+  for (const u of spare) sparedUids.add(u);
+  return Object.assign({}, cls, {
+    expired, sparedUids,
+    kept: cls.kept + (cls.expired.length - expired.length),
+    [counter]: spare.size
+  });
+}
+
+/**
+ * The anonymous accounts that still exist, are not about to be deleted, have
+ * been quiet for a day, have not been spared, and have a `users/` node. The
+ * client never writes a profile for an anonymous user and never shows them a
+ * history, so what sits there is the session history the pre-2026-08-25 bug
+ * wrote for every joiner.
+ */
+function historyCandidates(cls, usersKeys) {
+  const expired = new Set(cls.expired);
+  const spared = cls.sparedUids || new Set();
+  return (usersKeys || []).filter((uid) =>
+    isUid(uid) && cls.quietUids.has(uid) && !expired.has(uid) && !spared.has(uid)).sort();
+}
+
+/**
+ * Judge a fresh fetch of accounts about to be acted on. An account survives
+ * only if it is STILL there, STILL anonymous, STILL dated and STILL idle for
+ * `idleMs` — someone who came back, or created an account, in the minutes
+ * since the listing is dropped.
+ *
+ * @returns {{still:string[], changed:number, gone:number}}
+ *   `gone`: no longer has an account at all, so there is nothing to delete.
+ */
+function recheck(candidates, freshAccounts, opts) {
+  const { nowMs, idleMs } = opts;
+  const fresh = new Map();
+  for (const a of freshAccounts || []) if (a && a.uid) fresh.set(a.uid, a);
+  const out = { still: [], changed: 0, gone: 0 };
+  for (const uid of candidates) {
+    const a = fresh.get(uid);
+    if (!a) { out.gone++; continue; }
+    if (!isAnonymous(a) || !isDated(a) || nowMs - lastActivityMs(a) < idleMs) {
+      out.changed++;
+      continue;
+    }
+    out.still.push(uid);
+  }
+  return out;
+}
+
 /**
  * Build the database paths to delete.
  *
- * @param {object} cls        result of classifyAccounts()
- * @param {object} keysets    { users:string[], scenarios:string[],
- *                              rateLimitUids:string[],
- *                              reports:{[shareId]:string[]} } — KEYS only
- * @param {object} [opts]     { sweepOrphans:boolean }
- * @returns {{paths:string[], expiredPaths:number, legacyHistory:number,
- *            orphans:{users:number, scenarios:number, rateLimits:number,
- *                     reports:number}, orphanPaths:number, skippedKeys:number}}
+ * @param {object} sets     { expired:string[], history:string[], authUids:Set }
+ * @param {object} keysets  { users:string[], scenarios:string[] } — KEYS only
+ * @param {object} [opts]   { sweepOrphans:boolean }
+ * @returns {{paths:string[], expiredPaths:number, historyPaths:number,
+ *            orphans:{users:number, scenarios:number},
+ *            orphanPaths:number, skippedKeys:number}}
  */
-function planDeletion(cls, keysets, opts) {
+function planDeletion(sets, keysets, opts) {
   const sweepOrphans = !!(opts && opts.sweepOrphans);
-  const expired = new Set(cls.expired);
+  const expired = new Set(sets.expired);
+  const history = new Set(sets.history);
   const ks = keysets || {};
   const paths = [];
   const out = {
-    paths, expiredPaths: 0, legacyHistory: 0,
-    orphans: { users: 0, scenarios: 0, rateLimits: 0, reports: 0 },
+    paths, expiredPaths: 0, historyPaths: 0,
+    orphans: { users: 0, scenarios: 0 },
     orphanPaths: 0, skippedKeys: 0
   };
 
@@ -162,31 +291,24 @@ function planDeletion(cls, keysets, opts) {
     for (const uid of keys || []) {
       if (!isUid(uid)) { out.skippedKeys++; continue; }
       if (expired.has(uid)) {
+        /* `scenarios` is never deleted for an account being removed: the job
+           treats a scenarios node as evidence against anonymity and spares
+           the account, so none reaches here. Skipped rather than trusted. */
+        if (kind === "scenarios") continue;
         paths.push(pathFor(uid));
         out.expiredPaths++;
-      } else if (!cls.authUids.has(uid)) {
+      } else if (!sets.authUids.has(uid)) {
         out.orphans[kind]++;
         if (sweepOrphans) { paths.push(pathFor(uid)); out.orphanPaths++; }
-      } else if (kind === "users" && cls.anonymousUids.has(uid)) {
-        /* A LIVE anonymous account with a users/ node. The client refuses to
-           write a profile for an anonymous user, so what is here is the
-           session history the pre-2026-08-25 bug wrote for every joiner — and
-           the client refuses to show it to them either. Removed now rather
-           than when the account ages out: it should never have existed. */
+      } else if (kind === "users" && history.has(uid)) {
         paths.push("users/" + uid + "/history");
-        out.legacyHistory++;
+        out.historyPaths++;
       }
     }
   };
 
   visit(ks.users, "users", (uid) => "users/" + uid);
   visit(ks.scenarios, "scenarios", (uid) => "scenarios/" + uid);
-  visit(ks.rateLimitUids, "rateLimits", (uid) => "rateLimits/uid/" + uid);
-  for (const shareId of Object.keys(ks.reports || {})) {
-    if (!SHARE_ID_RE.test(shareId)) { out.skippedKeys++; continue; }
-    visit(ks.reports[shareId], "reports",
-      (uid) => "reports/scenarios/" + shareId + "/" + uid);
-  }
   return out;
 }
 
@@ -208,11 +330,11 @@ function orphanTripwire(orphanTotal, authTotal) {
   };
 }
 
+const UID = UID_RE.source.slice(1, -1);
 const SAFE_PATHS = [
-  new RegExp("^users/" + UID_RE.source.slice(1, -1) + "(/history)?$"),
-  new RegExp("^scenarios/" + UID_RE.source.slice(1, -1) + "$"),
-  new RegExp("^reports/scenarios/" + SHARE_ID_RE.source.slice(1, -1) + "/" +
-             UID_RE.source.slice(1, -1) + "$"),
+  new RegExp("^users/" + UID + "(/history)?$"),
+  /* Reachable only through the orphan sweep. */
+  new RegExp("^scenarios/" + UID + "$"),
   /* rateLimits/<scope>/<id> and rateLimits/<scope>/<id>/<bucket> — never the
      scope node or the tree itself. */
   new RegExp("^rateLimits/(uid|session)/" + RTDB_KEY + "(/" + RTDB_KEY + ")?$")
@@ -260,8 +382,9 @@ function chunk(list, size) {
 }
 
 module.exports = {
-  validateWindowDays, isAnonymous, lastActivityMs, classifyAccounts,
-  planDeletion, orphanTripwire, assertSafePaths, dropDescendants, chunk, isUid,
-  DEFAULT_RETENTION_DAYS, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS,
-  ORPHAN_FLOOR, ORPHAN_RATIO, DAY_MS, UID_RE, SHARE_ID_RE
+  validateWindowDays, isAnonymous, isDated, lastActivityMs, classifyAccounts,
+  listingSanity, sparing, historyCandidates, recheck, planDeletion, orphanTripwire,
+  assertSafePaths, dropDescendants, chunk, isUid,
+  DEFAULT_RETENTION_DAYS, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS, QUIET_MS,
+  ORPHAN_FLOOR, ORPHAN_RATIO, UNDATED_FLOOR, DAY_MS, UID_RE
 };

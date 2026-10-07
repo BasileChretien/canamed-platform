@@ -78,10 +78,17 @@ function bucketWindow(bucket) {
  * being wrong is small and bounded — a counter restarts — and such keys are
  * counted separately so a change of format on the proxy side shows up in the
  * report instead of hiding in the total.
+ *
+ * So is a well-formed key for a window that has NOT STARTED. The proxy only
+ * ever writes the current hour and the current day, so "h999999999" or
+ * "d20991231" is not a counter, it is the same junk in a valid costume — and
+ * judged by its own start date it would never expire. One window of slack
+ * covers a clock that disagrees with the proxy's.
  */
 function isStaleBucket(bucket, nowMs) {
   const w = bucketWindow(bucket);
   if (!w) return true;
+  if (w.startMs > nowMs + w.windowMs) return true;
   return nowMs >= w.startMs + TTL_WINDOWS * w.windowMs;
 }
 

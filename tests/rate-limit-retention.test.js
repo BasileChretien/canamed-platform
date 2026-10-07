@@ -88,6 +88,25 @@ test("a key in no known format is stale, so junk cannot outlive the policy", () 
   }
 });
 
+test("a well-formed key for a window that has NOT STARTED is stale too", () => {
+  /* The proxy only ever writes the current hour and the current day. Judged by
+     its own start date, "d20991231" would never expire — the same junk as an
+     unparseable key, in a valid costume. Found by review. */
+  for (const k of ["h999999999", "d20991231", "d99991231", hourKey(NOW + 100000 * HOUR_MS)]) {
+    assert.ok(bucketWindow(k), k + " should parse — that is the point");
+    assert.strictEqual(isStaleBucket(k, NOW), true, k);
+  }
+});
+
+test("one window of clock slack: the NEXT hour and the NEXT day are not junk", () => {
+  /* The sweep and the proxy do not share a clock. A bucket the proxy has just
+     opened must not be swept by a runner whose clock is a little behind. */
+  assert.strictEqual(isStaleBucket(hourKey(NOW + HOUR_MS), NOW), false);
+  assert.strictEqual(isStaleBucket(dayBucket(NOW + DAY_MS), NOW), false);
+  assert.strictEqual(isStaleBucket(hourKey(NOW + 3 * HOUR_MS), NOW), true);
+  assert.strictEqual(isStaleBucket(dayBucket(NOW + 3 * DAY_MS), NOW), true);
+});
+
 test("plan: stale buckets go, current ones stay, in both scopes", () => {
   const old = NOW - 5 * DAY_MS;
   const tree = {

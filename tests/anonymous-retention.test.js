@@ -9,27 +9,37 @@
  *
  *   - deleting a SIGNED-IN account (it is only ever meant to see anonymous ones)
  *   - deleting an account someone is still using, or a live session still names
- *   - deleting on the strength of a uid that merely failed to be listed
+ *   - deleting on evidence that is merely ABSENT — a missing or garbled date, a
+ *     uid that failed to be listed, a response that dropped a field
  *   - a planner bug producing a path that addresses a whole tree
  *   - and the opposite failure, quietly keeping what the policy says goes
+ *
+ * An independent review of the first version found that two of its predicates
+ * failed OPEN: an unreadable last-refresh date was treated as no date at all,
+ * and "anonymous" rested on one field being absent with nothing to notice if
+ * it were absent for everyone. The tests marked (review) pin those.
  */
 
 const test = require("node:test");
 const assert = require("node:assert");
 
 const {
-  validateWindowDays, isAnonymous, lastActivityMs, classifyAccounts, planDeletion,
-  orphanTripwire, assertSafePaths, dropDescendants, chunk,
-  DEFAULT_RETENTION_DAYS, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS, ORPHAN_FLOOR, DAY_MS
+  validateWindowDays, isAnonymous, isDated, lastActivityMs, classifyAccounts,
+  listingSanity, sparing, historyCandidates, recheck, planDeletion, orphanTripwire,
+  assertSafePaths, dropDescendants, chunk,
+  DEFAULT_RETENTION_DAYS, MIN_RETENTION_DAYS, MAX_RETENTION_DAYS, QUIET_MS,
+  ORPHAN_FLOOR, UNDATED_FLOOR, DAY_MS
 } = require("../scripts/lib/anonymous-retention");
 
 const NOW = Date.UTC(2026, 9, 7, 12, 0, 0);            // fixed clock
 const WINDOW = DEFAULT_RETENTION_DAYS * DAY_MS;
 const OLD = NOW - WINDOW - DAY_MS;                      // safely idle
-const FRESH = NOW - WINDOW + DAY_MS;                    // safely inside
+const FRESH = NOW - WINDOW + DAY_MS;                    // inside the window, but quiet
+const TODAY = NOW - 60 * 60 * 1000;                     // used an hour ago
 
 const acct = (uid, last, providers) => ({
-  uid, createdMs: last, lastLoginMs: last, lastRefreshMs: last, providers: providers || []
+  uid, createdMs: last, lastLoginMs: last, lastRefreshMs: last, dateFault: false,
+  providers: providers || []
 });
 const classify = (accounts, protectedUids) =>
   classifyAccounts(accounts, { nowMs: NOW, windowMs: WINDOW, protectedUids });
@@ -73,14 +83,24 @@ test("last activity is the MOST RECENT of the three dates", () => {
   assert.strictEqual(lastActivityMs({ createdMs: "x", lastLoginMs: -1, lastRefreshMs: NaN }), null);
 });
 
+test("(review) an account is DATED only with a readable last-refresh date and no fault", () => {
+  assert.strictEqual(isDated(acct("a", OLD)), true);
+  // no last-refresh date at all: the other two cannot stand in for it
+  assert.strictEqual(isDated({ createdMs: OLD, lastLoginMs: OLD, lastRefreshMs: null, dateFault: false }), false);
+  // a date field was present but garbled
+  assert.strictEqual(isDated(Object.assign(acct("a", OLD), { dateFault: true })), false);
+  for (const odd of [null, undefined, {}]) assert.strictEqual(isDated(odd), false);
+});
+
 test("classify: idle anonymous accounts expire; everything else is kept", () => {
   const cls = classify([
     acct("idle1", OLD), acct("idle2", OLD - 50 * DAY_MS),
-    acct("recent", FRESH), acct("today", NOW)
+    acct("recent", FRESH), acct("today", TODAY)
   ]);
   assert.deepStrictEqual(cls.expired, ["idle1", "idle2"]);
   assert.strictEqual(cls.kept, 2);
   assert.strictEqual(cls.anonymous, 4);
+  assert.strictEqual(cls.withRefresh, 4);
 });
 
 test("classify: the boundary — idle for exactly the window expires, a millisecond less does not", () => {
@@ -100,14 +120,47 @@ test("classify: a SIGNED-IN account never expires, however long it has been idle
   assert.strictEqual(cls.named, 4);
   assert.strictEqual(cls.anonymous, 0);
   assert.strictEqual(cls.anonymousUids.size, 0);
+  assert.strictEqual(cls.quietUids.size, 0);
 });
 
 test("classify: one recent date is enough to keep an otherwise ancient account", () => {
   const cls = classify([{
     uid: "returning", createdMs: OLD - 300 * DAY_MS, lastLoginMs: OLD - 300 * DAY_MS,
-    lastRefreshMs: FRESH, providers: []
+    lastRefreshMs: FRESH, dateFault: false, providers: []
   }]);
   assert.deepStrictEqual(cls.expired, []);
+});
+
+test("(review) classify: a GARBLED last-refresh date keeps the account — it is not read as absent", () => {
+  /* The failure the review reproduced. A returning participant: created and
+     last signed in long ago, refreshed yesterday, but the refresh date arrived
+     in a form the parser rejects. Read as "no date", the two old dates would
+     speak for the account and it would expire. */
+  const returning = {
+    uid: "returning", createdMs: OLD, lastLoginMs: OLD, lastRefreshMs: null,
+    dateFault: true, providers: []
+  };
+  const cls = classify([returning]);
+  assert.deepStrictEqual(cls.expired, [], "an active account expired on a date it could not read");
+  assert.strictEqual(cls.undated, 1);
+  assert.strictEqual(cls.kept, 1);
+});
+
+test("(review) classify: NO last-refresh date at all also keeps the account", () => {
+  const cls = classify([{
+    uid: "norefresh", createdMs: OLD, lastLoginMs: OLD, lastRefreshMs: null,
+    dateFault: false, providers: []
+  }]);
+  assert.deepStrictEqual(cls.expired, []);
+  assert.strictEqual(cls.undated, 1);
+  assert.strictEqual(cls.withRefresh, 0);
+});
+
+test("classify: an account with no date of any kind is kept and reported", () => {
+  const cls = classify([{ uid: "nodate", createdMs: null, lastLoginMs: null,
+                          lastRefreshMs: null, dateFault: false, providers: [] }]);
+  assert.deepStrictEqual(cls.expired, []);
+  assert.strictEqual(cls.undated, 1);
 });
 
 test("classify: an account a live session names is kept, and counted as protected", () => {
@@ -120,16 +173,6 @@ test("classify: an account a live session names is kept, and counted as protecte
 test("classify: protection only matters once idle — a fresh member is just kept", () => {
   const cls = classify([acct("member", FRESH)], new Set(["member"]));
   assert.strictEqual(cls.protected, 0);
-  assert.strictEqual(cls.kept, 1);
-});
-
-test("classify: an UNDATED account is kept and reported, never treated as ancient", () => {
-  /* Over-deletion is not recoverable. An account with no usable date is the
-     one understood least; it must not be the one deleted most readily. */
-  const cls = classify([{ uid: "nodate", createdMs: null, lastLoginMs: null,
-                          lastRefreshMs: null, providers: [] }]);
-  assert.deepStrictEqual(cls.expired, []);
-  assert.strictEqual(cls.undated, 1);
   assert.strictEqual(cls.kept, 1);
 });
 
@@ -151,6 +194,15 @@ test("classify: authUids records EVERY listed account, usable or not", () => {
   assert.strictEqual(cls.total, 3);
 });
 
+test("classify: QUIET means shown idle for a day — today's users and the undated are not", () => {
+  const cls = classify([
+    acct("idle", OLD), acct("lastweek", NOW - 7 * DAY_MS), acct("edge", NOW - QUIET_MS),
+    acct("today", TODAY),
+    { uid: "undated", createdMs: OLD, lastLoginMs: OLD, lastRefreshMs: null, dateFault: false, providers: [] }
+  ]);
+  assert.deepStrictEqual([...cls.quietUids].sort(), ["edge", "idle", "lastweek"]);
+});
+
 test("classify: empty / missing input is a no-op", () => {
   for (const v of [[], null, undefined]) {
     const cls = classify(v);
@@ -159,81 +211,181 @@ test("classify: empty / missing input is a no-op", () => {
   }
 });
 
+// ── does the listing look like a listing? ───────────────────────────────────
+
+test("(review) sanity: a listing with NO signed-in account is refused", () => {
+  /* "Anonymous" is the absence of a provider. If the response dropped the
+     provider field for everyone, every account — the facilitators' included —
+     would look anonymous, and nothing else here would notice. This project
+     has signed-in accounts, so none in the listing means a broken listing. */
+  const allLookAnonymous = classify([acct("facilitator", OLD), acct("visitor", OLD)]);
+  assert.strictEqual(allLookAnonymous.expired.length, 2, "without the guard both would be deleted");
+  const verdict = listingSanity(allLookAnonymous);
+  assert.strictEqual(verdict.ok, false);
+  assert.match(verdict.error, /no account in the listing has a sign-in provider/);
+
+  assert.strictEqual(listingSanity(classify([acct("v", OLD), acct("f", OLD, ["google.com"])])).ok, true);
+});
+
+test("(review) sanity: a listing where NO anonymous account has a refresh date is refused", () => {
+  const bare = (uid) => ({ uid, createdMs: OLD, lastLoginMs: OLD, lastRefreshMs: null,
+                           dateFault: false, providers: [] });
+  const cls = classify([bare("a"), bare("b"), acct("f", OLD, ["password"])]);
+  const verdict = listingSanity(cls);
+  assert.strictEqual(verdict.ok, false);
+  assert.match(verdict.error, /last-refresh date/);
+});
+
+test("(review) sanity: a few undated accounts are noise; most of them is a format change", () => {
+  const named = acct("f", OLD, ["google.com"]);
+  const faulty = (i) => Object.assign(acct("bad" + i, OLD), { dateFault: true });
+  const good = (i) => acct("ok" + i, OLD);
+  const many = (n, f) => Array.from({ length: n }, (_, i) => f(i));
+
+  // 3 of 40 unreadable: carry on, they are simply kept
+  assert.strictEqual(listingSanity(classify([named, ...many(3, faulty), ...many(37, good)])).ok, true);
+  // below the floor even when it is most of a tiny project
+  assert.strictEqual(listingSanity(classify([named, ...many(UNDATED_FLOOR, faulty), good(0)])).ok, true);
+  // 30 of 40: the dates have stopped parsing
+  const verdict = listingSanity(classify([named, ...many(30, faulty), ...many(10, good)]));
+  assert.strictEqual(verdict.ok, false);
+  assert.match(verdict.error, /30 of 40/);
+});
+
+test("sanity: an empty classification is not this function's to refuse", () => {
+  assert.strictEqual(listingSanity(classify([])).ok, true);
+});
+
+// ── sparing, history, and the re-check ──────────────────────────────────────
+
+test("sparing: takes uids out of `expired`, counts them, and remembers them", () => {
+  const cls = classify([acct("a", OLD), acct("b", OLD), acct("c", FRESH)]);
+  const out = sparing(cls, ["a", "c"], "contradicted");
+  assert.deepStrictEqual(out.expired, ["b"]);
+  assert.strictEqual(out.contradicted, 2);
+  assert.strictEqual(out.kept, cls.kept + 1, "only the one that was expired moves to kept");
+  assert.deepStrictEqual([...out.sparedUids].sort(), ["a", "c"]);
+  assert.deepStrictEqual(cls.expired, ["a", "b"], "the input must not be mutated");
+});
+
+test("history: only quiet, still-present, un-spared anonymous accounts with a users/ node", () => {
+  const base = classify([
+    acct("idle", OLD), acct("quiet", FRESH), acct("today", TODAY),
+    acct("spared", FRESH), acct("named", FRESH, ["google.com"])
+  ]);
+  const cls = sparing(base, ["spared"], "contradicted");
+  const got = historyCandidates(cls, ["idle", "quiet", "today", "spared", "named", "ghost", "a/b"]);
+  /* idle  — being deleted whole, so not a history-only case
+     today — used within the day: left alone, its owner may be mid-sign-up
+     spared — the database contradicts the listing; nothing of theirs is touched
+     named — signed in: that history is theirs and is meant to be there
+     ghost — no account: an orphan, a different rule */
+  assert.deepStrictEqual(got, ["quiet"]);
+});
+
+test("re-check: only what is STILL there, STILL anonymous, STILL dated and STILL idle survives", () => {
+  const fresh = [
+    acct("same", OLD),
+    acct("linked", OLD, ["google.com"]),                              // created an account since
+    acct("returned", TODAY),                                          // came back since
+    Object.assign(acct("garbled", OLD), { dateFault: true }),         // can no longer be judged
+    { uid: "norefresh", createdMs: OLD, lastLoginMs: OLD, lastRefreshMs: null, dateFault: false, providers: [] }
+  ];
+  const got = recheck(["same", "linked", "returned", "garbled", "norefresh", "vanished"], fresh,
+    { nowMs: NOW, idleMs: WINDOW });
+  assert.deepStrictEqual(got, { still: ["same"], changed: 4, gone: 1 });
+});
+
+test("re-check: the idle bar is the caller's — a day for history, the window for deletion", () => {
+  const fresh = [acct("u", FRESH)];           // quiet, but nowhere near 90 days
+  assert.deepStrictEqual(recheck(["u"], fresh, { nowMs: NOW, idleMs: QUIET_MS }).still, ["u"]);
+  assert.deepStrictEqual(recheck(["u"], fresh, { nowMs: NOW, idleMs: WINDOW }).still, []);
+});
+
+test("re-check: an empty or missing fetch spares nobody by accident — everyone is `gone`", () => {
+  for (const f of [[], null, undefined]) {
+    assert.deepStrictEqual(recheck(["a", "b"], f, { nowMs: NOW, idleMs: WINDOW }),
+      { still: [], changed: 0, gone: 2 });
+  }
+});
+
 // ── what gets deleted ───────────────────────────────────────────────────────
 
-const CLS = () => classify([
-  acct("gone", OLD), acct("live", FRESH), acct("named", OLD, ["google.com"])
-]);
+const AUTH = new Set(["gone", "live", "named"]);
+const plan = (sets, keysets, opts) => planDeletion(
+  Object.assign({ expired: [], history: [], authUids: AUTH }, sets), keysets, opts);
 
-test("plan: an expired account takes every record keyed by it", () => {
-  const plan = planDeletion(CLS(), {
-    users: ["gone"], scenarios: ["gone"], rateLimitUids: ["gone"],
-    reports: { shareA: ["gone"], shareB: ["gone", "named"] }
-  });
-  assert.deepStrictEqual(plan.paths.sort(), [
-    "rateLimits/uid/gone", "reports/scenarios/shareA/gone", "reports/scenarios/shareB/gone",
-    "scenarios/gone", "users/gone"
-  ]);
-  assert.strictEqual(plan.expiredPaths, 5);
+test("plan: an expired account takes its users/ node, and nothing else", () => {
+  const p = plan({ expired: ["gone"] }, { users: ["gone"], scenarios: [] });
+  assert.deepStrictEqual(p.paths, ["users/gone"]);
+  assert.strictEqual(p.expiredPaths, 1);
 });
 
 test("plan: only records that EXIST are listed", () => {
-  const plan = planDeletion(CLS(), { users: [], scenarios: [], rateLimitUids: [], reports: {} });
-  assert.deepStrictEqual(plan.paths, []);
+  assert.deepStrictEqual(plan({ expired: ["gone"] }, { users: [], scenarios: [] }).paths, []);
+});
+
+test("plan: `scenarios/` is NEVER deleted for an account being removed", () => {
+  /* The job spares any "anonymous" account that has one, so none should reach
+     the planner — and if one did, a scenario is authored work that only a
+     signed-in user can save. It is skipped, not trusted. */
+  const p = plan({ expired: ["gone"] }, { users: ["gone"], scenarios: ["gone"] });
+  assert.deepStrictEqual(p.paths, ["users/gone"]);
+  assert.ok(!p.paths.some((x) => x.startsWith("scenarios/")));
 });
 
 test("plan: a SIGNED-IN account's records are never touched", () => {
-  const plan = planDeletion(CLS(), {
-    users: ["named"], scenarios: ["named"], rateLimitUids: ["named"], reports: { s: ["named"] }
-  });
-  assert.deepStrictEqual(plan.paths, []);
-  assert.strictEqual(plan.legacyHistory, 0);
+  const p = plan({ expired: ["gone"], history: ["live"] }, { users: ["named"], scenarios: ["named"] });
+  assert.deepStrictEqual(p.paths, []);
 });
 
-test("plan: a LIVE anonymous account loses its bug-written history, and only that", () => {
+test("plan: a history candidate loses its history, and only that", () => {
   /* #348 stopped the write on 2026-08-25; this removes what it left. Scoped to
-     /history so that anything else found under an anonymous uid survives to be
-     looked at rather than being deleted unexamined. */
-  const plan = planDeletion(CLS(), {
-    users: ["live"], scenarios: ["live"], rateLimitUids: ["live"], reports: { s: ["live"] }
-  });
-  assert.deepStrictEqual(plan.paths, ["users/live/history"]);
-  assert.strictEqual(plan.legacyHistory, 1);
-  assert.strictEqual(plan.expiredPaths, 0);
+     /history so that anything else under the node survives to be looked at. */
+  const p = plan({ history: ["live"] }, { users: ["live"], scenarios: [] });
+  assert.deepStrictEqual(p.paths, ["users/live/history"]);
+  assert.strictEqual(p.historyPaths, 1);
+  assert.strictEqual(p.expiredPaths, 0);
+});
+
+test("plan: a live account that is NOT a history candidate is left entirely alone", () => {
+  const p = plan({}, { users: ["live"], scenarios: [] });
+  assert.deepStrictEqual(p.paths, []);
 });
 
 test("plan: an ORPHAN is counted and left alone by default", () => {
   /* "Not in the listing" is also what a truncated listing looks like. Acting
      on it by default would delete signed-in users' profiles and scenarios. */
-  const plan = planDeletion(CLS(), {
-    users: ["ghost"], scenarios: ["ghost"], rateLimitUids: ["ghost"], reports: { s: ["ghost"] }
-  });
-  assert.deepStrictEqual(plan.paths, []);
-  assert.deepStrictEqual(plan.orphans, { users: 1, scenarios: 1, rateLimits: 1, reports: 1 });
-  assert.strictEqual(plan.orphanPaths, 0);
+  const p = plan({}, { users: ["ghost"], scenarios: ["ghost"] });
+  assert.deepStrictEqual(p.paths, []);
+  assert.deepStrictEqual(p.orphans, { users: 1, scenarios: 1 });
+  assert.strictEqual(p.orphanPaths, 0);
 });
 
 test("plan: orphans go only when an operator asks", () => {
-  const plan = planDeletion(CLS(), {
-    users: ["ghost"], scenarios: ["ghost"], rateLimitUids: [], reports: { s: ["ghost"] }
-  }, { sweepOrphans: true });
-  assert.deepStrictEqual(plan.paths.sort(),
-    ["reports/scenarios/s/ghost", "scenarios/ghost", "users/ghost"]);
-  assert.strictEqual(plan.orphanPaths, 3);
+  const p = plan({}, { users: ["ghost"], scenarios: ["ghost"] }, { sweepOrphans: true });
+  assert.deepStrictEqual(p.paths.sort(), ["scenarios/ghost", "users/ghost"]);
+  assert.strictEqual(p.orphanPaths, 2);
+});
+
+test("plan: moderation reports are not this job's to delete", () => {
+  /* A report may concern content that is still published and unreviewed.
+     Deleting evidence on a timer is a product decision, not a default. */
+  const p = plan({ expired: ["gone"] },
+    { users: ["gone"], scenarios: [], reports: { shareA: ["gone"] } }, { sweepOrphans: true });
+  assert.ok(!p.paths.some((x) => x.startsWith("reports/")));
 });
 
 test("plan: malformed keys never become paths", () => {
-  const plan = planDeletion(CLS(), {
-    users: ["", "a b", "x/y"], scenarios: [null, 7],
-    rateLimitUids: ["ok.no"], reports: { "bad share": ["gone"], "also/bad": ["gone"] }
-  }, { sweepOrphans: true });
-  assert.deepStrictEqual(plan.paths, []);
-  assert.strictEqual(plan.skippedKeys, 8);
+  const p = plan({ expired: ["gone"] },
+    { users: ["", "a b", "x/y", "__proto__/x"], scenarios: [null, 7, "ok.no"] }, { sweepOrphans: true });
+  assert.deepStrictEqual(p.paths, []);
+  assert.strictEqual(p.skippedKeys, 7);
 });
 
 test("plan: missing keysets are a no-op, not a crash", () => {
-  for (const ks of [undefined, null, {}, { reports: null }]) {
-    assert.deepStrictEqual(planDeletion(CLS(), ks).paths, []);
+  for (const ks of [undefined, null, {}]) {
+    assert.deepStrictEqual(plan({ expired: ["gone"] }, ks).paths, []);
   }
 });
 
@@ -254,8 +406,8 @@ test("tripwire: a handful of orphans is plausible; a crowd means the listing is 
 test("safe paths: every shape the job is allowed to delete passes", () => {
   assertSafePaths([
     "users/AbC123", "users/AbC123/history", "scenarios/AbC123",
-    "rateLimits/uid/AbC123", "rateLimits/uid/AbC123/h489912", "rateLimits/session/Room 2 code/d20261007",
-    "reports/scenarios/share_1/AbC123"
+    "rateLimits/uid/AbC123", "rateLimits/uid/AbC123/h489912",
+    "rateLimits/session/Room 2 code/d20261007", "rateLimits/uid/__proto__/h1"
   ]);
 });
 
@@ -264,7 +416,7 @@ test("safe paths: anything that addresses a tree, or an unknown place, is refuse
      deletes every profile, or every counter, in a single write. */
   for (const bad of [
     "users", "users/", "scenarios", "rateLimits", "rateLimits/uid", "rateLimits/session",
-    "reports", "reports/scenarios", "reports/scenarios/share_1",
+    "reports", "reports/scenarios", "reports/scenarios/share_1", "reports/scenarios/share_1/AbC123",
     "users/a/profile", "users/a/history/CODE", "users/a/b/c",
     "sessions/ABC", "sessions/ABC/members/u", "adminSecrets/ABC", "credentials/x",
     "rateLimits/global/d20261007", "rateLimits/uid/a/b/c", "users/a b", "users/a.b",

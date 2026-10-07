@@ -352,23 +352,47 @@ anonymous identifier is still indefinite; do not describe it otherwise.
 
 - **What it removes.** An anonymous account idle ≥ 90 days that no LIVE session
   names (member or creator) and no allowlist names (`facilitatorGate/allow`,
-  `moderators`), together with `users/<uid>`, `scenarios/<uid>`,
-  `rateLimits/uid/<uid>` and its `reports/scenarios/*/<uid>`. Records go first,
-  the account second; a failed write means no account is deleted that run.
+  `moderators`), together with its `users/<uid>` node. Records go first, the
+  account second; a failed write means no account is deleted that run.
   The live-session check is what makes "90 days" honest: a session closed on
   day 89 lives 30 more, so the real bound is ~120 days after last use.
+- **What it deliberately does NOT remove.** `scenarios/<uid>`: the client only
+  saves a scenario for a signed-in user, so one under an "anonymous" uid is
+  treated as evidence AGAINST anonymity and spares the account.
+  `reports/scenarios/<shareId>/<uid>`: a moderation report may concern content
+  that is still published and unreviewed — deleting evidence on a timer is a
+  product decision nobody has taken. Both stay under DPA Annex VI G8.
 - **Two older gaps closed in the same pass.** (a) `users/<uid>/history` written
   for every anonymous joiner before #348 is removed for accounts that still
   exist. (b) The proxy's rate-limit counters (`rateLimits/{uid,session}/…`) are
   swept once past the TTL the proxy asks for — **nothing swept them before**,
   although `proxy/src/stores.js` said `cleanup-stale-sessions.js` did.
-- **Positive identification only.** An account is deleted because its own Auth
-  record shows no sign-in provider — never because a uid is missing from the
-  listing, which is also what a truncated listing looks like. Orphans are
-  counted and left alone unless `sweep_orphans` is ticked, behind a tripwire.
+- **Positive evidence at every step; anything that cannot be shown is kept.**
+  The first version failed OPEN twice and an independent review caught both
+  before merge — do not relax these without re-reading why:
+  1. *anonymous* = the account's own record lists no provider, AND the listing
+     as a whole contains signed-in accounts (else the provider field is missing
+     and every account looks anonymous → run refused), AND the database holds
+     no `profile` / `scenarios` for that uid;
+  2. *idle* = a READABLE last-refresh date that is old. A date that is absent
+     or present-but-garbled is "unknown", never "old" — a returning
+     participant's sign-in date never moves, so the refresh date is the only
+     sign they are still here;
+  3. *still so at the last moment* = every candidate is fetched again
+     (`accounts:lookup`) immediately before the writes, and dropped if it
+     signed in or came back since the listing.
+
+  Orphans (a uid with records and no account) are counted and left alone unless
+  `sweep_orphans` is ticked, behind a tripwire; record keys are read BEFORE the
+  account listing so a new sign-up can never look like one.
+- **The counter sweep cannot stop the job.** Participants can write under their
+  own `rateLimits` node, so it is read per id, shallow, and a failure is
+  counted (exit 1) rather than thrown.
 - **No e-mail address reaches the runner.** The Admin SDK's `listUsers()`
   returns whole records, so the listing goes over REST with a `fields` mask
-  and then VERIFIES it: one unrequested key aborts the run.
+  and then VERIFIES it: one unrequested key aborts the run. The check can only
+  detect a transfer, not undo it, so the listing starts with a ONE-account
+  canary — an ignored mask exposes one record, not a thousand.
 - ⚠️ **SCHEDULING IT IS ONE CHANGE WITH THREE PARTS**: the cron, the armed
   `ANON_CONFIRM`, and the privacy notice. A nightly run sends account
   identifiers and session member uids to a US runner, which `privacy.html` §6–7

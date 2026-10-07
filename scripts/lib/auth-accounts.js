@@ -1,6 +1,6 @@
 "use strict";
-/* List and delete Firebase Auth accounts over the Identity Toolkit REST API,
- * WITHOUT ever receiving an e-mail address.
+/* List, re-check and delete Firebase Auth accounts over the Identity Toolkit
+ * REST API, WITHOUT ever receiving an e-mail address.
  *
  * WHY NOT THE ADMIN SDK. `getAuth().listUsers()` returns whole user records:
  * e-mail, display name and photo URL for every signed-in account. The job that
@@ -18,12 +18,13 @@
  * by `providerId` alone, so "google.com" comes back and the address behind it
  * does not.
  *
- * ⚠️ THE MASK IS VERIFIED, NOT TRUSTED. If the server ever ignored `fields`,
- * the full records would arrive and nothing would look wrong. Every account
- * object is therefore checked against the allowlist, and a single unexpected
- * KEY aborts the run — naming the key, never its value. The data has crossed by
- * then, but the job stops instead of carrying on every night, and the failure
- * says exactly what happened.
+ * ⚠️ THE MASK IS VERIFIED, NOT TRUSTED — and the verification can only DETECT
+ * a transfer, not undo one. If the server ignored `fields`, whole records
+ * would arrive and nothing would look wrong, so every account object is checked
+ * against the allowlist and a single unexpected KEY aborts the run, naming the
+ * key and never its value. To keep what an ignored mask can expose as small as
+ * it can be, the listing begins with a CANARY: one account, same mask, same
+ * check. Only when that comes back clean are the full pages requested.
  *
  * Network access is injected (`fetch`, `getToken`) so all of this is testable
  * without credentials or firebase-admin.
@@ -35,12 +36,16 @@ const DEFAULT_API_BASE = "https://identitytoolkit.googleapis.com/v1";
    uid itself: three timestamps and the NAMES of the sign-in providers. */
 const ACCOUNT_KEYS = ["localId", "createdAt", "lastLoginAt", "lastRefreshAt", "providerUserInfo"];
 const PROVIDER_KEYS = ["providerId"];
-const FIELD_MASK =
-  "nextPageToken,users(localId,createdAt,lastLoginAt,lastRefreshAt,providerUserInfo(providerId))";
+const USER_MASK = "users(localId,createdAt,lastLoginAt,lastRefreshAt,providerUserInfo(providerId))";
+const FIELD_MASK = "nextPageToken," + USER_MASK;
 
 const PAGE_SIZE = 1000;          // the API maximum for batchGet
 const DELETE_BATCH = 1000;       // the API maximum for batchDelete
+const LOOKUP_BATCH = 100;        // the API maximum for accounts:lookup by localId
 const MAX_PAGES = 2000;          // 2M accounts; a runaway-loop bound, not a quota
+/* Without one, a stalled connection runs to the workflow's timeout, and GitHub
+   records that as "cancelled" — which sends no failure mail. */
+const REQUEST_TIMEOUT_MS = 60 * 1000;
 
 /** `createdAt` / `lastLoginAt` arrive as int64 STRINGS of milliseconds. */
 function msFromEpochString(v) {
@@ -64,8 +69,15 @@ function unexpectedKeys(obj, allowed) {
  * Turn one API account object into the shape the retention rules read, after
  * checking the partial-response mask was honoured.
  *
+ * `dateFault` is true when a date field is PRESENT but unreadable. That is not
+ * the same as absent, and the difference decides a deletion: a returning
+ * participant's sign-in date never moves (the SDK restores the session), so the
+ * last-refresh date is the only sign they are still here. Reading a garbled one
+ * as "no date" would leave the old sign-in date to speak for the account and
+ * expire someone who was active yesterday.
+ *
  * @returns {{uid:string, createdMs:number|null, lastLoginMs:number|null,
- *            lastRefreshMs:number|null, providers:string[]}}
+ *            lastRefreshMs:number|null, dateFault:boolean, providers:string[]}}
  */
 function normaliseAccount(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -97,12 +109,36 @@ function normaliseAccount(raw) {
        keeps such an account out of the anonymous set — the safe direction. */
     providers.push(typeof p.providerId === "string" && p.providerId ? p.providerId : "unknown");
   }
+
+  let dateFault = false;
+  const date = (key, parse) => {
+    if (raw[key] === undefined) return null;
+    const ms = parse(raw[key]);
+    if (ms === null) dateFault = true;
+    return ms;
+  };
   return {
     uid: typeof raw.localId === "string" ? raw.localId : "",
-    createdMs: msFromEpochString(raw.createdAt),
-    lastLoginMs: msFromEpochString(raw.lastLoginAt),
-    lastRefreshMs: msFromRfc3339(raw.lastRefreshAt),
+    createdMs: date("createdAt", msFromEpochString),
+    lastLoginMs: date("lastLoginAt", msFromEpochString),
+    lastRefreshMs: date("lastRefreshAt", msFromRfc3339),
+    dateFault,
     providers
+  };
+}
+
+/* The same uid on two pages is not something this API documents, but a
+   listing that changes while it is being paged could produce it. Merged in the
+   direction that DELETES LESS: every provider seen, the latest of each date. */
+function mergeAccounts(a, b) {
+  const later = (x, y) => (x === null ? y : (y === null ? x : Math.max(x, y)));
+  return {
+    uid: a.uid,
+    createdMs: later(a.createdMs, b.createdMs),
+    lastLoginMs: later(a.lastLoginMs, b.lastLoginMs),
+    lastRefreshMs: later(a.lastRefreshMs, b.lastRefreshMs),
+    dateFault: a.dateFault || b.dateFault,
+    providers: [...new Set(a.providers.concat(b.providers))]
   };
 }
 
@@ -113,7 +149,44 @@ function requireDeps(deps) {
   if (typeof deps.projectId !== "string" || !/^[a-z0-9-]{4,40}$/.test(deps.projectId)) {
     throw new Error("auth-accounts needs a plain projectId, got: " + JSON.stringify(deps.projectId));
   }
-  return String(deps.apiBase || DEFAULT_API_BASE).replace(/\/+$/, "");
+  return String(deps.apiBase || DEFAULT_API_BASE).replace(/\/+$/, "") +
+    "/projects/" + deps.projectId;
+}
+
+async function send(deps, url, init) {
+  const headers = Object.assign({ Authorization: "Bearer " + (await deps.getToken()) },
+    (init && init.headers) || {});
+  return deps.fetch(url, Object.assign({}, init, {
+    headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  }));
+}
+
+/* A JSON parse error quotes the text it choked on, and that text is a response
+   that may hold account data. The status is reported; the body never is. */
+async function readBody(res, what) {
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    throw new Error(what + " returned an unreadable body: HTTP " + res.status);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(what + " returned a non-object body");
+  }
+  if (body.users !== undefined && !Array.isArray(body.users)) {
+    throw new Error(what + " returned a non-array `users`");
+  }
+  return body;
+}
+
+async function fetchPage(deps, root, pageSize, pageToken) {
+  const qs = "maxResults=" + pageSize + "&fields=" + encodeURIComponent(FIELD_MASK) +
+    (pageToken ? "&nextPageToken=" + encodeURIComponent(pageToken) : "");
+  const res = await send(deps, root + "/accounts:batchGet?" + qs);
+  /* Status only. An error body can echo request details, and these logs are
+     world-readable. */
+  if (!res.ok) throw new Error("account listing failed: HTTP " + res.status);
+  return readBody(res, "account listing");
 }
 
 /**
@@ -122,36 +195,29 @@ function requireDeps(deps) {
  * list must never look like a complete one.
  *
  * @param {object} deps { fetch, getToken, projectId, [apiBase] }
- * @returns {Promise<Array>} normalised accounts
+ * @returns {Promise<Array>} normalised accounts, one per uid
  */
 async function listAccounts(deps) {
-  const base = requireDeps(deps);
-  const out = [];
+  const root = requireDeps(deps);
+
+  /* THE CANARY. One account, checked exactly as every later one is. If the
+     mask is being ignored this throws here, with one record received rather
+     than a thousand. Its page token is discarded: the listing below starts
+     again from the beginning. */
+  for (const raw of (await fetchPage(deps, root, 1, "")).users || []) normaliseAccount(raw);
+
+  const byUid = new Map();
+  const unkeyed = [];
   const seenTokens = new Set();
   let pageToken = "";
-
   for (let page = 0; page < MAX_PAGES; page++) {
-    const qs = "maxResults=" + PAGE_SIZE +
-      "&fields=" + encodeURIComponent(FIELD_MASK) +
-      (pageToken ? "&nextPageToken=" + encodeURIComponent(pageToken) : "");
-    const res = await deps.fetch(
-      base + "/projects/" + deps.projectId + "/accounts:batchGet?" + qs,
-      { headers: { Authorization: "Bearer " + (await deps.getToken()) } });
-    if (!res.ok) {
-      /* Status only. An error body can echo request details, and these logs
-         are world-readable. */
-      throw new Error("account listing failed: HTTP " + res.status);
+    const body = await fetchPage(deps, root, PAGE_SIZE, pageToken);
+    for (const raw of body.users || []) {
+      const acct = normaliseAccount(raw);
+      if (!acct.uid) unkeyed.push(acct);
+      else byUid.set(acct.uid, byUid.has(acct.uid) ? mergeAccounts(byUid.get(acct.uid), acct) : acct);
     }
-    const body = await res.json();
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      throw new Error("account listing returned a non-object page");
-    }
-    if (body.users !== undefined && !Array.isArray(body.users)) {
-      throw new Error("account listing returned a non-array `users`");
-    }
-    for (const raw of body.users || []) out.push(normaliseAccount(raw));
-
-    if (!body.nextPageToken) return out;
+    if (!body.nextPageToken) return [...byUid.values()].concat(unkeyed);
     if (typeof body.nextPageToken !== "string" || seenTokens.has(body.nextPageToken)) {
       throw new Error("account listing returned an unusable or repeated page token");
     }
@@ -162,6 +228,37 @@ async function listAccounts(deps) {
 }
 
 /**
+ * Fetch specific accounts again, by uid — the re-check made immediately before
+ * anything is deleted. Same mask, same verification, a different endpoint, so
+ * it is also a second opinion on what the listing said.
+ *
+ * A uid the API does not return no longer has an account; it is simply absent
+ * from the result. Any failure throws: a re-check that cannot be made must not
+ * be read as "nothing changed".
+ *
+ * @param {object} deps { fetch, getToken, projectId, [apiBase] }
+ * @param {string[]} uids
+ * @returns {Promise<Array>} normalised accounts
+ */
+async function lookupAccounts(deps, uids) {
+  const root = requireDeps(deps);
+  const out = [];
+  for (let i = 0; i < uids.length; i += LOOKUP_BATCH) {
+    const res = await send(deps,
+      root + "/accounts:lookup?fields=" + encodeURIComponent(USER_MASK), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localId: uids.slice(i, i + LOOKUP_BATCH) })
+      });
+    if (!res.ok) throw new Error("account re-check failed: HTTP " + res.status);
+    for (const raw of (await readBody(res, "account re-check")).users || []) {
+      out.push(normaliseAccount(raw));
+    }
+  }
+  return out;
+}
+
+/**
  * Delete accounts by uid.
  *
  * `force: true` is what the API requires to delete an account that is not
@@ -169,39 +266,43 @@ async function listAccounts(deps) {
  *
  * @param {object} deps { fetch, getToken, projectId, [apiBase], [sleep] }
  * @param {string[]} uids
- * @returns {Promise<{deleted:number, failed:number, httpStatuses:number[]}>}
+ * @returns {Promise<{deleted:number, failed:number, httpStatuses:number[],
+ *                    networkErrors:number}>}
  *   counts and the distinct non-2xx statuses, never a uid. A failed uid is
  *   retried by the next run, which rediscovers it from the listing.
  */
 async function deleteAccounts(deps, uids) {
-  const base = requireDeps(deps);
+  const root = requireDeps(deps);
   const sleep = deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
   const httpStatuses = new Set();
-  let deleted = 0, failed = 0;
+  let deleted = 0, failed = 0, networkErrors = 0;
 
   for (let i = 0; i < uids.length; i += DELETE_BATCH) {
     const chunk = uids.slice(i, i + DELETE_BATCH);
     /* batchDelete is limited to one request a second per project. */
     if (i > 0) await sleep(1100);
-    const res = await deps.fetch(
-      base + "/projects/" + deps.projectId + "/accounts:batchDelete",
-      {
+    let res, text;
+    try {
+      res = await send(deps, root + "/accounts:batchDelete", {
         method: "POST",
-        headers: {
-          Authorization: "Bearer " + (await deps.getToken()),
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ localIds: chunk, force: true })
       });
+      text = res.ok ? await res.text() : "";
+    } catch {
+      /* A timeout or a dropped connection. The records are already gone by
+         now, so this must be counted, not thrown: the remaining chunks still
+         deserve their attempt and the caller exits non-zero either way. */
+      networkErrors++;
+      failed += chunk.length;
+      continue;
+    }
     if (!res.ok) {
-      /* Carry on with the remaining chunks: one refused batch should not
-         strand the rest, and the caller reports the status and exits non-zero. */
       httpStatuses.add(res.status);
       failed += chunk.length;
       continue;
     }
     /* A 200 carries per-uid failures in `errors`; an empty body means none. */
-    const text = await res.text();
     let body = null;
     try {
       body = text ? JSON.parse(text) : {};
@@ -216,11 +317,15 @@ async function deleteAccounts(deps, uids) {
     failed += errs;
     deleted += chunk.length - errs;
   }
-  return { deleted, failed, httpStatuses: [...httpStatuses].sort((a, b) => a - b) };
+  return {
+    deleted, failed, networkErrors,
+    httpStatuses: [...httpStatuses].sort((a, b) => a - b)
+  };
 }
 
 module.exports = {
-  listAccounts, deleteAccounts, normaliseAccount,
+  listAccounts, lookupAccounts, deleteAccounts, normaliseAccount, mergeAccounts,
   msFromEpochString, msFromRfc3339,
-  FIELD_MASK, ACCOUNT_KEYS, PROVIDER_KEYS, PAGE_SIZE, DELETE_BATCH
+  FIELD_MASK, USER_MASK, ACCOUNT_KEYS, PROVIDER_KEYS,
+  PAGE_SIZE, DELETE_BATCH, LOOKUP_BATCH, REQUEST_TIMEOUT_MS
 };

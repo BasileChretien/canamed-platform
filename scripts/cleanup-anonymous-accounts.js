@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
-/* Remove anonymous Firebase Auth accounts nobody has used, and the records
- * keyed by them — issue #347.
+/* Remove anonymous Firebase Auth accounts nobody has used, and what is kept
+ * under them — issue #347.
  *
  * Every visitor is signed in anonymously before any consent surface is
  * reached, and until this job nothing removed those accounts: retention was
@@ -38,25 +38,28 @@
  * repository, whose Actions logs are world-readable, and a uid is the very
  * identifier this job exists to stop keeping.
  *
- * Exit codes: 0 done · 1 some deletions failed · 2 misconfigured or broken ·
- *             3 refused on purpose (nothing was deleted)
+ * Exit codes: 0 done · 1 something was not done (see the output) ·
+ *             2 misconfigured or broken · 3 refused on purpose (nothing deleted)
  */
 
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const { makeRestShallowReader, makeRestValueReader } = require("./lib/session-trees");
 const { parseRetentionDays } = require("./lib/retention-window");
-const { listAccounts, deleteAccounts } = require("./lib/auth-accounts");
+const { listAccounts, lookupAccounts, deleteAccounts } = require("./lib/auth-accounts");
 const {
   validateWindowDays, DEFAULT_RETENTION_DAYS, DAY_MS
 } = require("./lib/anonymous-retention");
-const { runAnonymousRetention } = require("./lib/anonymous-retention-job");
+const { runAnonymousRetention, withTimeout } = require("./lib/anonymous-retention-job");
+const { exitCodeFor, formatReport } = require("./lib/anonymous-retention-report");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || "canamed-69785";
 const CONFIRM = process.env.ANON_CONFIRM === "1";
 const SWEEP_ORPHANS = process.env.ANON_SWEEP_ORPHANS === "1";
+/* One multi-path update of a few hundred nulls takes well under a second. */
+const WRITE_TIMEOUT_MS = 2 * 60 * 1000;
 
 function retentionDays() {
   const parsed = parseRetentionDays(process.env.ANON_RETENTION_DAYS, DEFAULT_RETENTION_DAYS);
@@ -66,46 +69,6 @@ function retentionDays() {
     process.exit(2);
   }
   return checked.value;
-}
-
-function print(report, days) {
-  const a = report.accounts, r = report.records, l = report.rateLimits;
-  const will = CONFIRM ? "deleted" : "would delete";
-  console.log(`Sessions:    ${report.sessions} live, whose members and creators are never removed`);
-  console.log(`Accounts:    ${a.total} total — ${a.anonymous} anonymous, ${a.named} signed-in (untouched)`);
-  console.log(`Anonymous:   ${a.expired} idle > ${days}d, ${a.kept} kept ` +
-    `(${a.protected} still in a live session or allowlisted, ${a.undated} undated, ` +
-    `${a.unusable} with an unusable uid)`);
-  console.log(`Records:     ${r.expiredPaths} keyed by those accounts`);
-  console.log(`History:     ${r.legacyHistory} live anonymous account(s) with a users/ node`);
-  if (r.legacyHistory) {
-    console.log("             Expected on the first live run only. Anonymous joiners stopped");
-    console.log("             getting a history record on 2026-08-25 (#348); a count that");
-    console.log("             comes back afterwards means that write has regressed.");
-  }
-  const o = r.orphans;
-  console.log(`Orphans:     ${o.users} users, ${o.scenarios} scenarios, ${o.rateLimits} rateLimits, ` +
-    `${o.reports} reports with no account — ` +
-    (SWEEP_ORPHANS ? `${r.orphanPaths} included` : "reported only (ANON_SWEEP_ORPHANS=1 to remove)"));
-  if (r.skippedKeys) {
-    console.log(`Skipped:     ${r.skippedKeys} key(s) that are not a well-formed uid or share id`);
-  }
-  console.log(`Rate limits: ${l.staleUid} per-uid + ${l.staleSession} per-session bucket(s) past ` +
-    `their window, ${l.kept} current` + (l.unparsed ? `, ${l.unparsed} in no known format` : ""));
-  console.log(`Paths:       ${report.paths} database path(s) — ${will}`);
-  if (!CONFIRM) return;
-
-  const w = report.written, au = report.auth;
-  console.log(`Written:     ${w.paths} path(s) removed` +
-    (w.failedUpdates ? `, ${w.failedUpdates} update(s) FAILED [${w.errorCodes.join(", ")}]` : ""));
-  if (au.skipped) {
-    console.log("Auth:        NO account deleted — a database write failed, and an account");
-    console.log("             is only removed after its records. The next run retries both.");
-  } else {
-    console.log(`Auth:        ${au.deleted} account(s) deleted` +
-      (au.failed ? `, ${au.failed} FAILED` : "") +
-      (au.httpStatuses.length ? ` [HTTP ${au.httpStatuses.join(", ")}]` : ""));
-  }
 }
 
 async function main() {
@@ -126,10 +89,11 @@ async function main() {
 
   const report = await runAnonymousRetention({
     listAccounts: () => listAccounts(authDeps),
+    lookupAccounts: (uids) => lookupAccounts(authDeps, uids),
     deleteAccounts: (uids) => deleteAccounts(authDeps, uids),
     fetchShallow: makeRestShallowReader({ app, databaseURL: DB_URL }),
     readValue: makeRestValueReader({ app, databaseURL: DB_URL }),
-    updateRoot: (update) => db.ref().update(update)
+    updateRoot: (update) => withTimeout(db.ref().update(update), WRITE_TIMEOUT_MS)
   }, {
     nowMs: Date.now(),
     windowMs: days * DAY_MS,
@@ -137,16 +101,13 @@ async function main() {
     sweepOrphans: SWEEP_ORPHANS
   });
 
-  print(report, days);
-  if (!CONFIRM && report.paths + report.accounts.expired > 0) {
-    console.log("(Set ANON_CONFIRM=1 to actually delete.)");
+  for (const line of formatReport(report, { confirm: CONFIRM, days, sweepOrphans: SWEEP_ORPHANS })) {
+    console.log(line);
   }
-
-  const failed = report.written.failedUpdates > 0 || report.auth.failed > 0 || report.auth.skipped;
   /* Explicit: firebase-admin's database connection keeps the event loop alive,
      so falling off the end would hang until the workflow timeout — see
      tests/ops-scripts-terminate.test.js. */
-  process.exit(failed ? 1 : 0);
+  process.exit(exitCodeFor(report));
 }
 
 main().catch((e) => {
