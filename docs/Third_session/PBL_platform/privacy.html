@@ -185,7 +185,10 @@
     <p>The platform's scheduled maintenance jobs run on <strong>GitHub
       Actions</strong> (GitHub, Inc., United States). <strong>The jobs that run every day do not read your session
       content.</strong> They read a list of session identifiers and, for each session, the two dates that
-      decide when it is deleted; one also reads the certificate records. A further
+      decide when it is deleted; one also reads the certificate records. Requests
+      to withdraw consent or to have data erased are read too, with the record of
+      those already carried out: for each, the session's identifier, the person's
+      technical identifiers, a date and what was asked. A further
       job, which deletes technical identifiers that are no longer in use
       (section 8), reads: the list of those identifiers with the dates they were
       created and last used; the identifiers of the members and the creator of
@@ -199,7 +202,10 @@
       2026-09-01 two of these jobs copied the <strong>whole live session
       database</strong> onto a GitHub machine every day &mdash; one to decide
       what to delete, one to weigh how large the database had become. Neither
-      needed the contents to do its work, and neither does it any more. These jobs report only counts and dates &mdash; no personal
+      needed the contents to do its work, and neither does it any more. A third
+      job, which watches for erasure requests that have gone unanswered, did the
+      same from 2026-09-03 to 2026-10-07, although it needed only the requests;
+      it has been corrected. These jobs report only counts and dates &mdash; no personal
       data is written into their logs. Two
       further jobs that copy the database in full, a backup and the
       pseudonymised research export, are running again as of
@@ -341,6 +347,10 @@
       scenario names and the time &mdash; including for participants who never
       created an account. The error was corrected on 2026-08-25, and what it left
       behind is deleted by the same job.
+      Section 6 now also says that the daily jobs read requests to withdraw
+      consent or to have data erased, which earlier versions did not mention,
+      and that one of them copied the whole live session database to a GitHub
+      machine every day from 2026-09-03 to 2026-10-07 without needing to.
       Material changes are issued under a new version with re-consent on next join.
       <strong>Material changes since PIS v10, carried forward:</strong>
       section 1 no longer states that Université de Caen Normandie and Nagoya
@@ -568,7 +578,11 @@
       <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). <strong>Les tâches qui s'exécutent chaque jour ne lisent pas le contenu
       de vos séances.</strong> Elles lisent une liste d'identifiants de séance et, pour chaque séance, les deux
       dates qui déterminent le moment de sa suppression ; l'une lit également les
-      enregistrements de certificats. Une autre tâche, qui supprime les
+      enregistrements de certificats. Les demandes de retrait du consentement ou
+      d'effacement des données sont lues elles aussi, ainsi que la trace de
+      celles déjà traitées : pour chacune, l'identifiant de la séance, les
+      identifiants techniques de la personne, une date et l'objet de la demande.
+      Une autre tâche, qui supprime les
       identifiants techniques devenus inutiles (section 8), lit : la liste de ces
       identifiants avec leurs dates de création et de dernière utilisation ; les
       identifiants des membres et du créateur de chaque séance en cours ; la
@@ -583,7 +597,10 @@
       copiaient <strong>l'intégralité de la base de session en cours</strong> sur
       une machine GitHub chaque jour &mdash; l'une pour décider quoi supprimer,
       l'autre pour mesurer la taille de la base. Ni l'une ni l'autre n'avait
-      besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Ces tâches ne consignent que des décomptes et des dates
+      besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Une
+      troisième tâche, qui surveille les demandes d'effacement restées sans
+      réponse, a fait de même du 03/09/2026 au 07/10/2026, alors qu'elle n'avait
+      besoin que des demandes ; elle a été corrigée. Ces tâches ne consignent que des décomptes et des dates
       &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base intégralement,
       une sauvegarde et l'export de recherche pseudonymisé, sont de nouveau actives
       depuis le 01/09/2026. Elles écrivent sur le stockage objet de
@@ -746,6 +763,11 @@
       les participants n'ayant jamais créé de compte. L'erreur a été
       corrigée le 25/08/2026 et ce qu'elle a laissé est supprimé par la même
       tâche.
+      La section 6 indique désormais aussi que les tâches quotidiennes lisent
+      les demandes de retrait du consentement ou d'effacement, ce que les
+      versions précédentes ne mentionnaient pas, et que l'une d'elles a copié
+      chaque jour l'intégralité de la base de session en cours sur une machine
+      GitHub, du 03/09/2026 au 07/10/2026, sans en avoir besoin.
       Les modifications substantielles font l'objet d'une nouvelle version avec re-consentement à la prochaine participation.
       <strong>Modifications substantielles depuis la version PIS v10, reprises :</strong>
       la section 1 n'affirme plus que l'Université de Caen Normandie et

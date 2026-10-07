@@ -335,6 +335,75 @@ test("the DAILY jobs read no session content — the notice says so in three lan
   }
 });
 
+/* DERIVATION C — scheduled jobs that read the REQUEST ledgers whole: the
+   withdrawals people have made and the record of erasures carried out. Each
+   entry names a session and a person's technical identifiers. */
+function readsRequestLedgers(rel, seen = new Set()) {
+  if (seen.has(rel)) return false;
+  seen.add(rel);
+  let src;
+  try {
+    src = read(ROOT, rel);
+  } catch {
+    return false;
+  }
+  if (/\.ref\(\s*["'`](withdrawals|erasures)["'`]\s*\)\s*\.(get|once)\(/.test(src)) return true;
+  for (const m of src.matchAll(/require\(["'](\.\/[\w./-]+)["']\)/g)) {
+    const dep = path.posix.join(path.posix.dirname(rel), m[1]);
+    if (readsRequestLedgers(dep.endsWith(".js") ? dep : dep + ".js", seen)) return true;
+  }
+  return false;
+}
+
+test("the notice says the daily jobs read withdrawal and erasure requests", () => {
+  /* The data-rights monitor went on a daily cron on 2026-09-03 and section 6
+     went on listing "session identifiers and two dates" as everything the
+     daily jobs read. A request to withdraw or to be erased names a session and
+     a person; a job that reads those on a runner in the United States is a
+     reader the notice has to name. */
+  const readers = scheduledScripts().filter((rel) => readsRequestLedgers(rel));
+  assert.ok(readers.includes("scripts/data-rights-monitor.js"),
+    "the derivation no longer sees the data-rights monitor reading the request ledgers " +
+    "(found: " + (readers.join(", ") || "none") + "). Either it stopped, and the notice can " +
+    "say less, or the derivation is broken and this test is passing on nothing.");
+
+  const s = privacySections();
+  const said = {
+    en: [/Requests to withdraw consent or to have data erased are read too, with the record of those already carried out/,
+         /for each, the session's identifier, the person's technical identifiers, a date and what was asked/],
+    fr: [/Les demandes de retrait du consentement ou d'effacement des données sont lues elles aussi, ainsi que la trace de celles déjà traitées/,
+         /pour chacune, l'identifiant de la séance, les identifiants techniques de la personne, une date et l'objet de la demande/],
+    ja: [/同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も読み込みます/,
+         /それぞれについて読み込むのは、セッションの識別子、ご本人の技術的識別子、日付、ご請求の内容です/]
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    const sec = recipientsAndTransfers(s[lang], lang);
+    for (const re of said[lang]) {
+      assert.ok(re.test(sec), "privacy.html [" + lang + "] sections 6-7 do not say: " + re +
+        "\nScheduled jobs that read the request ledgers: " + readers.join(", "));
+    }
+  }
+});
+
+test("the notice admits the month in which a third daily job copied every session", () => {
+  /* From 2026-09-03 the data-rights monitor enumerated sessions with the deep
+     reader, so it copied the whole live database to a GitHub runner every day
+     while section 6 said no daily job read session content. The same section
+     already owns up to the two jobs that did so until 2026-09-01; leaving this
+     one out would make that paragraph read as the full account. */
+  const s = privacySections();
+  const said = {
+    en: /A third job, which watches for erasure requests that have gone unanswered, did the same from 2026-09-03 to 2026-10-07, although it needed only the requests; it has been corrected/,
+    fr: /Une troisième tâche, qui surveille les demandes d'effacement restées sans réponse, a fait de même du 03\/09\/2026 au 07\/10\/2026, alors qu'elle n'avait besoin que des demandes ; elle a été corrigée/,
+    ja: /対応されていない削除のご請求を監視する3つ目の処理も、2026年9月3日から2026年10月7日まで同じように複製していました/
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    assert.ok(said[lang].test(recipientsAndTransfers(s[lang], lang)),
+      "privacy.html [" + lang + "] sections 6-7 no longer admit that the data-rights monitor " +
+      "copied the whole session database daily from 2026-09-03 to 2026-10-07");
+  }
+});
+
 test("if a scheduled job DOES copy the database, the notice says so and says where", () => {
   /* The backup and the pseudonymised export copy everything — that is their
      purpose, and they were re-enabled on 2026-09-01 after five days in which the

@@ -3664,9 +3664,23 @@ two apart — conflating them is the error this analysis began with.
 that can be checked rather than an assurance:
 - The platform is **pre-pilot**: four sessions existed on the date of this entry.
 - What the jobs read has been minimised to **session identifiers and two
-  lifecycle dates per session**, plus the `credentials` records. **No session
-  bodies have reached a runner since PIS v7** (2026-09-01/02) — before that, two
+  lifecycle dates per session**, plus the `credentials` records. ~~No session
+  bodies have reached a runner since PIS v7 (2026-09-01/02)~~ — before that, two
   jobs copied the whole identified tree daily.
+- ⚠️ **The struck sentence was FALSE from the day after it was written, and
+  this acceptance was given on it.** The data-rights monitor went on a daily
+  cron on 2026-09-03 and enumerated sessions with the deep reader, so it copied
+  the whole identified tree — free-text chat included — to a runner every day
+  until 2026-10-07 (#431 replaced the read with a keys-only listing). It used
+  only the withdrawal paths. Nobody saw it because the "daily jobs" the notice
+  test checked were a hand-written list the monitor was never added to; the
+  rule is now derived (`tests/ops-transfer-notice.test.js`: any scheduled job
+  that reads session bodies must be one of the two disclosed full copies). PIS
+  v12 section 6 admits the month, and lists what was missing besides: the
+  monitor reads the withdrawal and erasure ledgers (a session identifier, the
+  person's technical identifiers, a date, what was asked). **[OPERATOR: the
+  acceptance below was given on "no session bodies since 2026-09-01". Re-read
+  it against a month in which they did cross, and say whether it stands.]**
 - ⚠️ **That limb WIDENED in 2026-10, and this acceptance has not been given
   again on the wider facts.** The anonymous-account retention job (G13) adds,
   nightly: every Auth account's UID with three timestamps and the names of its
