@@ -3325,14 +3325,9 @@ function readSession(hintId) {
 /* version stamp written next to every consent record. Bump whenever the
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
-   participant consented to.
-
-   ⚠️ It sat at "PIS-v3-2026-07" from July to October 2026 while the notice went
-   from v3 to v11. So every consent record written in that time names v3, and a
-   participant resuming a session was never asked again — although section 16
-   of the notice promises re-consent "on next join" after a material change
-   (the resume path compares THIS string, further down). Nothing compared it
-   with the notice. tests/pis-version-lockstep.test.js does now. */
+   participant consented to. The resume path compares it too, so a bump is
+   what re-asks a returning participant. It sat at v3 while the notice went
+   to v11; tests/pis-version-lockstep.test.js now ties the two together. */
 const CONSENT_NOTICE_VERSION = "PIS-v12-2026-10";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */

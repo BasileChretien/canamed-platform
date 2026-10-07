@@ -114,14 +114,24 @@ function deepReadsSessions(rel, seen = new Set()) {
    That the escape hatch really is opt-in — never a catch-block fallback — is
    asserted in tests/session-enum-shallow.test.js, which is where that
    invariant belongs. */
-function enumeratesShallowly(rel) {
-  let src;
-  try {
-    src = read(ROOT, rel);
-  } catch {
-    return false;
-  }
-  if (/readSessionLocationsShallow\s*\(/.test(src)) return true;
+/* A CALL, never the definition. The first version of the library follow-through
+   below matched `readSessionLocationsShallow(` anywhere in a dependency — and
+   lib/session-trees.js DEFINES that function, and every session-reading script
+   requires that file. So the backup, the export and the data-rights monitor
+   were all classed as shallow, derivation B came back empty, and the full-copy
+   disclosure test returned having asserted nothing. An independent review
+   caught it; "the derivation still sees the jobs that copy everything", below,
+   is what fails if it happens again. */
+const CALLS_SHALLOW = /(?<!function\s+)\breadSessionLocationsShallow\s*\(/;
+const CALLS_DEEP = /(?<!function\s+)\breadSessionLocations\s*\(/;
+
+/* The rule itself, on source text, so it can be shown on cases the repository
+   does not contain today. */
+function classifiesAsShallow(src, libSources) {
+  if (CALLS_SHALLOW.test(src)) return true;
+  /* A script that itself calls the deep reader, and never the shallow one, is
+     not excused by anything it imports. */
+  if (CALLS_DEEP.test(src)) return false;
   /* ...or through the library that does its reading. cleanup-anonymous-accounts
      keeps its orchestration in lib/anonymous-retention-job.js so it can be
      driven against fakes, and THAT file calls the shallow enumerator. One
@@ -129,17 +139,37 @@ function enumeratesShallowly(rel) {
      That the library never reads a session body is asserted where it can be
      shown by running it: tests/anonymous-retention-job.test.js, "the only
      value ever read whole is a session's creator uid". */
+  return libSources.some((lib) => CALLS_SHALLOW.test(lib));
+}
+
+function enumeratesShallowly(rel) {
+  let src;
+  try {
+    src = read(ROOT, rel);
+  } catch {
+    return false;
+  }
+  const libs = [];
   for (const m of src.matchAll(/require\(["'](\.\/lib\/[\w.-]+)["']\)/g)) {
     const dep = path.posix.join(path.posix.dirname(rel), m[1]);
     try {
-      if (/readSessionLocationsShallow\s*\(/.test(read(ROOT, dep.endsWith(".js") ? dep : dep + ".js"))) {
-        return true;
-      }
+      libs.push(read(ROOT, dep.endsWith(".js") ? dep : dep + ".js"));
     } catch {
       /* an unreadable dependency proves nothing either way */
     }
   }
-  return false;
+  return classifiesAsShallow(src, libs);
+}
+
+/* The two jobs whose PURPOSE is a full copy. Section 6 of the notice names
+   them and says where the copy goes. Everything else on a schedule must read
+   no session body at all. */
+const FULL_COPY = ["scripts/backup-sessions.js", "scripts/pseudonymise-export.js"];
+
+/* Read from the workflows directly, NOT through derivation B — it is what
+   derivation B is checked against. */
+function scheduledScripts() {
+  return scheduledWorkflows().flatMap((w) => scriptsOf(w.yml));
 }
 
 /* DERIVATION A — scheduled jobs that reach the database at all, by any route.
@@ -234,6 +264,37 @@ test("the derivation finds the scheduled jobs that touch the database", () => {
   );
 });
 
+test("the derivation still sees the jobs that copy everything", () => {
+  /* Anti-vacuity for derivation B, in the direction that matters: a derivation
+     that finds NOTHING makes the two tests below pass by doing nothing. The
+     backup and the export read the whole database by design, so while either
+     is on a live cron it must be reported. */
+  const scheduled = scheduledScripts();
+  const bulk = jobsReadingSessionBodies().map((j) => j.script);
+  for (const job of FULL_COPY) {
+    if (!scheduled.includes(job)) continue; // switched off: correctly not reported
+    assert.ok(bulk.includes(job),
+      job + " runs on a schedule and copies the database, but the derivation no longer " +
+      "reports it as reading session bodies. The disclosure tests here would pass vacuously.");
+  }
+  /* The two helpers must tell the readers apart, whatever the schedule says. */
+  assert.strictEqual(enumeratesShallowly("scripts/backup-sessions.js"), false);
+  assert.strictEqual(enumeratesShallowly("scripts/pseudonymise-export.js"), false);
+  assert.strictEqual(enumeratesShallowly("scripts/cleanup-anonymous-accounts.js"), true);
+  assert.strictEqual(enumeratesShallowly("scripts/lib/session-trees.js"), false,
+    "the module that DEFINES the shallow enumerator is not thereby a caller of it");
+  /* ...and the rule on the three shapes that decide it. */
+  const definesIt = "async function readSessionLocationsShallow(opts) {\n}";
+  const callsIt = "const locations = await readSessionLocationsShallow({ app });";
+  const viaLib = 'const job = require("./lib/some-job");';
+  assert.strictEqual(classifiesAsShallow(viaLib, [definesIt]), false,
+    "a library that only DEFINES the shallow enumerator excused a script");
+  assert.strictEqual(classifiesAsShallow(viaLib, [callsIt]), true);
+  assert.strictEqual(
+    classifiesAsShallow(viaLib + "\nconst all = await readSessionLocations(db);", [callsIt]), false,
+    "a script that calls the deep reader itself was excused by a library it imports");
+});
+
 test("the DAILY jobs read no session content — the notice says so in three languages", () => {
   /* The claim in section 6 is scoped, and the scoping is the whole point.
      Between PIS v7 and v9 it read "None of them reads your session content",
@@ -242,22 +303,23 @@ test("the DAILY jobs read no session content — the notice says so in three lan
      this test is what caught it — the notice and the schedule had moved in
      opposite directions inside one change.
 
-     So: the jobs that run every day must read no bodies; the full-copy jobs are
-     allowed to, and are disclosed separately (next test). */
-  const DAILY = [
-    "scripts/cleanup-stale-sessions.js",
-    "scripts/firebase-cost-monitor.js",
-    "scripts/cleanup-expired-credentials.js",
-    "scripts/cleanup-anonymous-accounts.js"
-  ];
+     So: the full-copy jobs are allowed to read bodies, and are disclosed
+     separately (next test); NOTHING ELSE on a schedule may.
+
+     This used to check a hand-written list of "daily" scripts. The data-rights
+     monitor was added to the schedule on 2026-09-03 and not to the list, and it
+     deep-read every session every day for a month while the notice said no
+     daily job did. The rule is now derived: whatever is scheduled and is not
+     one of the two disclosed copies. */
   const offenders = jobsReadingSessionBodies()
     .map((j) => j.script)
-    .filter((j) => DAILY.includes(j));
+    .filter((j) => !FULL_COPY.includes(j));
   assert.deepStrictEqual(
     offenders, [],
-    "a DAILY maintenance job reads session bodies again: " + offenders.join(", ") +
+    "a scheduled job other than the two disclosed full copies reads session bodies: " +
+      offenders.join(", ") +
       "\nprivacy.html section 6 tells participants the daily jobs do not read " +
-      "session content."
+      "session content. Enumerate with readSessionLocationsShallow() instead."
   );
 
   const s = privacySections();
@@ -280,7 +342,10 @@ test("if a scheduled job DOES copy the database, the notice says so and says whe
      identified database leaving on a schedule is exactly the kind of processing
      Art. 13 exists to surface, so it may run only while the notice describes it
      AND names the destination. */
-  const bulk = jobsReadingSessionBodies().map((j) => j.script);
+  /* Whether there is anything to disclose is read from the SCHEDULE, not from
+     derivation B: a conditional on the derivation under test is how this test
+     once returned early with both jobs running. */
+  const bulk = FULL_COPY.filter((job) => scheduledScripts().includes(job));
   if (bulk.length === 0) return; // both switched off again; nothing to disclose
 
   const s = privacySections();

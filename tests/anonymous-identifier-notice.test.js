@@ -35,7 +35,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
-  DEFAULT_RETENTION_DAYS, MAX_RETENTION_DAYS, assertSafePaths
+  DEFAULT_RETENTION_DAYS, MAX_RETENTION_DAYS, assertSafePaths, classifyAccounts
 } = require("../scripts/lib/anonymous-retention");
 const { TTL_WINDOWS } = require("../scripts/lib/rate-limit-retention");
 const {
@@ -53,8 +53,41 @@ const read = (...p) => fs.readFileSync(path.join(...p), "utf8").replace(/\r\n/g,
 // ---- the enforced side -----------------------------------------------------
 
 const WORKFLOW = read(ROOT, ".github", "workflows", "cleanup-anonymous-accounts.yml");
-const liveCronLines = WORKFLOW.split("\n")
-  .filter((l) => /^\s*-\s*cron:/.test(l) && !/^\s*#/.test(l));
+const liveLines = WORKFLOW.split("\n").filter((l) => !/^\s*#/.test(l));
+const liveCronLines = liveLines.filter((l) => /^\s*-\s*cron:/.test(l));
+
+/** The value the workflow gives an env var, read from LIVE lines only, and
+ *  there must be exactly one. An independent review disarmed the schedule
+ *  while every assertion here stayed green: the armed line commented out "to
+ *  restore later", a dispatch-only one added below it. A pattern run over the
+ *  whole file still found the first. */
+function liveEnv(name) {
+  const re = new RegExp("^\\s+" + name + ":\\s*(.+?)\\s*$");
+  const hits = liveLines.map((l) => re.exec(l)).filter(Boolean).map((m) => m[1]);
+  assert.strictEqual(hits.length, 1,
+    "cleanup-anonymous-accounts.yml must set " + name + " on exactly one live line; found " +
+    hits.length + ": " + JSON.stringify(hits));
+  return hits[0];
+}
+
+/** The `default:` of a dispatch input, read from that input's OWN block: the
+ *  lines indented deeper than its key, up to the first that is not. A pattern
+ *  that walks "any line" until it meets a `default:` slides into the NEXT
+ *  input's when this one's is quoted, double-spaced or missing — and the next
+ *  input here defaults to false. Returns the token as written, or null. */
+function inputDefault(name) {
+  const at = liveLines.findIndex((l) => new RegExp("^\\s+" + name + ":\\s*$").test(l));
+  assert.ok(at >= 0, "cleanup-anonymous-accounts.yml has no `" + name + "` input any more");
+  const depth = (l) => l.match(/^\s*/)[0].length;
+  for (let i = at + 1; i < liveLines.length; i++) {
+    const l = liveLines[i];
+    if (!l.trim()) continue;
+    if (depth(l) <= depth(liveLines[at])) break;
+    const m = /^\s+default:\s*(.*?)\s*$/.exec(l);
+    if (m) return m[1];
+  }
+  return null;
+}
 
 /* The closed-session window: how long a session outlives its closing, and so
    how much later than N days an identifier can go. Read from the purge job. */
@@ -125,11 +158,11 @@ test("the job DELETES on schedule: a scheduled run is not a dry run", () => {
   /* The second way: the cron still fires and the run still goes green, but
      nothing is removed. cleanup-expired-credentials.yml is in exactly that
      state on purpose — and its retention period is not in the notice. */
-  assert.match(WORKFLOW,
-    /ANON_CONFIRM: \$\{\{ \(github\.event_name == 'schedule' \|\| github\.event\.inputs\.confirm == 'true'\) && '1' \|\| '0' \}\}/,
-    "a scheduled run must set ANON_CONFIRM=1");
-  const confirmInput = /confirm:\s*\n(?:\s+.*\n)*?\s+default: (\w+)/.exec(WORKFLOW);
-  assert.ok(confirmInput && confirmInput[1] === "false",
+  assert.strictEqual(liveEnv("ANON_CONFIRM"),
+    "${{ (github.event_name == 'schedule' || github.event.inputs.confirm == 'true') && '1' || '0' }}",
+    "a scheduled run must set ANON_CONFIRM=1, and nothing but a schedule or a ticked " +
+    "`confirm` may");
+  assert.strictEqual(inputDefault("confirm"), "false",
     "a MANUAL dispatch must still default to a dry run");
 });
 
@@ -151,7 +184,8 @@ test("nothing in the workflow lets a scheduled run skip the job, or run somethin
 });
 
 test("the window the workflow passes is the one the rules default to, and its ceiling", () => {
-  const m = /ANON_RETENTION_DAYS: \$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}/.exec(WORKFLOW);
+  const m = /^\$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}$/
+    .exec(liveEnv("ANON_RETENTION_DAYS"));
   assert.ok(m, "ANON_RETENTION_DAYS is no longer wired to the dispatch input");
   assert.strictEqual(Number(m[1]), DEFAULT_RETENTION_DAYS);
   assert.strictEqual(MAX_RETENTION_DAYS, DEFAULT_RETENTION_DAYS,
@@ -258,26 +292,40 @@ test("section 8 states when the usage counters go, and the figure is the real on
   }
 });
 
-test("section 8 states the two things that outlast the period, instead of a bare number", () => {
+test("section 8 states what outlasts the period, instead of a bare number", () => {
   /* Found by an independent fact-check: "deleted after 90 days" was stated
      flatly, while (a) the identifier survives in the nightly backups of the
      sessions it joined, and (b) the job deliberately keeps an account an
-     operator has allowlisted, or one the database says is not anonymous. */
+     operator has allowlisted, or one the database says is not anonymous.
+
+     A second review found the fix had overcorrected: it said the identifier
+     is kept longer "ONLY if" (b), and the job also keeps an account it cannot
+     read enough about to judge — no readable last-use date, an identifier it
+     cannot use as a key, a user node it cannot read. An exhaustive list that
+     omits a case is false for the person in that case, so the notice now names
+     that class too and no longer says "only". */
   const item = { en: /technical identifier your browser is given/, fr: /identifiant technique attribué/,
                  ja: /割り当てられる技術的識別子/ };
   const must = {
     en: [/remain in the nightly backups until those expire/,
-         /kept longer only if it belongs to an approved facilitator or moderator, or if a profile or authored scenarios are stored under it/],
+         /kept longer if it belongs to an approved facilitator or moderator, or if a profile or authored scenarios are stored under it/,
+         /also kept when it cannot be established when it was last used, or what is stored under it: in doubt, nothing is deleted/],
     fr: [/subsistent dans les sauvegardes nocturnes jusqu'à leur expiration/,
-         /conservé plus longtemps que s'il appartient à un animateur ou à un modérateur approuvé, ou si un profil ou des scénarios rédigés sont enregistrés/],
+         /conservé plus longtemps s'il appartient à un animateur ou à un modérateur approuvé, ou si un profil ou des scénarios rédigés sont enregistrés/,
+         /Il l'est aussi lorsqu'il n'est pas possible d'établir quand il a été utilisé pour la dernière fois, ou ce qui est enregistré sous cet identifiant : dans le doute, rien n'est supprimé/],
     ja: [/毎晩のバックアップに残る複製は、この一覧の2番目の項の期間で失効します/,
-         /承認済みのファシリテーターまたはモデレーターの識別子である場合と、プロフィールまたは作成したシナリオが保存されている場合に限り、これより長く保持します/]
+         /承認済みのファシリテーターまたはモデレーターの識別子である場合と、プロフィールまたは作成したシナリオが保存されている場合は、これより長く保持します/,
+         /最終利用日や、何が保存されているかを確認できない場合も、削除せずに保持します/]
   };
+  const exhaustive = { en: /only if/, fr: /n'est conservé plus longtemps que/, ja: /に限り/ };
   for (const lang of LANGS) {
     const li = retentionItem(lang, item[lang]);
     for (const re of must[lang]) {
       assert.ok(re.test(li), "privacy.html [" + lang + "] section 8 no longer says: " + re);
     }
+    assert.ok(!exhaustive[lang].test(li),
+      "privacy.html [" + lang + "] section 8 presents the reasons an identifier is kept as " +
+      "a closed list again (" + exhaustive[lang] + ")");
   }
   /* The exceptions are the job's, so they are read from it. */
   const job = read(ROOT, "scripts", "lib", "anonymous-retention-job.js");
@@ -287,6 +335,40 @@ test("section 8 states the two things that outlast the period, instead of a bare
     "the job no longer spares an account with a profile, but the notice says it does");
   assert.match(job, /if \(scenarios\.has\(uid\)\) contradicted\.add\(uid\)/,
     "the job no longer spares an account with scenarios, but the notice says it does");
+});
+
+test("every way the job KEEPS an anonymous account is one the notice names", () => {
+  /* The other half of the test above: the notice lists the reasons, so a new
+     reason must reach the notice. classifyAccounts() counts each kind of kept
+     account under its own key, which makes the list checkable — a new counter
+     fails here until section 8 is read again. */
+  const now = Date.UTC(2026, 9, 7);
+  const old = now - 200 * 24 * 3600 * 1000;
+  const acct = (uid, extra) => Object.assign(
+    { uid, providers: [], createdMs: old, lastLoginMs: old, lastRefreshMs: old }, extra);
+  const cls = classifyAccounts([
+    acct("idleAndUnnamed"),
+    acct("onAnAllowlist"),
+    acct("noReadableDate", { lastRefreshMs: null }),
+    acct("bad/uid")
+  ], { nowMs: now, windowMs: DEFAULT_RETENTION_DAYS * 24 * 3600 * 1000,
+       protectedUids: new Set(["onAnAllowlist"]) });
+  assert.deepStrictEqual(Object.keys(cls).sort(), [
+    "anonymous", "anonymousUids", "authUids", "expired", "kept", "named", "protected",
+    "quietUids", "total", "undated", "unusable", "withRefresh"
+  ], "classifyAccounts() sorts accounts into a class this test does not know. If it is a " +
+     "new reason to KEEP one, section 8 of the notice must name it (three languages).");
+  assert.deepStrictEqual(cls.expired, ["idleAndUnnamed"]);
+  assert.deepStrictEqual(
+    { protected: cls.protected, undated: cls.undated, unusable: cls.unusable, kept: cls.kept },
+    { protected: 1, undated: 1, unusable: 1, kept: 3 },
+    "an idle anonymous account is kept for a reason other than the three counted here");
+  /* ...and the fourth, which lives in the job: a user node it cannot read, or
+     that is not a node, spares the account. */
+  const job = read(ROOT, "scripts", "lib", "anonymous-retention-job.js");
+  assert.match(job, /catch \{\s*readErrors\+\+;\s*contradicted\.add\(uid\);/,
+    "the job no longer keeps an account whose user node it cannot read, but the notice " +
+    "says that in doubt nothing is deleted");
 });
 
 test("section 8 says a moderation report is KEPT — and the job really cannot delete one", () => {

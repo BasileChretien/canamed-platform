@@ -761,8 +761,10 @@ deleted after 90 days without use.** If a session you joined still exists then,
 it goes when that session does — about 30 days later at most. It also stays in
 the nightly backups of the sessions you joined until those expire, and it is
 kept longer if it belongs to an approved facilitator or moderator, or if a
-profile or authored scenarios are stored under it. The AI chat's usage counters
-are deleted within about three days.
+profile or authored scenarios are stored under it. It is also kept when it
+cannot be established when it was last used, or what is stored under it: in
+doubt, nothing is deleted. The AI chat's usage counters are deleted within
+about three days.
 
 **Two things are not deleted automatically at all:**
 

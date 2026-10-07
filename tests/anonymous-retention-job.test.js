@@ -695,16 +695,43 @@ test("the workflow is scheduled, and what ties that to the notice lives next doo
     "schedule from outliving the disclosure it depends on");
 });
 
+/* LIVE lines only, and exactly one of them: a pattern run over the whole file
+   is satisfied by a commented-out line, and one that walks "any line" to the
+   next `default:` slides out of the input it was asked about. Both let a wrong
+   workflow through; see the same two readers in
+   tests/anonymous-identifier-notice.test.js for how each was found. */
+const LIVE = WORKFLOW.split("\n").filter((l) => !/^\s*#/.test(l));
+function liveEnv(name) {
+  const re = new RegExp("^\\s+" + name + ":\\s*(.+?)\\s*$");
+  const hits = LIVE.map((l) => re.exec(l)).filter(Boolean).map((m) => m[1]);
+  assert.strictEqual(hits.length, 1, name + " must be set on exactly one live line");
+  return hits[0];
+}
+function inputDefault(name) {
+  const at = LIVE.findIndex((l) => new RegExp("^\\s+" + name + ":\\s*$").test(l));
+  assert.ok(at >= 0, "no `" + name + "` input in the workflow");
+  const depth = (l) => l.match(/^\s*/)[0].length;
+  for (let i = at + 1; i < LIVE.length; i++) {
+    if (!LIVE[i].trim()) continue;
+    if (depth(LIVE[i]) <= depth(LIVE[at])) break;
+    const m = /^\s+default:\s*(.*?)\s*$/.exec(LIVE[i]);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 test("the orphan sweep is never on by schedule — only by an explicit manual tick", () => {
   /* Deleting on schedule is the published policy. Deleting records whose uid
      has no account is an operator decision, behind a tripwire. */
-  assert.match(WORKFLOW, /ANON_SWEEP_ORPHANS: \$\{\{ github\.event\.inputs\.sweep_orphans == 'true' && '1' \|\| '0' \}\}/);
-  const sweepInput = /sweep_orphans:\s*\n(?:\s+.*\n)*?\s+default: (\w+)/.exec(WORKFLOW);
-  assert.ok(sweepInput && sweepInput[1] === "false", "the sweep_orphans input must default to false");
+  assert.strictEqual(liveEnv("ANON_SWEEP_ORPHANS"),
+    "${{ github.event.inputs.sweep_orphans == 'true' && '1' || '0' }}");
+  assert.strictEqual(inputDefault("sweep_orphans"), "false",
+    "the sweep_orphans input must default to false");
 });
 
 test("the workflow's default window is the one the rules default to", () => {
-  const m = /ANON_RETENTION_DAYS: \$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}/.exec(WORKFLOW);
+  const m = /^\$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}$/
+    .exec(liveEnv("ANON_RETENTION_DAYS"));
   assert.ok(m, "ANON_RETENTION_DAYS is no longer wired to the dispatch input");
   assert.strictEqual(Number(m[1]), DEFAULT_RETENTION_DAYS);
 });

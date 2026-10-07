@@ -3049,9 +3049,11 @@ same day.)*
 > - **The per-account rate-limit counters** — `rateLimits/uid/<uid>/<bucket>`,
 >   increment-only for a client. These do have a sweep —
 >   `scripts/lib/rate-limit-retention.js` drops a bucket once it is past its
->   TTL (2 hours / 2 days) — but it runs as part of the G13 job and is therefore
->   **not scheduled** (see the note at G7). Once it is, they expire within two
->   days whatever happens to the account; today they stay.
+>   TTL (2 hours / 2 days) — and it runs as the first phase of the G13 job,
+>   which is **scheduled nightly since PIS v12** (see the note at G7). They
+>   therefore expire within about three days whatever happens to the account.
+>   (Until that job was scheduled this entry read "not scheduled … today they
+>   stay", which was true of #426 as merged and stopped being true with v12.)
 >
 > **What it does NOT remove, by design** — everything inside a session or keyed
 > by one: the pool entry (with the name typed at join), answers, votes, chat
@@ -3475,11 +3477,17 @@ found no false statement about a person's data, and these dependencies:
 - **An orphan created LATER is only counted on schedule.** If an account is
   removed some other way (the Console), the `users/` node left behind is
   reported nightly and deleted only by a manual dispatch with `sweep_orphans`.
-- **Four kinds of anonymous account are kept past 90 days by design**: one on
+- **Five kinds of anonymous account are kept past 90 days by design**: one on
   an operator allowlist; one with a `profile` or `scenarios` node (which the
   owner can write, so a participant can exempt their own account); one with no
-  readable last-use date; one whose uid is not well-formed. The notice states
-  the first two. The dry run found none of the four.
+  readable last-use date; one whose uid is not well-formed; one whose
+  `users/<uid>` node cannot be read. The notice
+  states the first two by name and the rest as one class ("when it cannot be
+  established when it was last used, or what is stored under it: in doubt,
+  nothing is deleted"). Its first v12 draft said "kept longer **only** if" the
+  first two held, which an independent review found false for the others; a
+  test now fails if a new class of kept account appears without the notice
+  being read again. The dry run found none of them.
 
 *What is NOT established.* Recovery is
 proven for a participant's **next page load** only (the SDK clears a stored
