@@ -304,8 +304,18 @@ function makeWorld(opts) {
   const fail = (code, more) => Promise.reject(Object.assign(new Error(code), { code }, more));
   /* A call that signs somebody in. The listener is told before the call's
      promise resolves — or, with `auth.late`, only after the caller's own
-     success handler has run: nothing in the page may depend on that order. */
-  const signedInAs = (user) => {
+     success handler has run: nothing in the page may depend on that order.
+
+     The SDK builds a NEW user object for a sign-in. Where the uid changes the
+     page is told and takes it. Where it is the uid ALREADY signed in, the page
+     is told nothing and the object it holds has been superseded — the case
+     reproduced here: a fresh object, which is the account's from then on. */
+  const signedInAs = (registered) => {
+    let user = registered;
+    if (auth.currentUser && auth.currentUser.uid === registered.uid) {
+      user = Object.assign({}, registered);
+      Object.values(auth.accounts).forEach((a) => { if (a.user === registered) a.user = user; });
+    }
     auth.currentUser = user;
     if (!auth.late) return notify(user).then(() => ({ user }));
     setImmediate(() => { if (user.uid !== lastUid) deliver(user); });
@@ -1680,6 +1690,42 @@ for (const late of [false, true]) {
     assert.deepStrictEqual(w.signInForm(), EMPTY);
   });
 
+  test("I: after another tab made the visitor an account, signing in here as ANOTHER account and then as that one " +
+       "is handled once each (" + order + ")", async () => {
+    /* FOUND IN REVIEW, round 2. Two things no test held. The page must look at
+       the user the SDK has NOW, not at the one it was last told about: in the
+       second-tab state that one is an account under the uid the page still
+       shows as a visitor, so a sign-in to somebody else would be handled as
+       it. And a reported ACCOUNT must clear what the page remembers of that
+       visitor, or signing in to the visitor's own account afterwards — a change
+       of uid, which the SDK reports — is handled by the page as well. */
+    const w = await onSignInView();
+    const uid = w.sandbox.currentUser.uid;
+    w.auth.accounts[ALICE.email] = { user: ALICE, password: PASSWORD };
+    w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
+    w.otherTabUpgrades(NEW, PASSWORD);
+    w.auth.late = late;
+
+    let before = w.handled.length;
+    w.typeSignIn({ email: ALICE.email, password: PASSWORD });
+    w.sandbox.signInWithEmail(ALICE.email, PASSWORD);
+    await w.settle();
+    assert.deepStrictEqual(w.handled.slice(before), ["uidAlice"], "another account: the SDK's report, and only that");
+    assert.strictEqual(w.sandbox.currentUser, w.auth.currentUser);
+    assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Alice" });
+
+    before = w.handled.length;
+    w.typeSignIn({ email: NEW, password: PASSWORD });
+    w.sandbox.signInWithEmail(NEW, PASSWORD);
+    await w.settle();
+    assert.deepStrictEqual(w.handled.slice(before), [uid],
+      "then the account the other tab made: a change of uid, so the SDK's report again and only that");
+    assert.strictEqual(w.sandbox.currentUser, w.auth.currentUser);
+    assert.strictEqual(profileReads(w, uid), 1);
+    assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: NEW });
+    assert.deepStrictEqual(w.views(), ["profile-setup"]);
+  });
+
   test("I: a sign-up when there is no anonymous visitor to upgrade is handled once, not twice (" + order + ")", async () => {
     // Anonymous sign-in refused or not answered yet: the account is created outright.
     const w = makeWorld();
@@ -1792,7 +1838,8 @@ const SECOND_TAB = [
 for (const s of SECOND_TAB) {
   test("I: an account created in another tab is shown here as soon as somebody " + s.how, async () => {
     const w = await onSignInView();
-    const uid = w.sandbox.currentUser.uid;
+    const visitor = w.sandbox.currentUser;
+    const uid = visitor.uid;
     w.otherTabUpgrades(NEW, PASSWORD);
     const before = w.handled.length;
     const told = w.reported.length;
@@ -1806,7 +1853,10 @@ for (const s of SECOND_TAB) {
 
     assert.strictEqual(w.el("splash-account-hint").textContent, "", "premise: the sign-in succeeded");
     assert.strictEqual(w.reported.length, told, "premise: and the SDK reported nothing, the uid being the same");
+    assert.notStrictEqual(w.auth.currentUser, visitor, "premise: the sign-in built a new user object for that uid");
     assert.deepStrictEqual(w.handled.slice(before), [uid], "handled once, by the page");
+    assert.strictEqual(w.sandbox.currentUser, w.auth.currentUser,
+      "with the user the SDK now has, not the object that sign-in superseded");
     assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: NEW });
     assert.deepStrictEqual(w.views(), ["profile-setup"]);
     assert.deepStrictEqual(w.signInForm(), EMPTY);
