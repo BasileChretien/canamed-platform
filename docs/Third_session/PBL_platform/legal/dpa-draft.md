@@ -903,12 +903,13 @@ arising from the termination itself, without prejudice to accrued rights.
 | G4 no APPI Art. 28 basis for the LLM leg | BLOCKING | [OWNER] | [DATE] | |
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
-| G7 LLM usage log undisclosed / unbounded / unreachable | HIGH | [OWNER] | [DATE] | |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | |
+| G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; a sweep was built on 2026-10-07 and is **not yet scheduled**. Disclosure and the Art. 15 route are untouched |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | Narrowed by the G13 job for an ANONYMOUS account's `users/` node only. Scenarios and moderation reports are deliberately left in place, for everyone |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
 | G12 withdrawal does not produce erasure | BLOCKING | [OWNER] | [DATE] | |
+| G13 anonymous sign-in account: undisclosed, never deleted | HIGH — **MECHANISM BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED** | [OWNER] | [DATE] | `scripts/cleanup-anonymous-accounts.js` removes an anonymous account idle ≥ 90 days that no live session names, with its `users/` node. It runs only on manual dispatch and is a dry run unless confirmed. **Until it is scheduled, retention is still indefinite and the notice still omits the identifier** — the cron, the armed confirm and the notice must land in one change. This item closes then, not now |
 | Annex IV — EEA → Hugging Face mechanism | BLOCKING | [OWNER] | [DATE] | |
 | Annex IV — Google / GitHub DPA evidence | BLOCKING | [OWNER] | [DATE] | |
 
@@ -1695,7 +1696,8 @@ widely than participants are told.
 |---|---|---|---|
 | Display name, university/affiliation, study year, self-rated English | `sessions/<code>/pool/<clientId>` | Every session member | Free-text, each capped at 40 characters |
 | Consent record | `.../pool/<clientId>/consent` | Every session member | Booleans for workshop and research consent, plus a notice-version string |
-| Identity-to-account bindings | `clientMapping`, `stableIdMapping`, `members`, `rooms/*/uidMembers` | Every session member | Maps a browser identity to a Firebase auth UID |
+| Identity-to-account bindings | `clientMapping`, `stableIdMapping`, `members`, `rooms/*/uidMembers` | Every session member | Maps a browser identity to a Firebase auth UID. For a participant who never signs in, that UID is the **anonymous sign-in account** in the next row |
+| **Anonymous sign-in account** | **Firebase Authentication (Google)** — not the database | No one via the client. The operator, through the Firebase Console and the Identity Toolkit API | `signInAnonymously()` creates one for **every visitor, on page load, before any consent surface is reached**: a UID and three timestamps (created, last sign-in, last token refresh). No name, no e-mail. The credential is persisted in the browser so the UID is stable between visits. Every `auth != null` rule in the database depends on it. **Not in the notice, and not deleted by anything until 2026-10** — see Annex VI, G13 |
 | Free-text clinical answers and replies | `rooms/<room>/answers`, `answerReplies` | Every session member (not only the room) | Carries the author's display name and university |
 | Diagnostic hypotheses, prompt replies, revealed items, scores | `rooms/<room>/moduleA/*`, `moduleB/*` | Every session member | Free text capped at 200 characters |
 | **Free-text conversation with the simulated patient** | `roomChat/<code>/<room>/chat/<turnId>` — org sessions: `roomChat/orgs/<slug>/<code>/<room>/chat/<turnId>`. **Outside the session subtree since 2026-07-24 (PR #235)**; it was `rooms/<room>/moduleA/chat/<turnId>` before that | **Room members only, and genuinely so** — its own `.read`, granted per room plus the facilitator. Before the move the room-scoped rule restricted *writing* only, because `.read` cascades from `sessions/$sessionId` | Up to 600 characters per turn; **the highest-risk field** because it is unconstrained student writing |
@@ -1707,9 +1709,10 @@ widely than participants are told.
 | **Session metadata: creator UID, facilitator display name (`created.by`), workshop label, scenario id, `scenarioCustomJson` (up to 262,144 characters of authored scenario), scenario reference, closed marker, summary, admin-hash marker** | `sessions/<code>/*` | **Any authenticated user of the platform** (`".read": "auth != null"`, with **no membership test**) — including participants of a *different* facilitator's session | Session codes are 6 characters from a 31-character alphabet (~30 bits) and are explicitly not secret ("read aloud to a room"). See Annex VI, G3 |
 | **Participant email addresses** | `rosters/sessions/<code>/<uid>` | Session creator only | Email, name, university. Written only for signed-in (non-anonymous) participants who gave research consent. Exportable by the facilitator as CSV |
 | **Certificate records** | `credentials/<certId>` | **Anyone, with no authentication**, by exact ID | A SHA-256 **hash of the name** (not the name), the session code, a session label, timestamps, `retentionUntil` |
-| Account profile and session history | `users/<uid>/*` | Self only | Only for participants who create an optional account |
-| Authored and shared scenarios | `scenarios/<ownerUid>`, `sharedScenarios/<shareId>` | Owner; shared ones readable by **any signed-in user** | Shared scenarios carry the author's display name (capped 80 chars) — confirm the facilitator consent flow discloses that |
-| Abuse reports and moderation records | `reports/*`, `moderation/*` | Admin-gated | Retains the reporting user's UID |
+| Account profile and session history | `users/<uid>/*` | Self only | Intended only for participants who create an optional account. **That was not true until 2026-08-25:** `pushSessionToHistory()` guarded on `!currentUser`, which is truthy for an anonymous user, so **every anonymous joiner** got `users/<anon-uid>/history/<code>` — session code, workshop name, scenario name, join time. Fixed in #348 for new writes; the records already written are removed by the G13 job |
+| Authored and shared scenarios | `scenarios/<ownerUid>`, `sharedScenarios/<shareId>` | Owner; shared ones readable by **any signed-in user** | Shared scenarios carry the author's display name (capped 80 chars) — confirm the facilitator consent flow discloses that. The rules also accept an **anonymous** owner (`auth.uid == $ownerUid`); the client does not offer it |
+| Abuse reports and moderation records | `reports/*`, `moderation/*` | Admin-gated | Retains the reporting user's UID — which may be an anonymous one (the rule is `$reporterUid == auth.uid`, and the client checks only that someone is signed in) |
+| **Chat rate-limit counters** | `rateLimits/uid/<uid>/<bucket>`, `rateLimits/session/<code>/<bucket>` | The UID itself; for the session tree, members holding a room claim | Auth UID or session code, an hour or UTC-day bucket, and a count. Written by the self-hosted proxy with the caller's own token since 2026-08-31. A usage timeline per identifier. **Never swept until 2026-10**, although the proxy's own source said a job did — see Annex VI, G7 |
 | **LLM usage log** | `metrics/hfPatient/*` | **No one via the client** — the path has no rule, so it is unreadable from any browser and reachable only via the Admin SDK | Per turn: auth UID, timestamp, language, message count, reply length, latency, HTTP status, inference provider, token counts, session code. Not in the notice; no job deletes it |
 | Org-scoped mirror of all of the above | `orgs/<slug>/sessions/<id>/**` | As above within the org | Retention, backup, pseudonymisation and erasure all walk this tree (since Phase-4e gap 2); rule parity closed 2026-09-04. Still prohibited under clause 3.8, now on the narrower ground stated there |
 
@@ -1757,6 +1760,18 @@ Annex VI, item R8.
 `sessionStorage`: a per-tab random client identifier (`canamed_client`, **64
 bits** — `new Uint8Array(8)`, corrected from 80),
 a local error-telemetry buffer, and transient connection flags.
+
+`IndexedDB`: the Firebase Auth SDK's own credential store
+(`firebaseLocalStorageDb`), holding the **anonymous sign-in account's** UID and
+refresh token. The platform asks the SDK for `Persistence.LOCAL`
+(`script.js`, at Firebase initialisation), which the SDK keeps in IndexedDB and,
+where that is unavailable, in `localStorage`. It is written on the first page
+load, before any consent surface,
+and it is what makes that UID the same on the next visit. Missing from every
+earlier draft of this inventory, and from the notice. It belongs with
+`canamed_stable_id` in the ePrivacy / Art. 5(3) question above: both are
+identifiers stored on the device for everyone, and only this one is needed for
+the platform to work at all. See Annex VI, G13.
 
 Error telemetry is **local only** — it is buffered in the browser (maximum 50
 entries, including user agent, page path without query string, and stack traces)
@@ -2946,8 +2961,33 @@ and no job deletes it. **Fix:** add a TTL; add it to the Art. 15 runbook
 control change — consider adding an explicit `.read: false` so the invisibility
 is deliberate rather than incidental.
 
+> ⚠️ **"No job deletes it" has been stale since 2026-08-12, and the gap it
+> describes has since reappeared somewhere else** (checked against the code
+> 2026-10-07). `scripts/cleanup-stale-sessions.js` prunes `metrics/hfPatient`
+> at 30 days (`scripts/lib/metrics-retention.js`), and the function that wrote
+> it has not run since the billing account closed on 2026-08-27 — so this
+> particular log is bounded and no longer growing.
+> Its successor is not. The self-hosted proxy keeps its counters at
+> `rateLimits/uid/<uid>/<bucket>` and `rateLimits/session/<code>/<bucket>`, and
+> **nothing swept them**: the store's source said
+> `cleanup-stale-sessions.js` did, and no script referenced `rateLimits` at all.
+> Each hour and each day in which a participant used the chat stayed on record
+> under their UID from 2026-08-31 onward.
+> `scripts/lib/rate-limit-retention.js` now sweeps a bucket once it is past the
+> TTL the proxy itself asks for (two windows: 2 hours, 2 days). **It runs as part
+> of the G13 job and is therefore NOT SCHEDULED either.**
+> The disclosure and Art. 15 limbs of this item are untouched: neither tree is
+> in the notice, and neither can be surfaced through an in-product request.
+
 **G8 — MEDIUM. Account profiles, admin secrets, recovery records, authored
 scenarios, abuse reports and moderation records** have no automated deletion.
+*(Narrowed 2026-10-07 for anonymous accounts only, and only for `users/<uid>`,
+which the G13 job removes along with the account. It deliberately leaves
+`scenarios/<uid>` and moderation reports in place — see G13 for why — so those
+two limbs are unchanged for everyone. For a signed-in account nothing here has
+changed at all — and the client's own
+`accountDelete()` removes `users/<uid>` but not `scenarios/<uid>`, which is then
+unreadable by anyone and kept for ever.)*
 
 **G9 — ✅ CLOSED 2026-09-04. The entire `orgs/` tree is outside every
 safeguard.**
@@ -3192,6 +3232,89 @@ now exists; that is not the same as the duty being discharged.
    students with the same name in one cohort is ordinary, and deleting a
    namesake's work while honouring someone else's request would be a worse
    defect than the one being fixed. They are reported as AMBIGUOUS for a human.
+
+**G13 — HIGH (new, 2026-10-07). MECHANISM BUILT, NOT SCHEDULED, NOT ARMED. Every
+visitor is given an account before consenting to anything, and nothing ever
+deleted one.** `ensureSignedIn()` calls `signInAnonymously()` on page load, so a
+Firebase Auth account — a UID, three timestamps, and a credential persisted in
+the browser — exists for every visitor whether or not they go on to enter a
+session code. It is the identifier behind every `auth != null` rule, and it is
+stable between visits.
+
+Three things were wrong, and only the third has a mechanism:
+
+1. **It is not in the notice.** Section 4 of `privacy.html` describes what
+   Google supplies "if you sign in", which reads as though Google Auth begins
+   there. It begins on page load.
+2. **It has no stated lawful basis.** Section 3 rests the whole notice on
+   consent, and this identifier is created before any consent is sought.
+   **[CONTROLLER / DPO TO DECIDE: the basis for the identifier itself — it is
+   what the access rules run on, so it cannot wait for consent — and whether
+   storing its credential on the device is "strictly necessary" in the ePrivacy
+   sense. The same question is already open for `canamed_stable_id` at R8; the
+   two should be answered together.]**
+3. **It was kept for ever.** Auto-deletion of anonymous users is an Identity
+   Platform feature this project does not have. Checked in the Console on
+   2026-08-25: the oldest anonymous accounts were 101 days old, never returned
+   to, and still there (issue #347).
+
+*The mechanism.* `scripts/cleanup-anonymous-accounts.js` removes an anonymous
+account that has gone 90 days without use, together with its `users/<uid>`
+node. Its chat counters need no rule of their own: every one is swept on its own
+clock within days (G7). Three properties matter for what may be told to
+participants:
+
+- **"90 days" is a floor, and the true bound is about 120.** An account that a
+  LIVE session still names — as a member or as its creator — is not removed,
+  because a session closed on its 89th day lives another 30 and would otherwise
+  point at a UID nobody can sign in as. The notice must state the period with
+  that qualification, not as a bare 90.
+- **Only accounts POSITIVELY identified as anonymous AND idle are touched, and
+  anything that cannot be shown is kept.** An account is deleted because its own
+  record shows no sign-in provider and a readable last-refresh date that is old
+  — never because a UID is absent from the listing, and never on a date that is
+  missing or unreadable. The listing as a whole must contain signed-in accounts,
+  or the run is refused. Each candidate is fetched again immediately before
+  deletion and dropped if it has signed in or returned. A signed-in account is
+  out of scope however long it has been idle; its retention is G8's subject.
+- **Two things keyed by the UID are deliberately NOT deleted, and "everything
+  recorded against the identifier is removed" must therefore not be said.**
+  `scenarios/<uid>`: the client saves a scenario only for a signed-in user, so
+  one found under an "anonymous" UID is treated as evidence that the account is
+  not anonymous, and spares it. `reports/scenarios/<shareId>/<uid>`: a
+  moderation report may concern content still published and not yet reviewed.
+  **[CONTROLLER TO DECIDE: how long an unactioned report is kept, and whether a
+  report outlives its reporter's account.]** Both remain under G8.
+
+It also removes, for anonymous accounts that still exist, the session history
+described in Annex I §5 — written for every anonymous joiner until 2026-08-25.
+
+*What the job sends to the automation runner (Annex III, row 5).* For every
+account, signed-in ones included: the UID, the three timestamps, and the **name**
+of each sign-in provider. **No e-mail address and no display name** — the
+listing asks Google for a partial response and aborts if anything else comes
+back (`scripts/lib/auth-accounts.js`). In addition: the member and creator UIDs
+of each live session; the keys of `users/` and `scenarios/`, and of each quiet
+anonymous account's `users/` node (the words "history" and "profile", never
+their contents); and the keys of the rate-limit tree — UID or session code, and
+the time buckets. That is a new category crossing to the United States and must be added
+to the transfer description in the same change that schedules the job.
+
+*What is NOT established.* The job has never run against production. Whether the
+service account may list accounts, and whether Google honours the
+partial-response mask, can only be shown by a dispatched dry run. And recovery is
+proven for a participant's **next page load** only (the SDK clears a stored
+account whose reload fails, and the platform signs in afresh); a browser tab
+left open across the deletion cannot be exercised on the emulator, which answers
+a deleted account's token refresh differently from Google's documented
+behaviour.
+
+**This item closes when the job is scheduled AND armed AND the notice describes
+it** — one change, because a schedule without the notice is an undisclosed
+nightly transfer, and the notice without the schedule states a period nothing
+enforces.
+
+[CONTROLLER — DATE THE JOB WAS SCHEDULED: ____ ]
 
 ## Residual risks accepted by design
 
