@@ -3754,9 +3754,10 @@ body.session-ended-shown { overflow: hidden; }
   overflow-y: auto;
 }
 /* Session code, date + scenario name, withdraw button. The row wraps instead of
-   shrinking and the date + scenario name takes only what the other two leave:
-   under default flex shrinking a long scenario name squeezed them, breaking the
-   code at its hyphen and the button label over several lines, at every width. */
+   shrinking, and the date + scenario name asks for little and takes what the
+   other two leave: under default flex shrinking a long scenario name squeezed
+   them, breaking the code at its hyphen and the button label over several
+   lines, at every width. */
 .account-history-row {
   display: flex;
   flex-wrap: wrap;
@@ -3775,14 +3776,18 @@ body.session-ended-shown { overflow: hidden; }
   font-weight: 800;
 }
 .account-history-meta {
-  flex: 1 1 0;
+  /* A floor, not zero: with enlarged text the code and the button leave very
+     little, and at 0 this became a 62px column eleven lines tall. Once less
+     than this is left the button wraps to the next line instead. */
+  flex: 1 1 12ch;
   /* A scenario name is authored text, up to 80 characters of anything. */
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.84rem;
 }
-/* Too narrow for all three side by side: the code and the button share the
-   first line, the date + scenario name takes the next at full width. */
+/* A phone is too narrow for all three side by side: the date + scenario name
+   goes last, on its own line at full width. The button shares the first line
+   with the code where its label fits and drops below it where it does not. */
 @media (max-width: 720px) {
   .account-history-meta { order: 1; flex-basis: 100%; }
 }
