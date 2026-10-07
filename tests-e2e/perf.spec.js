@@ -721,8 +721,9 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     default), as this entry's first draft was until review caught it; the
 //     deltas are right. At level 9 that entry reads script.js 191.05 ->
 //     191.10 and first-party 323.94 -> 323.99, so the margin it calls ~1.45 KB
-//     was 2.0. Measure with { level: 9 }, or read critical_kb_gz off the perf
-//     job, or this ledger drifts away from the check it documents.
+//     was 2.0. Measure with { level: 9 }, or this ledger drifts away from the
+//     check it documents. (critical_kb_gz in the perf job's log is rounded to
+//     whole KB — it prints 325 for 324.58 — so it cannot confirm hundredths.)
 //   2026-10-07 (third entry): CAP UNCHANGED (326). The splash's signed-in row
 //     gained an "Account" link — the only opener of the account dialog outside
 //     a session, where its header chip is hidden. Measured the way this spec
@@ -760,6 +761,34 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     file: the entry was being refused whole. MARGIN ~0.87 KB, and that is
 //     the third small eager addition in a row with no reclaim (#436, #429,
 //     this one) — the next change to an eager file should bring one.
+//   2026-10-08 (second entry): CAP UNCHANGED (326). #442, the follow-up to the
+//     second entry of 2026-10-07, all in the account dialog: a long sign-in
+//     address wraps instead of scrolling it; the floor of a history row's date
+//     + name column goes from 12ch to 20ch; a bare domain in a hint breaks;
+//     and the two role options stack when they do not fit. That last one is
+//     not only an enlarged-text change: at 320px they stack at default text
+//     size too, where on main they overhung their column by about 12px.
+//     +29 B on style.css, measured the way this spec measures, against main
+//     at v185: style.css 46.30 -> 46.33 KB gz, first-party 325.13 -> 325.16,
+//     MARGIN ~0.84 KB.
+//     Four declarations. The first two were paid for by rewording that block's
+//     own comments (-13 B at that point; the review of the 2026-10-07 second
+//     entry had measured those comments at ~400 B of the ~600 it added). The
+//     last two, added after this change's own review, are not paid for. Said
+//     plainly because the 316 entry calls trimming prose to land a symptom of
+//     a budget with no room: that is where this budget is.
+//     ⚠️ ANOTHER SMALL EAGER ADDITION WITHOUT THE RECLAIM, which is still owed.
+//   2026-10-08 (third entry): CAP UNCHANGED (326). #440 stops the account
+//     dialog, the profile setup form, the sign-in form and the lobby's join
+//     form carrying one account's data over to the next: what is shown is
+//     reset on every change of uid, a read or a save acknowledgement that
+//     arrives for an account that has gone is dropped, and the session list
+//     is emptied before it is read. Same method, against main at v186:
+//     first-party 325.16 -> 325.76 KB, +610 B, all of it script.js. None of it
+//     can be lazy — it is the reset of the eager account UI itself.
+//     ⚠️ MARGIN 249 B. THE BUDGET IS SPENT. The next change to an eager file
+//     has to bring a reclaim with it; the one queued behind this (a new
+//     account shown at once, without a reload) does, in comments.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

@@ -12186,7 +12186,7 @@ function signInWithEmail(email, password) {
   }
   splashHintOk(hint, "Signing you in…");
   auth.signInWithEmailAndPassword(email, password)
-    .then(() => splashHintOk(hint, ""))
+    .then(() => { clearSignInForm(); splashHintOk(hint, ""); })
     .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
@@ -12228,7 +12228,7 @@ function signUpWithEmail(email, password) {
           }
           throw e;
         });
-  link.then(() => splashHintOk(hint, ""))
+  link.then(() => { clearSignInForm(); splashHintOk(hint, ""); })
       .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
@@ -12268,6 +12268,7 @@ function ensureSignedIn() {
 
 /* Auth state changes: signed-in / signed-out / after sign-up */
 function handleAuthStateChange(user) {
+  if ((currentUser && currentUser.uid) !== (user && user.uid)) resetAccountUI();
   currentUser = user || null;
   // R2-24/25: bind stableId to auth.uid the moment we have a non-anonymous
   // user. Persistent across tabs/devices, lets research (longitudinal
@@ -12303,6 +12304,7 @@ function handleAuthStateChange(user) {
       return;
     }
     loadProfile().then(profile => {
+      if (currentUser !== user) return;
       currentProfile = profile;
       paintUserChip();
       // Refresh the create-session picker so this user's authored scenarios
@@ -12351,19 +12353,50 @@ function handleAuthStateChange(user) {
   }
 }
 
+/* The account changed: nothing of the previous one stays on screen. */
+function resetAccountUI() {
+  closeAccountDialog();
+  currentProfile = null;
+  paintUserChip(true);   // no opener until THIS account's profile is read
+  if (currentUser) clearSignInForm();
+  splashHintOk(el("splash-profile-setup-hint"), "");
+  Object.keys(_joinFill).forEach(id => {
+    const n = el(id), f = _joinFill[id];
+    if (n && n.value === f[1]) n.value = f[0];
+    delete _joinFill[id];
+  });
+  [["name", ""], ["uni", ""], ["year", "1"], ["english", "B2"]].forEach(f => {
+    const n = el("splash-prof-" + f[0]);
+    if (n) n.value = f[1];
+  });
+  const v = el("splash-view-profile-setup");
+  if (v && !v.hidden) splashShowView("enter");
+}
+
+/* The sign-in form must not keep an address and password once used. */
+function clearSignInForm() {
+  ["email-input", "password-input", "password-confirm"].forEach(id => {
+    const n = el("splash-" + id);
+    if (n) { n.value = ""; n.dispatchEvent(new Event("input")); }
+  });
+}
+
 function loadProfile() {
   if (!currentUser || !db) return Promise.resolve(null);
   return db.ref("users/" + currentUser.uid + "/profile").once("value")
     .then(snap => snap.val()).catch(() => null);
 }
 
+/* Resolves null, and changes nothing, if the account went while it was saving. */
 function saveProfile(updates) {
-  if (!currentUser || !db) return Promise.reject(new Error("Not signed in"));
+  const user = currentUser;
+  if (!user || user.isAnonymous || !db) return Promise.reject(new Error("Not signed in"));
   const now = Date.now();
   const merged = Object.assign({}, currentProfile || {}, updates, { updatedAt: now });
   if (!merged.createdAt) merged.createdAt = now;
-  return db.ref("users/" + currentUser.uid + "/profile").set(merged)
-    .then(() => { currentProfile = merged; return merged; });
+  return db.ref("users/" + user.uid + "/profile").set(merged).then(
+    () => (currentUser === user ? (currentProfile = merged) : null),
+    e => { if (currentUser === user) throw e; return null; });
 }
 
 /* Log a session join to the SIGNED-IN user's history. Idempotent: writing the
@@ -12425,14 +12458,14 @@ function populateProfileSelects(selectId) {
 
 /* The header user chip - shown when signed in, hidden otherwise. Two letters
    for initials; clicking opens the account dialog. */
-function paintUserChip() {
+function paintUserChip(hide) {
   const chip = el("user-chip");
   const splashRow = el("splash-signed-in");
   // Anonymous users are treated as "not signed in" UI-wise — the chip / row
   // belong to identified (Google) users only. Round-2 introduced an
   // always-on anonymous user under the hood for DB-rule purposes, but it
   // is intentionally invisible to the participant.
-  if (!currentUser || currentUser.isAnonymous) {
+  if (hide || !currentUser || currentUser.isAnonymous) {
     if (chip) chip.classList.add("hidden");
     if (splashRow) splashRow.hidden = true;
     return;
@@ -12497,7 +12530,8 @@ function profileSetupSubmit() {
   if (!uni) { splashHintErr(hint, "Pick your university."); return; }
   splashHintOk(hint, "Saving your profile…");
   const updates = profileUpdatesForRole(role, name, uni, "splash-prof-year", "splash-prof-english");
-  saveProfile(updates).then(() => {
+  saveProfile(updates).then(p => {
+    if (!p) return;
     splashHintOk(hint, "");
     paintUserChip();
     splashShowView("enter");
@@ -12505,20 +12539,22 @@ function profileSetupSubmit() {
   }).catch(e => splashHintErr(hint, "Could not save: " + (e.message || "")));
 }
 
+/* What the account put in the lobby's join form: id -> [value before, value put]. */
+const _joinFill = {};
 /* When a user with a profile lands on the lobby, pre-fill their join form */
 function applyProfileToJoinForm() {
-  if (!currentProfile) return;
+  const p = currentProfile;
+  if (!p) return;
+  const put = (id, v) => {
+    const n = el(id), f = _joinFill[id];
+    _joinFill[id] = [f && n.value === f[1] ? f[0] : n.value, n.value = v];
+  };
   const n = el("name-input");
-  if (n && !n.value) n.value = currentProfile.name || "";
+  if (n && !n.value) put("name-input", p.name || "");
   const u = el("uni-input");
-  if (u && currentProfile.university &&
-      [...u.options].some(o => o.value === currentProfile.university)) {
-    u.value = currentProfile.university;
-  }
-  const y = el("year-input");
-  if (y && currentProfile.year) y.value = String(currentProfile.year);
-  const e = el("english-input");
-  if (e && currentProfile.english) e.value = currentProfile.english;
+  if (u && p.university && [...u.options].some(o => o.value === p.university)) put("uni-input", p.university);
+  if (el("year-input") && p.year) put("year-input", String(p.year));
+  if (el("english-input") && p.english) put("english-input", p.english);
 }
 
 /* The account dialog's live subscription to users/<uid>/history.
@@ -12537,14 +12573,15 @@ function openAccountDialog() {
   const dlg = el("account-dialog");
   if (!dlg || !currentUser) return;
   el("account-email").textContent = currentUser.email || "";
+  // Every field, on every open: never what a previous account left here.
+  const p = currentProfile || {};
+  el("account-uni").value = "";
   populateProfileSelects("account-uni");
-  if (currentProfile) {
-    el("account-name").value = currentProfile.name || "";
-    if (currentProfile.university) el("account-uni").value = currentProfile.university;
-    if (currentProfile.year) el("account-year").value = String(currentProfile.year);
-    if (currentProfile.english) el("account-english").value = currentProfile.english;
-  }
-  setRoleRadio("account-role", (currentProfile && currentProfile.role) || "student");
+  el("account-name").value = p.name || "";
+  if (p.university) el("account-uni").value = p.university;
+  el("account-year").value = String(p.year || 1);
+  el("account-english").value = p.english || "B2";
+  setRoleRadio("account-role", p.role || "student");
   applyProfileRoleVisibility("account-role", "account-student-fields");
   splashHintOk(el("account-action-hint"), "");
   loadHistoryForDialog();
@@ -12555,12 +12592,15 @@ function closeAccountDialog() {
   if (!dlg) return;
   dialogClose(dlg);
   if (_historyListenerRef) { _historyListenerRef.off(); _historyListenerRef = null; }
+  const list = el("account-history");
+  if (list) list.innerHTML = "";
 }
 
 function loadHistoryForDialog() {
   const list = el("account-history");
   if (!list || !currentUser || !db) return;
   if (_historyListenerRef) _historyListenerRef.off();
+  list.innerHTML = "";   // the answer comes later: never a previous account's rows meanwhile
   _historyListenerRef = db.ref("users/" + currentUser.uid + "/history");
   _historyListenerRef.on("value", snap => {
     const v = snap.val() || {};
@@ -12612,7 +12652,8 @@ function accountSaveBtn() {
   const uni = (el("account-uni").value || "").trim();
   if (!name) { splashHintErr(hint, "Enter your name."); return; }
   const updates = profileUpdatesForRole(role, name, uni, "account-year", "account-english");
-  saveProfile(updates).then(() => {
+  saveProfile(updates).then(p => {
+    if (!p) return;
     splashHintOk(hint, "Profile saved.");
     paintUserChip();
     applyProfileToJoinForm();
@@ -12662,7 +12703,7 @@ function accountDelete() {
 }
 
 /* wire the splash-view-account / splash-view-profile-setup / account-dialog
-   handlers. Called once on first splash render. */
+   handlers. Idempotent: called at start-up and again by wireSplash(). */
 let _accountWired = false;
 function wireAccountUI() {
   if (_accountWired) return;
@@ -12677,7 +12718,7 @@ function wireAccountUI() {
   });
   if (el("splash-signed-in-out")) el("splash-signed-in-out").addEventListener("click", accountSignOut);
   if (el("splash-back-from-account")) el("splash-back-from-account")
-    .addEventListener("click", () => splashShowView("enter"));
+    .addEventListener("click", () => { clearSignInForm(); splashShowView("enter"); });
   if (el("splash-google-signin")) el("splash-google-signin")
     .addEventListener("click", () => signInWithProvider("google"));
   if (el("splash-microsoft-signin")) el("splash-microsoft-signin")
@@ -12813,6 +12854,8 @@ function wireBackToTop() {
 
 /* ===================== START ===================== */
 initEntry();
+// Auto-resume never reaches wireSplash(), and the header chip needs this too.
+wireAccountUI();
 initObserverChecklist();
 wireReferenceToolbars();
 wireBackToTop();
