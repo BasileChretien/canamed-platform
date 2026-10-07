@@ -11970,9 +11970,8 @@ function authErrorMessage(err) {
   return "Sign-in failed — please try again.";
 }
 
-/* sign in via a popup against any supported identity provider. Firebase
-   creates the account on first use, so there is no separate "sign up" path -
-   first sign-in IS the sign-up. Supports google / microsoft / apple. */
+/* Sign in through a provider's popup: google / microsoft / apple. The first
+   sign-in creates the account, so there is no separate sign-up. */
 function signInWithProvider(name) {
   const hint = el("splash-account-hint");
   if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
@@ -11981,13 +11980,11 @@ function signInWithProvider(name) {
   if (name === "google") {
     pretty = "Google";
     provider = new firebase.auth.GoogleAuthProvider();
-    // ask Google every time which account to use (avoids silently re-using a
-    // session from a different tab when a user wants to switch identities)
+    // Ask which account every time: never silently another tab's session.
     provider.setCustomParameters({ prompt: "select_account" });
   } else if (name === "microsoft") {
     pretty = "Microsoft";
     provider = new firebase.auth.OAuthProvider("microsoft.com");
-    // same UX: let the user pick their account every time
     provider.setCustomParameters({ prompt: "select_account" });
   } else if (name === "apple") {
     pretty = "Apple";
@@ -11998,21 +11995,17 @@ function signInWithProvider(name) {
     return;
   }
   splashHintOk(hint, "Opening " + pretty + " sign-in…");
-  // Round-2: if the user is currently anonymous, upgrade (link) the existing
-  // uid so users/{uid}/history survives the sign-in. If linking fails because
-  // the Google account already exists as its own user
-  // (auth/credential-already-in-use / email-already-in-use) — i.e. any
-  // returning signed-in user — sign in AS that account with the credential the
-  // error carries. Direct credential sign-in needs no popup, so it can't be
-  // popup-blocked. (History under the throwaway anon uid is forfeited.)
+  /* An anonymous visitor is LINKED: the uid, and what is stored under it, are
+     kept. If the provider account already exists as a user of its own, sign in
+     AS it with the credential the error carries (no second popup to block);
+     what was under the throwaway anonymous uid is then left behind. */
   const cur = auth.currentUser;
   const popupSignIn = () => auth.signInWithPopup(provider);
   const salvageSignIn = e =>
     (e && e.credential) ? auth.signInWithCredential(e.credential) : popupSignIn();
-  // If the browser blocks the popup (common outside Incognito), fall back to a
-  // full-page redirect — no popup blocker can stop it, and it completes
-  // reliably now that auth is first-party (authDomain = web.app). The matching
-  // getRedirectResult() handler in dbInit() finishes the sign-in on return.
+  /* A blocked popup falls back to a full-page redirect: no blocker stops it,
+     and it is reliable only because auth is first-party (authDomain = web.app).
+     getRedirectResult() in dbInit() finishes the sign-in on return. */
   const popupBlocked = e => e && (
     e.code === "auth/popup-blocked" ||
     e.code === "auth/cancelled-popup-request" ||
@@ -12037,10 +12030,7 @@ function signInWithProvider(name) {
         throw e;
       })
     : popupSignIn();
-  link.then(() => {
-    // handleAuthStateChange takes over from here
-    splashHintOk(hint, "");
-  }).catch(e => {
+  link.then(() => signInDone(hint)).catch(e => {
     if (popupBlocked(e)) {
       redirectSignIn().catch(err => splashHintErr(hint, authErrorMessage(err)));
       return;
@@ -12173,10 +12163,8 @@ function wireEmailAuthForm() {
   applyMode("signin");
 }
 
-/* Sign in to an EXISTING email/password account. No anonymous-uid linking
-   here — the user is claiming an account that pre-dates this tab, so any
-   throwaway anonymous uid is forfeited (same fate as Google sign-in for a
-   returning user). For first-time account creation, see signUpWithEmail. */
+/* Sign in to an EXISTING e-mail account. Nothing is linked: the account
+   pre-dates this tab, and the throwaway anonymous uid is left behind. */
 function signInWithEmail(email, password) {
   const hint = el("splash-account-hint");
   if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
@@ -12186,15 +12174,12 @@ function signInWithEmail(email, password) {
   }
   splashHintOk(hint, "Signing you in…");
   auth.signInWithEmailAndPassword(email, password)
-    .then(() => { clearSignInForm(); splashHintOk(hint, ""); })
+    .then(() => signInDone(hint))
     .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
-/* Create a new email/password account. If the caller is currently anonymous
-   we LINK the credential so users/{uid}/profile + history written under the
-   anon uid survive the upgrade. If the email is already in use, salvage by
-   signing in with the typed credential directly — same fall-back as the
-   Google flow. */
+/* Create an e-mail account. An anonymous visitor is LINKED, as in
+   signInWithProvider(); an address already in use signs in to that account. */
 function signUpWithEmail(email, password) {
   const hint = el("splash-account-hint");
   if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
@@ -12202,9 +12187,7 @@ function signUpWithEmail(email, password) {
     splashHintErr(hint, "Enter your email and password.");
     return;
   }
-  // Backstop must not be weaker than the UI strength gate: enforce the same
-  // policy (>= 8 chars AND >= 3 character classes) for ANY caller of this
-  // function, not just the wired form (2026-05-30 R2 review).
+  // The form's strength rule, for ANY caller: this must never be the weaker gate.
   if (!scorePassword(password).ok) {
     splashHintErr(hint, authErrorMessage({ code: "auth/weak-password" }));
     return;
@@ -12216,7 +12199,6 @@ function signUpWithEmail(email, password) {
     ? cur.linkWithCredential(cred).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
                   e.code === "auth/email-already-in-use")) {
-          // returning user — burn the throwaway anon uid, sign in as them
           return auth.signInWithCredential(cred);
         }
         throw e;
@@ -12228,15 +12210,13 @@ function signUpWithEmail(email, password) {
           }
           throw e;
         });
-  link.then(() => { clearSignInForm(); splashHintOk(hint, ""); })
+  link.then(() => signInDone(hint))
       .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
-/* Returns a promise that resolves once auth.currentUser is non-null. If
-   no user exists yet (first tab load, or someone signed out), kicks off
-   an anonymous sign-in. Idempotent — concurrent callers share one
-   in-flight promise. Returns a resolved promise immediately in solo /
-   local mode (no Firebase), so calling code can always `.then()`. */
+/* Resolves once somebody is signed in, signing in anonymously if nobody is
+   (first load, or after a sign-out). Concurrent callers share one promise. In
+   local mode (no Firebase) it resolves at once: a caller can always `.then()`. */
 function ensureSignedIn() {
   if (!auth) return Promise.resolve(null);
   if (auth.currentUser) return Promise.resolve(auth.currentUser);
@@ -12249,9 +12229,8 @@ function ensureSignedIn() {
     .catch(err => {
       _anonSignInPromise = null;
       console.warn("Anonymous sign-in failed; DB writes may be denied", err);
-      // resolve authReady with null so UI doesn't hang; subsequent DB
-      // writes will surface permission-denied errors visibly. Surface a
-      // hint to the operator if anonymous auth simply isn't enabled.
+      // authReady resolves with null so the UI does not hang; DB writes then
+      // fail visibly. Tell the operator if anonymous auth is simply not enabled.
       if (_authReadyResolve) { _authReadyResolve(null); _authReadyResolve = null; }
       if (err && err.code === "auth/operation-not-allowed") {
         const banner = el("connection-badge");
@@ -12266,38 +12245,31 @@ function ensureSignedIn() {
   return _anonSignInPromise;
 }
 
-/* Auth state changes: signed-in / signed-out / after sign-up */
+/* Who is signed in: the page's ONE path to it. The SDK calls this when the uid
+   changes, and only then; signInDone() calls it when it has not. */
 function handleAuthStateChange(user) {
   if ((currentUser && currentUser.uid) !== (user && user.uid)) resetAccountUI();
   currentUser = user || null;
-  // R2-24/25: bind stableId to auth.uid the moment we have a non-anonymous
-  // user. Persistent across tabs/devices, lets research (longitudinal
-  // replay) deduplicate the same person across many sessions / browsers.
-  // For anonymous users the localStorage-backed random stableId set at
-  // module init is left in place — survives refresh / tab close on the
-  // same browser without binding to any account.
+  _anonShown = user && user.isAnonymous ? user.uid : null;
+  // An account's stableId is its uid, on every tab and device (see stableId).
+  // An anonymous visitor keeps the random one minted at load.
   if (currentUser && !currentUser.isAnonymous && currentUser.uid) {
     stableId = currentUser.uid;
     try { localStorage.setItem(STABLE_ID_KEY, stableId); } catch (e) {}
   }
-  // Resolve authReady the moment we have *any* user (anonymous or
-  // identified). Pending DB-write paths can now proceed.
+  // Any user, anonymous included, lets the pending DB writes proceed.
   if (currentUser && _authReadyResolve) {
     _authReadyResolve(currentUser);
     _authReadyResolve = null;
   }
-  // If we lose the user mid-session (e.g. token revoked, manual sign-out
-  // from another tab), re-arm and immediately re-sign-in anonymously so
-  // the DB rules keep accepting writes.
+  // Nobody any more (token revoked, signed out in another tab): sign in
+  // anonymously again at once, so the DB rules keep accepting writes.
   if (!currentUser && auth) {
     authReady = new Promise(resolve => { _authReadyResolve = resolve; });
     ensureSignedIn();
   }
   if (currentUser) {
-    // Anonymous users (the default for every tab post-Round-2) don't get a
-    // persistent profile and shouldn't be pushed into the profile-setup
-    // screen — they use the code-only join flow. Only identified users
-    // (Google sign-in) hit the profile path below.
+    // An anonymous visitor has no profile and is never sent to profile setup.
     if (currentUser.isAnonymous) {
       currentProfile = null;
       paintUserChip();
@@ -12307,21 +12279,15 @@ function handleAuthStateChange(user) {
       if (currentUser !== user) return;
       currentProfile = profile;
       paintUserChip();
-      // Refresh the create-session picker so this user's authored scenarios
-      // (and any shared ones they can now see) show up immediately after
-      // sign-in. Idempotent + cheap; safe to call even if the picker is
-      // not currently on screen.
       try {
-        /* A user's own scenarios are unreadable until they are signed in, so a
-           picker painted before sign-in lists built-ins only — refresh it.
-           Guarded by typeof: the picker is a lazy chunk now, and signing in
-           without ever opening the create view means it was never loaded (there
-           is then nothing on screen to refresh either). */
+        /* A picker painted before sign-in lists built-ins only: the account's
+           own scenarios were unreadable until now. typeof, because the picker
+           is a lazy chunk that may never have been loaded. */
         if (typeof loadAuthoredSectionsIntoPicker === "function") {
           loadAuthoredSectionsIntoPicker();
         }
       } catch (_) {}
-      // first sign-in for this identified account → guide them through profile setup
+      // no profile yet: ask for one
       if (!profile || !profile.name) {
         populateProfileSelects("splash-prof-uni");
         setRoleRadio("splash-prof-role", (profile && profile.role) || "student");
@@ -12336,10 +12302,8 @@ function handleAuthStateChange(user) {
         splashShowView("profile-setup");
         return;
       }
-      // existing user → return them to whichever view they were on. If they
-      // were on the account view (just signed in), return to enter; otherwise
-      // do nothing (auth state can fire mid-session and we don't want to yank
-      // the user out of an active workshop).
+      // On the front page, back to "enter a session". In a session nothing
+      // moves: this can run in the middle of a workshop.
       const splash = el("splash");
       if (splash && !splash.classList.contains("hidden")) {
         splashShowView("enter");
@@ -12379,6 +12343,20 @@ function clearSignInForm() {
     const n = el("splash-" + id);
     if (n) { n.value = ""; n.dispatchEvent(new Event("input")); }
   });
+}
+
+/* The uid last handled as an ANONYMOUS visitor, else null. It can become an
+   account unreported: a link keeps the uid, and so does an account made in
+   another tab, which alters the live user object under this page. */
+let _anonShown = null;
+
+/* A sign-in or sign-up succeeded: an account the page still shows as a visitor
+   is handled here. (A tab nobody signs in on shows the visitor until reloaded.) */
+function signInDone(hint) {
+  clearSignInForm();
+  splashHintOk(hint, "");
+  const u = auth.currentUser;
+  if (u && !u.isAnonymous && u.uid === _anonShown) handleAuthStateChange(u);
 }
 
 function loadProfile() {
@@ -12461,10 +12439,8 @@ function populateProfileSelects(selectId) {
 function paintUserChip(hide) {
   const chip = el("user-chip");
   const splashRow = el("splash-signed-in");
-  // Anonymous users are treated as "not signed in" UI-wise — the chip / row
-  // belong to identified (Google) users only. Round-2 introduced an
-  // always-on anonymous user under the hood for DB-rule purposes, but it
-  // is intentionally invisible to the participant.
+  // An anonymous visitor is "not signed in" on screen: the chip and the row are
+  // for accounts. The anonymous user is there for the DB rules, and unseen.
   if (hide || !currentUser || currentUser.isAnonymous) {
     if (chip) chip.classList.add("hidden");
     if (splashRow) splashRow.hidden = true;
