@@ -100,6 +100,7 @@
       // splash — shared chrome
       "splash.tagline": "A collaborative platform for medical-education partnerships between universities.",
       "splash.signed-in-as": "Signed in as",
+      "splash.account": "Account",
       "splash.sign-out": "Sign out",
       "splash.lang-label": "Your language",
       "splash.saved-session-as": "Resuming as",

@@ -12515,7 +12515,7 @@ function applyProfileToJoinForm() {
    green, because nothing ever executed it. */
 let _historyListenerRef = null;
 
-/* The account dialog (opened by clicking the header chip) */
+/* The account dialog (opened by the header chip, or the splash's "Account") */
 function openAccountDialog() {
   const dlg = el("account-dialog");
   if (!dlg || !currentUser) return;
@@ -12681,8 +12681,11 @@ function wireAccountUI() {
     r.addEventListener("change", () =>
       applyProfileRoleVisibility("account-role", "account-student-fields")));
 
-  // header chip + account dialog
+  // header chip + account dialog. body.locked hides the header, so the
+  // splash's signed-in row carries the opener for someone not in a session.
   if (el("user-chip")) el("user-chip").addEventListener("click", openAccountDialog);
+  if (el("splash-signed-in-account")) el("splash-signed-in-account")
+    .addEventListener("click", openAccountDialog);
   if (el("account-dialog-close")) el("account-dialog-close")
     .addEventListener("click", closeAccountDialog);
   if (el("account-save-btn")) el("account-save-btn").addEventListener("click", accountSaveBtn);

@@ -30,6 +30,7 @@
   "a11y.skip-to-main": "Aller au contenu principal",
   "splash.tagline": "Une plateforme collaborative pour les partenariats pédagogiques entre facultés de médecine.",
   "splash.signed-in-as": "Connecté·e en tant que",
+  "splash.account": "Compte",
   "splash.sign-out": "Se déconnecter",
   "splash.lang-label": "Votre langue",
   "splash.saved-session-as": "Reprise en tant que",

@@ -30,6 +30,7 @@
   "a11y.skip-to-main": "跳至正文",
   "splash.tagline": "面向高校间医学教育合作的协作平台。",
   "splash.signed-in-as": "已登录:",
+  "splash.account": "账户",
   "splash.sign-out": "退出登录",
   "splash.lang-label": "语言",
   "privacy.title": "CaNaMED — 隐私政策",

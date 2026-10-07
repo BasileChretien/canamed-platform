@@ -2,7 +2,7 @@
  *
  * The account dialog OPENS, and says truthfully what "Delete account" does.
  *
- * Four reasons this spec exists:
+ * Five reasons this spec exists:
  *
  *   1. Nothing opened this dialog in a browser. `_historyListenerRef` lost its
  *      declaration in #264 (2026-07-31); from then on openAccountDialog() threw
@@ -26,13 +26,21 @@
  *      painted as a second masthead: the navy gradient, its tricolour rule,
  *      white ink, and a close button in the muted grey meant for a light
  *      surface. The masthead rules are now `body > header`.
+ *   5. Once it could open again, it could still only be opened from INSIDE a
+ *      session: its one caller was the header chip, and `body.locked` hides the
+ *      whole header until a session code has been accepted. A signed-in person
+ *      on the front page — which is where someone coming back weeks later to
+ *      withdraw or delete lands, possibly with a code that has since been
+ *      purged — had "Signed in as … Sign out" and nothing else. The front-page
+ *      tests at the bottom open it through the link that row now carries.
  *
- * Hermetic LOCAL mode has no auth at all, so no user is ever signed in and the
- * header chip that opens the dialog stays hidden. The tests stand a user in —
- * the dialog reads only `uid` and `email` — and call the app's own
- * openAccountDialog(), which is the function that was broken. The deletion
- * itself needs real rules and a real account: that is
- * tests-e2e/emulator/account-delete.spec.js.
+ * Hermetic LOCAL mode has no auth at all, so no user is ever signed in and
+ * neither control that opens the dialog is shown. The tests stand a user in —
+ * the dialog reads only `uid` and `email`. All but the last section call the
+ * app's own openAccountDialog(), which is the function that was broken; the
+ * front-page tests in the last section call paintUserChip() and then CLICK,
+ * because there the route is the thing under test. The deletion itself needs
+ * real rules and a real account: tests-e2e/emulator/account-delete.spec.js.
  *
  * Runs on every configured viewport (desktop + mobile-iphone/ipad/android) per
  * CLAUDE.md's per-device standing instruction — the spec basename is
@@ -385,4 +393,103 @@ test("Delete account asks nothing where there is no auth backend (LOCAL mode)", 
   expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => typeof window.deleteMyAccount),
     "the lazy chunk must not be fetched for a click that can do nothing").toBe("undefined");
+});
+
+/* ---- reaching the dialog from the front page ------------------------------ */
+
+/* Stand a user in on the front page and paint the signed-in row, as the app's
+   own auth-state handler does. No session code is entered at any point. */
+async function signedInOnFrontPage(page, user) {
+  await page.goto("/");
+  await page.waitForFunction(() =>
+    typeof paintUserChip === "function" && typeof dbInit === "function");
+  await page.evaluate(async ({ user, code }) => {
+    dbInit();
+    currentUser = Object.assign({ uid: "u_local", isAnonymous: false }, user);
+    await db.ref("users/u_local/history/" + code).set({ code, joinedAt: Date.now() });
+    paintUserChip();
+  }, { user, code: CODE });
+}
+
+test("a signed-in user opens the dialog from the front page, without a session code", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", e => errors.push(String(e && e.message || e)));
+
+  await signedInOnFrontPage(page, { email: "local@example.test" });
+
+  /* Positive control for "not in a session": the page is still locked, so the
+     header — and the chip in it, which paintUserChip() has just un-hidden — is
+     not displayed. Without this the test would pass just as well from inside a
+     session, where the dialog was always reachable. */
+  await expect(page.locator("body")).toHaveClass(/(^|\s)locked(\s|$)/);
+  await expect(page.locator("#user-chip")).not.toHaveClass(/hidden/);
+  await expect(page.locator("#user-chip")).toBeHidden();
+
+  const link = page.locator("#splash-signed-in-account");
+  await expect(link).toBeVisible();
+  // The text, not just the element: a missing i18n key renders as the raw key.
+  await expect(link).toHaveText("Account");
+  await link.click();
+
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await expect(page.locator("#account-email")).toHaveText("local@example.test");
+  /* What a returning participant comes for: the per-session withdrawal control
+     and Delete account, both reachable with no working session code. */
+  await expect(page.locator("#account-history .account-history-code")).toHaveText(CODE);
+  await expect(page.locator("#account-history .account-history-withdraw")).toBeVisible();
+  await page.locator("#account-delete-btn").scrollIntoViewIfNeeded();
+  await expect(page.locator("#account-delete-btn")).toBeVisible();
+
+  await page.locator("#account-dialog-close").click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+  // Still on the front page, still locked: opening it must not have let anyone in.
+  await expect(page.locator("body")).toHaveClass(/(^|\s)locked(\s|$)/);
+  await expect(page.locator("#splash")).toBeVisible();
+  expect(errors, "opening the dialog from the front page must not throw").toEqual([]);
+});
+
+test("the signed-in row keeps both of its links inside the card, whatever the name", async ({ page }) => {
+  /* The row shows the profile name, or the e-mail address when there is no
+     profile yet — and an institutional address has no break opportunity for
+     fifty characters. The row grew a third item; on a phone it has to wrap
+     rather than push "Sign out" out of the card. */
+  await signedInOnFrontPage(page,
+    { email: "firstname.middlename.familyname.u4@student.mail.example-university.test" });
+
+  const row = page.locator("#splash-signed-in");
+  await expect(row).toBeVisible();
+  await expect(page.locator("#splash-signed-in-name"))
+    .toHaveText("firstname.middlename.familyname.u4@student.mail.example-university.test");
+  await expect(page.locator("#splash-signed-in-account")).toBeVisible();
+  await expect(page.locator("#splash-signed-in-out")).toBeVisible();
+
+  const m = await page.evaluate(() => {
+    const box = id => document.getElementById(id).getBoundingClientRect();
+    const row = box("splash-signed-in");
+    const card = document.querySelector(".splash-card").getBoundingClientRect();
+    const name = box("splash-signed-in-name"), acct = box("splash-signed-in-account"),
+          out = box("splash-signed-in-out");
+    return {
+      rowLeft: row.left, rowRight: row.right, cardLeft: card.left, cardRight: card.right,
+      nameLeft: name.left, nameRight: name.right,
+      acctLeft: acct.left, acctRight: acct.right, acctTop: acct.top, acctBottom: acct.bottom,
+      outLeft: out.left, outRight: out.right, outTop: out.top, outBottom: out.bottom,
+      docScroll: document.documentElement.scrollWidth, vw: document.documentElement.clientWidth
+    };
+  });
+  expect(m.rowLeft, "the row must stay inside the card").toBeGreaterThanOrEqual(m.cardLeft - 1);
+  expect(m.rowRight, "the row must stay inside the card").toBeLessThanOrEqual(m.cardRight + 1);
+  expect(m.nameLeft, "the name must stay inside the row").toBeGreaterThanOrEqual(m.rowLeft - 1);
+  expect(m.nameRight, "the name must wrap, not run out of the row").toBeLessThanOrEqual(m.rowRight + 1);
+  for (const [what, l, r] of [["Account", m.acctLeft, m.acctRight], ["Sign out", m.outLeft, m.outRight]]) {
+    expect(l, what + " must stay inside the row").toBeGreaterThanOrEqual(m.rowLeft - 1);
+    expect(r, what + " must stay inside the row").toBeLessThanOrEqual(m.rowRight + 1);
+  }
+  /* Two tap targets, not one: they may share a line or sit on two, but their
+     boxes must not overlap. */
+  const sameLine = m.acctTop < m.outBottom && m.outTop < m.acctBottom;
+  if (sameLine) {
+    expect(m.acctRight, "Account and Sign out must not overlap").toBeLessThanOrEqual(m.outLeft + 1);
+  }
+  expect(m.docScroll, "the page must not scroll sideways").toBeLessThanOrEqual(m.vw + 1);
 });

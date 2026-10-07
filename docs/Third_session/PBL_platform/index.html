@@ -281,12 +281,14 @@
               stroke-width="9" stroke-linecap="round" />
         <circle class="heart" cx="50" cy="14" r="6.5" />
       </svg>
-      <!-- shown only when signed in: lets the user see their identity and
-           sign out from the splash, since the header chip is hidden behind
-           body.locked until they enter a session code -->
+      <!-- shown only when signed in: lets the user see their identity, open
+           their account and sign out from the splash, since the header chip is
+           hidden behind body.locked until they enter a session code -->
       <div class="splash-signed-in" id="splash-signed-in" hidden>
         <span data-i18n="splash.signed-in-as">Signed in as</span>
         <strong id="splash-signed-in-name">—</strong>
+        <button type="button" class="splash-link" id="splash-signed-in-account"
+                data-i18n="splash.account" aria-haspopup="dialog">Account</button>
         <button type="button" class="splash-link" id="splash-signed-in-out"
                 data-i18n="splash.sign-out">Sign out</button>
       </div>
