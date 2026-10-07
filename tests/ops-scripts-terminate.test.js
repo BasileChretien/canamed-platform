@@ -148,6 +148,12 @@ test("the credential purge in particular exits, and passes its error state on", 
  * leaves this file green, because its dry-run branch still exits.
  * Distinguishing the two needs real parsing or an actual run against a
  * database. The residual risk is named here instead of being papered over.
+ *
+ * ONE script now has that actual run (2026-10-07): tests/cleanup-passes.test.js
+ * executes cleanup-stale-sessions.js in a child process against a fake database
+ * that holds the event loop open as firebase-admin does, so a path through its
+ * main() that returns without exiting hangs there and fails. Every other script
+ * in this set is still covered by the text checks alone.
  * ------------------------------------------------------------------------- */
 
 function allScriptsHoldingAConnection() {
@@ -182,7 +188,7 @@ test("each of them can exit SUCCESSFULLY, not only on error", () => {
      hanging — the success case being the one that hangs is worse than the
      reverse, because the failure case at least gets looked at.
      The test accepts a computed code, because two scripts legitimately use one:
-     `process.exit(errors > 0 ? 1 : 0)` and `process.exit(res.errors ? 1 : 0)`.
+     `process.exit(outcome.exitCode)` and `process.exit(res.errors ? 1 : 0)`.
      So the rule is "an exit whose argument is not a non-zero literal". */
   for (const rel of allScriptsHoldingAConnection()) {
     const calls = [...read(rel).matchAll(/process\.exit\(([^)]*)\)/g)].map((m) => m[1].trim());
