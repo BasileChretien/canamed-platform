@@ -3247,6 +3247,67 @@ the last identified copy survives to roughly **closure + 120 days**, or
 `tests/retention-notice-consistency.test.js` cannot see this: it pins the notice
 to `cleanup-stale-sessions.js`'s constants, and the archive is not one of them.
 
+✅ **And the limit itself could be set aside: a session dated in the future was
+never purged. Found 2026-10-07 by running the purge; FIXED the same day, in the
+rules and in the purge.** The nightly job decides from two dates, `closed/at`
+(30 days) and `created/at` (90 days). The client writes both, and the rules
+required of each only that it be a number. A session created — or closed — with
+a date years ahead was therefore "within retention" until that date: run
+against an in-memory database, the real job kept a session created ten years
+ahead, and kept it again when run five years later; the same for a session 200
+days old whose close date was ten years ahead, and for one in the organisation
+tree. `created` is written by whoever creates the session (any signed-in visitor
+while `facilitatorGate/enforce` is off) and `closed` by its admin, so the 30-
+and 90-day limits the notice publishes could be set aside for a session by its
+own creator, and every participant's data in it kept for as long as the creator
+chose. This pack did not record it. The project's own review notes had: they
+listed `created.at` as "lack[ing] an upper timestamp bound" and set it aside as
+an admin-only write of low value. It is not admin-only, and nobody had asked
+what reads the date.
+
+- **Rules.** Both dates must now lie no more than five seconds ahead of the
+  server clock and no more than two hours behind it, in both trees. Five seconds
+  is what every other timestamp in the rules allows and what joining a session
+  already demands of the same device, so no device that could run a session is
+  newly refused. Two hours behind is deliberate slack — a slow clock, or a write
+  queued through a dropped connection — and costs nothing: a past date can only
+  bring the purge forward. Both nodes were already write-once, which is what
+  stops a date being refreshed.
+- **Purge.** `scripts/lib/session-retention.js` treats a date more than 24 hours
+  ahead of the run as one no session can have, and the session as due. **This is
+  the change that closes it**: a rule protects sessions created after it ships
+  and does nothing for one already in the database. The scheduled job's log
+  states how many sessions were purged for this reason and never which.
+
+⚠️ **What remains true, and is not fixed by this:**
+- **Up to one day can still be gained on a session written before the rule
+  shipped** (or while a rules deploy has not taken effect — that deploy is not
+  something the purge can see). The tolerance is a day so that a session created
+  minutes before the nightly run by a device whose clock is fast, or set to the
+  wrong time zone, is not deleted as "impossible".
+- **Nobody has looked for sessions already carrying such a date.** The live
+  database was not queried for this. If one exists, the first live run after
+  this change purges it — after that night's backup — and the count appears in
+  the log. A manual dispatch of the workflow is a dry run by default and prints
+  the same count without deleting.
+- **A facilitator whose device clock is more than five seconds fast, or more
+  than two hours slow, can no longer create or close a session**, and the page
+  says only that it failed. A device that fast, or more than two minutes slow,
+  was already refused the membership write that entering a session depends on,
+  so it could not have run one; but the refusal now comes at creation, and the
+  client still sends its own clock rather than the server's.
+- **Other client-written dates still have no upper bound** (`summary/at`,
+  `pool/…/consent/at`, `users/<uid>/history/…/joinedAt` among them). None of
+  them decides a deletion today; a retention job that came to read one would
+  repeat this defect.
+
+`Verify:` `node --test tests/session-retention.test.js`, which runs the real
+purge in a child process against the same database on two dates five years
+apart, and holds the purge's tolerance in step with the rules' allowance; and
+`tests-e2e/emulator/session-date-bounds.spec.js`, where each refused date is
+followed by the same write with an honest one, and the real client creates and
+closes a session under the new rule.
+
 **Additional fix, and it is two separate things — do not do only the easy one:**
 (i) a technical route that removes a withdrawn participant from, or blocks
 restoration of, archived snapshots; **and** (ii) a **participant-facing

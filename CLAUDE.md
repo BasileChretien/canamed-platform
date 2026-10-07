@@ -1813,8 +1813,35 @@ observed — LOCAL mode models no rules — so these are static findings:**
   implied. Hardening belongs to the `$other`-sentinel item and must happen in
   both trees at once — not smuggled into a parity change.
   `Verify:` `node --test tests/rule-tree-parity.test.js`.
-- `summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
-  low value); `answers/.../edits/$editId` has no explicit owner check (possible
+- ~~`summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
+  low value)~~ **WRONG ON BOTH COUNTS for `created.at` — ✅ FIXED 2026-10-07,
+  together with `closed.at`.** `created` is not admin-only (any signed-in
+  visitor writes it while `facilitatorGate/enforce` is off), and it was not low
+  value: `created/at` and `closed/at` are the two numbers the nightly purge
+  decides from, so a session dated in the future was "within retention" until
+  that date. Measured by RUNNING the purge — kept with `created.at = now + 10
+  years`, and kept again five years later. Nobody had asked what READS the
+  date; a bound on a timestamp is worth exactly what depends on it.
+  - **Rules:** both `at`s are now `<= now + 5000 && >= now - 7200000`, both
+    trees. The upper bound equals `members/$uid/at`'s, which the same device
+    writes seconds later, so no device that could run a session is newly
+    refused; the lower one is deliberately slack (a past date only brings the
+    purge forward). The client still sends `Date.now()`, so a clock more than
+    5 s fast now fails at CREATION with a bare permission error.
+  - **Purge (the half that closes it — a rule cannot reach a session already in
+    the database):** `scripts/lib/session-retention.js` treats a date more than
+    24 h ahead as impossible and the session as due. The tolerance is a day on
+    purpose: with a small one, a session created minutes before the 03:17 UTC
+    run by a laptop with a fast or wrong-zone clock would be deleted. The job
+    prints `Dated in the future: N session(s)` — a count, in QUIET mode too.
+  - `Verify:` `node --test tests/session-retention.test.js` (runs the real
+    script on two dates five years apart; holds the tolerance ≥ the rules'
+    allowance) and `tests-e2e/emulator/session-date-bounds.spec.js` (every
+    denial paired with an allow; the real client creates and closes).
+  - **Still unbounded, and NOT read by any deletion job today:** `summary.at`,
+    `pool/$cid/consent/at`, `users/$uid/history/$code/joinedAt`. Bound one
+    before a retention job starts reading it, not after.
+- `answers/.../edits/$editId` has no explicit owner check (possible
   collaborative-edit by design — decide + document).
 
 **Round-3 — re-confirmed ACCEPTED (no change):**
