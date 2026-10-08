@@ -2123,6 +2123,8 @@ function closeSession() {
       const tree = result.tree;
       // strip the password hash from the archive
       if (tree.adminPasswordHash) delete tree.adminPasswordHash;
+      // …and a leftover of the old reset flag: it held the recovery code.
+      delete tree._superadminReset;
       downloadFullArchive(tree, sessionNum);
       if (result.alreadyClosed) {
         resetBtn("Session closed ✓ — re-download archive");

@@ -152,14 +152,18 @@ test("client: both reset call sites issue a reset ONLY when a password marker ex
      emulator spec that does drive the panel (reset-flag-unreadable.spec.js)
      resets a session that has a password. So this pins the shape that keeps a
      passwordless session away from the reset, and no more than the shape. */
-  for (const [file, resetRef] of [
-    ["script.js", 'db.ref(adminSecretPath(sessionNum, "reset/" + (currentUser && currentUser.uid)))'],
-    ["script-admin.js", 'db.ref(adminSecretPath(targetSession, "reset/" + (currentUser && currentUser.uid)))']
+  for (const [file, resetRef, firstWrite] of [
+    ["script.js", 'db.ref(adminSecretPath(sessionNum, "reset/" + (currentUser && currentUser.uid)))',
+      "return useAdminSecrets() ? Promise.all([refSecret.set(h), refMarker.set(randomAdminMarker())]) : refSecret.set(h);"],
+    ["script-admin.js", 'db.ref(adminSecretPath(targetSession, "reset/" + (currentUser && currentUser.uid)))',
+      "return legacy ? Promise.all([refSecret.set(h), refMarker.set(randomAdminMarker())]) : refSecret.set(h);"]
   ]) {
     const src = read(file);
     const at = src.indexOf(resetRef);
     assert.notStrictEqual(at, -1, file + " no longer builds the reset the way this test expects");
-    assert.strictEqual(src.split("\"reset/\"").length - 1, 1,
+    /* In ANY quotes. Counting the double-quoted spelling alone let a second
+       reset through as long as it was written 'reset/' (second review of #447). */
+    assert.strictEqual((src.match(/["'`]reset\/["'`]/g) || []).length, 1,
       file + " now builds a reset in more than one place — check each against the rule");
     assert.match(src.slice(Math.max(0, at - 2600), at), /refMarker\.once\("value"\)/,
       file + ": the branch must be decided on the marker");
@@ -169,10 +173,29 @@ test("client: both reset call sites issue a reset ONLY when a password marker ex
     assert.ok(guard !== -1 && at - guard < 2600,
       file + ": the reset is no longer preceded by the `marker is absent -> first write` " +
       "branch. A reset attempted on a session with no password is refused by the rule.");
+    /* The `snap` the guard tests is the MARKER's, and nothing runs between the
+       read and the guard. With the guard text intact, a snapshot taken from
+       another node, or a helper called above the guard, decided the branch on
+       something else — both passed while this only looked for the two pieces
+       of text somewhere above the reset (second review of #447). */
+    const READ = 'return refMarker.once("value").then(snap => {';
+    const readAt = src.lastIndexOf(READ, guard);
+    assert.ok(readAt !== -1 && guard - readAt < 600,
+      file + ": the guard is not directly inside `refMarker.once(\"value\").then(snap => {`");
+    assert.strictEqual(src.slice(readAt + READ.length, guard).replace(/^\s*\/\/.*$/gm, "").trim(), "",
+      file + ": something runs between reading the marker and the guard that decides on it");
+
     const open = guard + "if (snap.val() == null) ".length;
     const close = src.indexOf("}", open);
     assert.ok(close > open && close < at, file + ": the first-write branch does not end before the reset");
     const branch = src.slice(open + 1, close).replace(/^\s*\/\/.*$/gm, "").trim();
+
+    /* THE WHOLE STATEMENT. The checks below say what each part is for; none of
+       them sees a side effect added INSIDE the `return` — a comma expression, a
+       third element in the Promise.all — which is one statement, a `return`,
+       and writes the marker (second review of #447). */
+    assert.strictEqual(branch.replace(/\s+/g, " "), firstWrite,
+      file + ": the first-write branch is not, word for word, the statement this test knows");
 
     /* ONE statement, and it is a `return`. With the guard text intact but the
        `return` gone, the branch falls through: a session with no password is

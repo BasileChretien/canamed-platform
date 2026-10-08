@@ -200,7 +200,9 @@ test("default tree: a recovery code left behind blocks its session code and stil
   expect(await tryWrite(page, loc.path + "/adminPasswordHash", MARKER)).toBe("ALLOWED");
   //    c. And now the SAME payload from the same user goes through: the stale
   //       record is this session's recovery record, and its code resets a
-  //       password its holder never set. (The ALLOW leg for a. and for 2'.)
+  //       password its holder never set. (The ALLOW leg for a., and for the
+  //       refusal of this same payload, on this same path, on the session
+  //       created after the purge.)
   expect(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD)),
     "while the stale node stands, its code is the recovery code of the session at that code")
     .toBe("ALLOWED");

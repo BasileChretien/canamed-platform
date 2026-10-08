@@ -53,6 +53,12 @@
  *   - A STALE recovery record at a session's code still resets that session
  *     once it has a password. What removes stale records is the purge and the
  *     sweep (tests-e2e/emulator/recovery-purge.spec.js), not these rules.
+ * A THIRD thing was open when this file was written and is in neither item: a
+ * session's members could READ the recovery code while a reset was in
+ * progress, off the flag itself. It has its own change and its own committed
+ * test — tests-e2e/emulator/reset-flag-unreadable.spec.js — which is also why
+ * the resets below are opened at adminSecrets/…/reset/<uid> and no longer
+ * under the session.
  *
  * Seeding is done as the emulator owner — the Admin SDK, which is what a
  * restore or a purge is. No allow/deny verdict is settled with the owner token.

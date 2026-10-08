@@ -42,7 +42,10 @@ test("script: joinSuperAdmin writes its reset flag before overwriting hash", () 
   // the old node's name must NOT come back into this file.
   assert.match(SCRIPT, /db\.ref\(adminSecretPath\(sessionNum, "reset\/" \+ \(currentUser && currentUser\.uid\)\)\)/,
     "joinSuperAdmin must write its reset flag at adminSecrets/…/reset/<own uid>");
-  assert.doesNotMatch(SCRIPT, /_superadminReset/,
+  // script.js ALONE: `SCRIPT` above is script.js + script-admin.js, and the
+  // latter names the node once on purpose (the archive download strips a
+  // leftover — the next test pins that it is the only mention there).
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, "script.js"), "utf8"), /_superadminReset/,
     "script.js names the old reset node again. A flag written there is readable " +
     "by every member of the session, and it carries the recovery code.");
   // The write order matters: refReset.set(...).then(() => refSecret.set(h)).
@@ -66,8 +69,13 @@ test("script: change-pass-btn dashboard handler also uses the reset-flow", () =>
     "the dashboard handler must write its reset flag at adminSecrets/…/reset/<own uid>");
   assert.match(ADMIN, /refReset\.set\([^)]*\)[\s\S]*?\.then\(\(\) => refSecret\.set\(h\)\)/,
     "and set it BEFORE writing the new hash");
-  assert.doesNotMatch(ADMIN, /_superadminReset/,
-    "script-admin.js names the old, member-readable reset node again");
+  /* ONE mention is meant: the archive download deletes a leftover of the old
+     node from the copy it saves. Anything else is the old write coming back. */
+  assert.deepStrictEqual(
+    ADMIN.split("\n").filter((line) => line.includes("_superadminReset")).map((line) => line.trim()),
+    ["delete tree._superadminReset;"],
+    "script-admin.js names the old, member-readable reset node somewhere other than " +
+    "the archive download's strip");
 });
 
 // =============================================================

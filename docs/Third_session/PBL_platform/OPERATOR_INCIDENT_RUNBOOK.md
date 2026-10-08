@@ -258,8 +258,8 @@ A reset is refused once the session has been **closed**.
   to `sessions/<code>/_superadminReset`, which every participant of the
   session could read while the reset was in progress. **If you used
   this path before that change on a session that is still open, treat
-  its recovery code as known to its participants**; closing the session
-  ends what the code can do.)
+  its recovery code as known to its participants**; once the session is
+  closed, no further reset can be opened with it.)
 - **No audit trail** — the record is removed as soon as the reset is
   done and never held a history. This section used to describe one; it
   did not exist.

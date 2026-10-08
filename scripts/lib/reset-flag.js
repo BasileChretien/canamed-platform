@@ -26,9 +26,25 @@
  *                            taken before the backup learned to strip the node
  *                            may still hold one;
  *   - the nightly purge    — it writes a null there for every session it
- *                            keeps, so one left in the database is gone within
- *                            a day of this shipping.
- * They share this file so that the node's name is spelled once.
+ *                            keeps, so one left in the database is gone at
+ *                            the first run the backup gate lets through after
+ *                            this ships (a refused run skips the session pass
+ *                            whole, and this with it).
+ * The three share this file for the node's name. (Two older lists spell it
+ * themselves and are left alone: the research export's drop list in
+ * lib/pseudonymise.js, and the in-app archive in the platform's lib.js.)
+ *
+ * WHEN THIS CAN GO — a state, not a date. Nothing can put a value in the old
+ * node once the rules that make it delete-only are live: no client may write
+ * it, and a restore withholds it. So:
+ *   - the purge's nightly null and the backup's strip are dead code after the
+ *     first purge run that (a) follows the rules release and (b) logs
+ *     `Leftover reset flags: cleared`;
+ *   - the restore's withholding has to outlive every archive taken before the
+ *     backup stripped the node — 90 days after this shipped, by the bucket's
+ *     lifecycle rule.
+ * Until someone has checked both, leave all three: each is one line, and a
+ * recovery code in clear is what they stand between.
  */
 
 /** The old node's key under a session. Nothing writes it any more. */

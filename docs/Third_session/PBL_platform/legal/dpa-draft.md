@@ -904,7 +904,7 @@ arising from the termination itself, without prejudice to accrued rights.
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
 | G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; they are swept daily since PIS v12 and disclosed in the notice (sections 4 and 8). The Art. 15 route is untouched, and the older usage log is still not in the notice |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed three times on 2026-10-07, still open.** (3) Recovery records are now deleted with their session; admin secrets have been since 2026-07-23. The records left behind before that need the one-off sweep, which has only been DRY-RUN (34 records to delete, 2026-10-07) - see the first note at G8. The password reset now needs a password to reset, and no longer writes the recovery code where the session's participants can read it - a code exposed before that change stays valid while its session is open (Annex II section 3). (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed three times on 2026-10-07, still open.** (3) Recovery records are now deleted with their session; admin secrets have been since 2026-07-23. The records left behind before that need the one-off sweep, which has only been DRY-RUN (34 records to delete, 2026-10-07) - see the first note at G8. In the rules [OPERATOR - DATE THOSE RULES WERE DEPLOYED: ____ ], the password reset needs a password to reset. By a further change [OPERATOR - DATE ON WHICH BOTH ITS RULES AND ITS CLIENT WERE LIVE: ____ ] it no longer writes the recovery code where the session's participants can read it; until that date this is not in force, and a code exposed before it stays valid while its session is open (Annex II section 3, first limit). (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
@@ -1985,18 +1985,22 @@ that could not be confirmed from the code is marked.*
   > record still cannot be replaced. A facilitator who used the
   > forgotten-password path before that date, on a session that is still
   > open, should treat that session's recovery code as known to its
-  > participants; closing the session ends what the code can do. Where a
-  > reset had failed half-way, the code could also be left behind in the
-  > session itself: such a leftover is now removed by the nightly purge, left
-  > out of the nightly backup, and withheld when a backup is restored — but a
-  > backup taken before that date may contain one until it expires (90
-  > days).
-  > Second: a recovery record that outlived an
+  > participants; once the session is closed no further reset can be
+  > opened. Where a reset had failed half-way, the code could also be left
+  > behind in the session itself, readable there by its participants — and
+  > the nightly backup used to copy it, in clear, with the rest of the
+  > session, as did the archive a facilitator downloads on closing. Such a
+  > leftover is now removed by the nightly purge, left out of the nightly
+  > backup and of the facilitator's download, and withheld when a backup is
+  > restored — but a backup taken before that date may contain one until it
+  > expires (90 days).
+  > **Second:** a recovery record that outlived an
   > earlier session at the same session code is still a valid recovery code for
   > whatever session is created there once that session has a password; the
   > rules cannot tell it from a fresh one, and removing such records is the
-  > purge's and the sweep's job (G8). And "its creator" means the same sign-in
-  > account — for a facilitator who was not signed in, the same browser.
+  > purge's and the sweep's job (G8). **Third:** "its creator" means the same
+  > sign-in account — for a facilitator who was not signed in, the same
+  > browser.
 - Account passwords (Google or email/password sign-in is optional) must be at
   least 8 characters and use at least 3 character classes.
 

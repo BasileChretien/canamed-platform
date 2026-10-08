@@ -31,8 +31,15 @@
  * and no rule reads it any more.
  *
  * Every DENIED below has an ALLOWED for the same payload on the same path, by
- * a user who should be able to or in the state the write is for. Seeding is
- * done as the emulator owner; no verdict is settled with the owner token.
+ * a user who should be able to or in the state the write is for — with ONE
+ * exception, which is the point of the change: a VALUE at the old node (cell
+ * 3). Nothing may write one any more, so no user can be its allow leg. What
+ * stands in for it: that same write was ALLOWED before the change (the BEFORE
+ * column), and the path is not simply dead — the owner seeds it in step 10
+ * and the watcher's listener delivers what was seeded. That delivery is also
+ * what keeps cell 8 ("the watcher was handed nothing") from being the answer
+ * a dead listener would give. Seeding is done as the emulator owner; no
+ * verdict is settled with the owner token.
  *
  * NOT CLOSED HERE, and said so rather than implied: a code that leaked BEFORE
  * this change stays valid while its session is open — the record is still
@@ -188,6 +195,13 @@ for (const tree of ["default", "org"]) {
        Seeded by the owner exactly as it used to stand when it opened the hash
        for the user it names: fresh, the right code, that user's uid. */
     await ownerPut(oldNode(loc), oldFlag(K, stranger.uid));
+    /* THE CONTROL FOR CELL 8. The same listener, attached since step 1, is
+       handed the code as soon as there IS one in the node it watches — so the
+       "no" above means nothing was written there, not that nobody was
+       listening. (And it is why a leftover in that node matters: a member
+       reads it.) */
+    await expect.poll(() => codeSeen(stranger.page, oldNode(loc)),
+      "the watcher's listener is live: it delivers what the owner seeded in the old node").toBe(K);
     await step("10. an old-style flag naming the stranger sits in the old node: the stranger overwrites the hash", stranger, loc.adminSecretPath + "/hash", HASH_2);
     await step("10. anyone may DELETE what is left in the old node", stranger, oldNode(loc), null);
 

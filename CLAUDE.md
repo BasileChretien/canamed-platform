@@ -1428,9 +1428,11 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
 - **A session's recovery code is purged with it (2026-10-07) — ⛔ the backlog
   sweep has only been DRY-RUN (34 records to delete); #447 makes a password
   reset need a password to reset, IN THE RULES (live only once a deploy has
-  released them); and ⛔ one takeover route through the reset is still OPEN —
-  the recovery code is readable by every session member while a reset is in
-  progress.**
+  released them); and the takeover route through the reset — the recovery
+  code readable by every session member while a reset was in progress — is
+  CLOSED IN CODE by a change of its own, ⛔ live only once its rules AND its
+  shell have shipped, with one deliberate residual (its entry is the last
+  sub-bullet below).**
   `createSession()` writes `recovery/sessions/<code>` (org:
   `recovery/orgs/<slug>/sessions/<id>` — the ROSTER's shape, not adminSecrets')
   and from 2026-05-25 until the fix of 2026-10-07 nothing deleted it: the purge
@@ -1561,7 +1563,9 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     `Verify:` `node --test tests/reset-needs-a-password.test.js`; and on the
     emulator, the three cases of `reset-needs-a-password.spec.js`
     (`PORT=8771 npm run test:e2e:rules -- reset-needs-a-password`). Those test
-    the REPO. For the live system, on the first Deploy run after the merge:
+    the REPO. For the live system, on the first NON-SKIPPED Deploy run whose
+    commit contains the merge (a skipped run has no log, and a run on an
+    earlier commit prints the same string for the rules it shipped):
     `gh run view <deploy run> --log | grep -F 'released successfully'` — the
     only string that means the rules shipped (the step is `continue-on-error`,
     and `Database rules deployed` is echoed by every run, success or not).
@@ -1614,18 +1618,28 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
       a code): the backup strips it, the restore withholds it (an archive
       taken earlier may hold one for its 90 days), and the purge writes a null
       there for every session it keeps. BLIND, in an update of its own after
-      the purge: the scheduled jobs may read, per session, the identifiers and
-      the two dates and nothing else (`tests/ops-transfer-notice.test.js`), so
-      the purge does not look first — `tests/reset-flag-unreadable.test.js`
-      RECORDS its reads and fails on a third. Its log line counts paths
-      written, not leftovers found. A dry run writes nothing; a run the backup
-      gate refuses clears nothing. The node's name is spelled once, in
-      `scripts/lib/reset-flag.js`.
+      the purge: the PURGE may read, per session, the identifiers and the two
+      dates and nothing else (`tests/ops-transfer-notice.test.js`; the backup
+      and the export are disclosed full copies, a different matter), so it
+      does not look first — `tests/reset-flag-unreadable.test.js` RECORDS its
+      reads and fails on a third. Its log line counts paths written, not
+      leftovers found. A dry run writes nothing; a run the backup gate refuses
+      clears nothing. The facilitator's own archive download
+      (script-admin.js) strips it too — it stripped only the password marker.
+      The backup, the restore and the purge take the node's name from
+      `scripts/lib/reset-flag.js`, whose header also says WHEN ALL THIS CAN BE
+      REMOVED: the purge's null and the backup's strip once a let-through
+      purge run after the rules release has logged `cleared`; the restore's
+      withholding 90 days after this change reached main, when the last
+      archive taken before it has expired. A state to check, not a date to
+      wait for.
     **⚠️ NOT CLOSED, by decision and not by oversight (user, 2026-10-08): no
     rotation.** A code somebody obtained before both halves were live resets
     that session for as long as it is open — a reset does not issue a new
-    code, and the record is still write-once. Closing the session ends it (a
-    reset on a closed session is refused; measured). The exposure empties on
+    code, and the record is still write-once. Closing the session stops any
+    NEW reset being opened (measured: refused); one opened in the seconds
+    before the close keeps its 30 s, because the hash rules look at the flag
+    and not at `closed` — as they always have. The exposure empties on
     the retention clock: it is over once every session that existed before the
     deploy has been purged — a state, not a date.
     **⚠️ TWO HALVES, AND EITHER ONE ALONE REFUSES RESETS RATHER THAN LEAKING**
@@ -1645,7 +1659,8 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     emulator `PORT=8771 npm run test:e2e:rules -- reset-flag-unreadable` (four
     cases: both trees, the real client's reset panel, and the purge's update
     sent by the real Admin SDK). Those test the REPO. For the LIVE system,
-    three separate things: **rules** —
+    three separate things: **rules** — on the first non-skipped Deploy run
+    whose commit contains the merge,
     `gh run view <deploy run> --log | grep -F 'released successfully'`;
     **client** — `curl -s https://canamed-69785.web.app/script.js | grep -c
     _superadminReset` prints **0** (the shipped client no longer names the old
@@ -2481,7 +2496,12 @@ observed — LOCAL mode models no rules — so these are static findings:**
 **Round-4 review (2026-05-30) — verification pass on R3 + two residuals fixed:**
 - The R3 recovery-race fix was confirmed **correct + complete** (uid binding on
   all 4 hash rules, code-gate intact, no forge path; supply-chain, eval removal,
-  retentionUntil all re-verified). Two residuals found and fixed:
+  retentionUntil all re-verified). ⚠️ **"Code-gate intact, no forge path" did
+  not hold, and the reviews of that day did not see why:** the gate compares a code the
+  client has to PRESENT, and until 2026-10 it presented it in a node every
+  member of the session could read. Nobody needed to forge a code they could
+  read. See "THE RECOVERY CODE WAS READABLE BY EVERY SESSION MEMBER" under
+  Known security follow-ups. Two residuals found and fixed:
   - **Initial-set race (MEDIUM)**: the `!data.exists()` branch of the four hash
     rules wasn't uid-bound — an attacker could race the create-flow gap to set
     the admin hash first. Now guarded by `creatorUid == auth.uid` (creatorUid is

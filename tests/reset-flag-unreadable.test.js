@@ -175,6 +175,51 @@ test("rules: nothing in the adminSecrets tree is readable by a client", () => {
     "hashes, proofs, and the recovery code while a reset is open — is then readable");
 });
 
+test("rules: nothing ABOVE a reset rule grants a write", () => {
+  /* Writes cascade like reads: a `.write` that holds at ANY node on the way
+     down grants the write, whatever the rule at the leaf says. Every test
+     above reads a leaf. With `".write": "auth != null"` added at
+     adminSecrets/$code — or at sessions/$sessionId, or at recovery/sessions —
+     all of them stayed green, and any signed-in user could replace a hash, a
+     proof or another user's flag wholesale (found by the independent review
+     of this change; the same gap was noted on #447 for the rules it added). */
+  const grants = [];
+  (function walk(node, where) {
+    for (const [key, value] of Object.entries(node)) {
+      if (key === ".write") grants.push(where);
+      else if (value !== null && typeof value === "object") walk(value, where + "/" + key);
+    }
+  })(rules.adminSecrets, "adminSecrets");
+  assert.deepStrictEqual(grants.sort(), [
+    "adminSecrets/$code/hash",
+    "adminSecrets/$code/proof/$uid",
+    "adminSecrets/$code/reset/$uid",
+    "adminSecrets/orgs/$orgSlug/$sessionId/hash",
+    "adminSecrets/orgs/$orgSlug/$sessionId/proof/$uid",
+    "adminSecrets/orgs/$orgSlug/$sessionId/reset/$uid"
+  ], "in the adminSecrets tree a `.write` belongs at a hash, a proof or a flag — the " +
+     "six leaves — and nowhere above them");
+
+  /* …and the ancestors of the other rules a reset rests on: the marker and the
+     old node under a session, and the recovery record. `false` is as good as
+     absent (it grants nothing, and a deeper rule can still grant). */
+  const s = rules.sessions, o = rules.orgs, rec = rules.recovery;
+  const ANCESTORS = [
+    ["(root)", rules],
+    ["sessions", s], ["sessions/$sessionId", s.$sessionId],
+    ["orgs", o], ["orgs/$orgSlug", o.$orgSlug], ["orgs/$orgSlug/sessions", o.$orgSlug.sessions],
+    ["orgs/$orgSlug/sessions/$sessionId", o.$orgSlug.sessions.$sessionId],
+    ["recovery", rec], ["recovery/sessions", rec.sessions], ["recovery/orgs", rec.orgs],
+    ["recovery/orgs/$orgSlug", rec.orgs.$orgSlug], ["recovery/orgs/$orgSlug/sessions", rec.orgs.$orgSlug.sessions]
+  ];
+  for (const [where, node] of ANCESTORS) {
+    assert.ok(node !== undefined, where + " is no longer in the rules — re-read this list");
+    assert.ok(node[".write"] === undefined || node[".write"] === false,
+      "a `.write` at " + where + " grants every write below it, over the head of the " +
+      "rule that was meant to decide: " + JSON.stringify(node[".write"]));
+  }
+});
+
 /* ══ 2. THE CLIENT ══════════════════════════════════════════════════════ */
 
 for (const [file, session] of [["script.js", "sessionNum"], ["script-admin.js", "targetSession"]]) {
@@ -194,14 +239,34 @@ for (const [file, session] of [["script.js", "sessionNum"], ["script-admin.js", 
       file + ": the reset must be flag -> hash -> remove the flag, with exactly { requestedAt, code } in it");
     assert.match(block.slice(block.indexOf(".catch(err => {")), /try \{ refReset\.remove\(\); \} catch \(_\) \{\}/,
       file + ": a failed reset must still try to remove its flag — it holds the recovery code");
+    /* The flag is dated by the SERVER. The rule accepts ±5 s of its own clock,
+       so a laptop a minute out would be refused — and told its recovery code
+       is wrong. Pinned for script.js by r3-blockers only; the dashboard
+       handler had nothing (found in review), and the runbook now says a wrong
+       clock does not matter. */
+    assert.match(block,
+      /const TS = \(typeof firebase !== "undefined" &&\s*firebase\.database && firebase\.database\.ServerValue &&\s*firebase\.database\.ServerValue\.TIMESTAMP\) \|\| Date\.now\(\);/,
+      file + ": the flag's requestedAt must be the server's timestamp placeholder");
   });
 }
+
+test("client, script-admin.js: the facilitator's own archive download leaves a leftover flag out", () => {
+  /* The dashboard's "close and download" reads the session whole and saves it.
+     It stripped the password marker and nothing else, so a leftover of the old
+     flag went into the file with the recovery code in clear (found in review).
+     Deleted unconditionally: a falsy leftover is still a leftover. */
+  assert.match(read("script-admin.js"),
+    /if \(tree\.adminPasswordHash\) delete tree\.adminPasswordHash;\n(?:\s*\/\/[^\n]*\n)*\s*delete tree\._superadminReset;\n\s*downloadFullArchive\(tree, sessionNum\);/,
+    "the archive download must drop the old reset node before it saves the session");
+});
 
 test("client: nothing served to a browser writes the old node", () => {
   /* Every script in the platform directory, lazy chunks included: a write to
      the old node from any of them is refused by the rules, so it would be a
-     broken reset — and before the rules are live, a leaked code. lib.js may
-     NAME the node: it deletes it from the copy of a session it exports. */
+     broken reset — and before the rules are live, a leaked code. Two files
+     may NAME the node, each to delete it from a copy of a session that is
+     about to be saved: lib.js (the pseudonymised export) and script-admin.js
+     (the facilitator's archive download). */
   const WRITES = /\.ref\(|sPath\(|oPath\(|\.set\(|\.update\(|\.push\(/;
   const naming = [];
   const writing = [];
@@ -211,11 +276,16 @@ test("client: nothing served to a browser writes the old node", () => {
     for (const line of lines) if (WRITES.test(line)) writing.push(file + ": " + line.trim());
   }
   assert.deepStrictEqual(writing, [], "a served script addresses the old reset node");
-  assert.deepStrictEqual(naming, ["lib.js"],
-    "only lib.js should name the old node (it strips it from an export). A new mention " +
-    "is either a write coming back or a comment that will mislead the next reader");
+  assert.deepStrictEqual(naming, ["lib.js", "script-admin.js"],
+    "only lib.js and script-admin.js should name the old node (each strips it from a " +
+    "copy it saves). A new mention is either a write coming back or a comment that " +
+    "will mislead the next reader");
   assert.match(read("lib.js"), /delete out\._superadminReset;/,
-    "lib.js must go on stripping a leftover from the in-app archive");
+    "lib.js must go on stripping a leftover from the pseudonymised export");
+  assert.deepStrictEqual(
+    read("script-admin.js").split("\n").filter((line) => line.includes(OLD)).map((line) => line.trim()),
+    ["delete tree._superadminReset;"],
+    "script-admin.js may name the old node in ONE place: the archive download's strip");
 });
 
 /* ══ 3. THE OPS SCRIPTS ═════════════════════════════════════════════════ */

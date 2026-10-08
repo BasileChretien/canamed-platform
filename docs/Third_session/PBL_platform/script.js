@@ -5575,13 +5575,13 @@ function joinSuperAdmin() {
   // afterwards to shut the door early (the window self-expires regardless).
   //
   // SECURITY NOTE: the recovery code is the real gate. It is generated with
-  // ~59.5 bits of entropy, shown to the creator exactly once, and stored in
-  // the unreadable /recovery subtree — so a participant who only knows the
-  // (spoken-aloud) session code cannot read it, cannot inject one (the
-  // /recovery write is locked once a password exists), and therefore cannot
-  // pass the reset-flag rule. A wrong/blank code is rejected by the
-  // rules as a generic permission error, which we translate into a helpful
-  // hint below rather than claiming success.
+  // ~59.5 bits of entropy, shown to the creator exactly once, stored in the
+  // unreadable /recovery subtree and presented in a flag in the equally
+  // unreadable adminSecrets tree — so a participant who only knows the
+  // (spoken-aloud) session code cannot read it or inject one (the /recovery
+  // write is locked once a password exists). A wrong/blank code is rejected
+  // by the rules as a generic permission error, which we translate into a
+  // helpful hint below rather than claiming success.
   ensureSignedIn()
     .then(() => hashPassword(newPass, sessionNum))
     .then(h => {
