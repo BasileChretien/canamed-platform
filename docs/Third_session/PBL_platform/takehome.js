@@ -43,6 +43,10 @@
  * student-pdf.js).
  */
 
+/* A shell cached before serverNow() existed can still load this chunk: there,
+   dates come from the device clock, as they did before. */
+if (typeof serverNow !== "function") window.serverNow = function () { return Date.now(); };
+
 /* Escape the markdown control chars (incl. the table pipe) so a free-text
    answer can never break the document structure. */
 function _mdEsc(s) {
@@ -114,11 +118,11 @@ function downloadCertificatePdf() {
         nameHash: nameHash,
         session: (sessionNum || "").slice(0, 40),
         sessionLabel: sessionLabel,
-        at: Date.now(),
+        at: serverNow(),
         // Keep inside the DB rule's ~5-year retention cap (5y minus a margin for
         // clock skew). The previous 10-year value exceeded the cap, so the rule
         // rejected every write — leaving the id absent from the registry.
-        retentionUntil: Date.now() + (5 * 365 - 30) * 24 * 60 * 60 * 1000
+        retentionUntil: serverNow() + (5 * 365 - 30) * 24 * 60 * 60 * 1000
       };
       return firebase.database().ref("credentials/" + certId).set(payload).then(
         function () { return done; },
@@ -174,7 +178,9 @@ function downloadCertificatePdf() {
         sessionCode: sessionNum || "",
         sessionLabel: "",
         lang: (typeof getLang === "function") ? getLang() : "en",
-        dateStr: new Date().toLocaleDateString(),
+        // The day verify.html will show for this certificate: the record's
+        // `at` is the server's clock, so the PDF's date is taken from it too.
+        dateStr: new Date(serverNow()).toLocaleDateString(),
         partnership: "Université de Caen Normandie × Nagoya University",
         // Competencies omitted on purpose: the builder localizes its own
         // default set to data.lang. (A caller may still pass competencies to

@@ -157,6 +157,7 @@
       "splash.my-sessions.close-live-warning": "⚠ {n} participant(s) have joined this session — closing ends it for everyone.",
       "splash.my-sessions.closed-btn": "Closed",
       "splash.my-sessions.close-failed": "Could not close — check your connection and try again.",
+      "splash.my-sessions.close-refused": "The server refused to close this session from this browser. Open it with its facilitator password and end it from the dashboard.",
 
       // privacy page — R3 deep-i18n: privacy.html is a single dynamic
       // page; reviewed body copy lives inline as <section data-priv-lang>.
@@ -1032,7 +1033,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v28";  // PIS v12: lobby.consent-version names the notice that discloses the anonymous identifier
+  const LOCALE_VERSION = "v29";  // splash.my-sessions.close-refused: what "Close" says when the server refuses it
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
