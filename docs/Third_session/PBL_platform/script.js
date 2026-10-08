@@ -12244,27 +12244,31 @@ function accountSignOut() {
 /* The sign-in view, the account dialog and the profile save are the lazy
    account-ui.js, and this is every way into it. `run` is called once the chunk
    is in, at once if it already is; `fail` if it cannot be loaded. While it
-   loads, a repeat of the same `key` adds nothing, and both are dropped if
-   `still()` no longer holds: the account, or the view, changed meanwhile. */
+   loads, a repeat of the same `key` REPLACES what waits (the latest click acts,
+   once), and what waits is dropped if its `still()` no longer holds: the
+   account, or the view, changed meanwhile. */
 const _accountWaiting = {};
 function accountUI(key, run, fail, still) {
   if (typeof wireAccountChunk === "function") { run(); return; }
-  if (key && _accountWaiting[key]) return;
-  if (key) _accountWaiting[key] = true;
-  const settle = fn => x => { delete _accountWaiting[key]; if (!still || still()) fn(x); };
+  const asked = key && _accountWaiting[key];
+  if (key) _accountWaiting[key] = { run, fail, still };
+  if (asked) return;
+  const settle = ok => e => {
+    const w = key ? _accountWaiting[key] : { run, fail, still };
+    delete _accountWaiting[key];   // before still(): a dropped click must not go on counting as waiting
+    if (!w || (w.still && !w.still())) return;
+    if (ok) w.run(); else { console.warn("Could not load the account code:", e); w.fail(e); }
+  };
   const L = window.CanamedLoader;
   (L && L.ensureAccountUI ? L.ensureAccountUI()
-    : Promise.reject(new Error("loader has no ensureAccountUI")))
-    .then(() => {
-      if (typeof wireAccountChunk !== "function") throw new Error("account-ui.js defined nothing");
-    })
-    .then(settle(run), settle(e => { console.warn("Could not load the account code:", e); fail(e); }));
+    : Promise.reject(new Error("loader has no ensureAccountUI"))).then(settle(true), settle(false));
 }
 const accountLoadFailed = what => toast("Couldn't open " + what +
   " — check your connection and try again.", "", "loss");
 
 /* The front page's "Sign in…" link. Dropped if its own view is no longer the
-   one showing: the page has moved on (to profile setup, say) since the click. */
+   one showing: the page has moved on (to profile setup, or into a session)
+   since the click. */
 function showAccountView() {
   accountUI("view", () => {
     populateProfileSelects("splash-prof-uni");
@@ -12272,7 +12276,10 @@ function showAccountView() {
     if (hint) { hint.textContent = ""; hint.className = "splash-hint"; }
     splashShowView("account");
   }, () => accountLoadFailed("the sign-in screen"),
-  () => { const v = el("splash-view-enter"); return !!v && !v.hidden; });
+  () => {
+    const s = el("splash"), v = el("splash-view-enter");
+    return !!s && !s.classList.contains("hidden") && !!v && !v.hidden;
+  });
 }
 /* Both openers of the account dialog. The account that clicked is the only one
    it may open for: opened for another before ITS profile is read, the dialog

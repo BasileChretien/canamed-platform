@@ -55,14 +55,14 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 
 | Function | Lines | Calls | Purpose |
 |----------|-------|-------|---------|
-| signInWithProvider() | 4487–4540 | account dialog, splash buttons | Initiate Google OAuth, handle sign-in result |
+| signInWithProvider() | lazy `account-ui.js` | the sign-in view's provider buttons | Initiate Google OAuth, handle sign-in result |
 | loadProfile() | 4629–4634 | handleAuthStateChange() | Load user's saved profile (name, univ, year, english) from Firebase |
 | saveProfile() | 4635–4645 | profileSetupSubmit(), account dialog | Write profile updates to users/{uid}/profile |
 | handleAuthStateChange() | 4571–4628 | Auth state listener | Route: if first sign-in, show profile setup; else restore profile to form |
-| profileSetupSubmit() | 4711–4728 | profile-setup form submit | Validate & save new profile, then route to session-join or next step |
+| profileSetupSubmit() | lazy `account-ui.js` | profile-setup form submit, through `submitProfileSetup()` in `script.js` | Validate & save new profile, then route to session-join or next step |
 | applyProfileToJoinForm() | 4729–4744 | After profile loaded | Auto-fill join form (name, univ, year, english) from saved profile |
 | pushSessionToHistory() | 4646–4658 | After participant joins | Write session code to users/{uid}/history/{code} (for "recent sessions" list) |
-| loadHistoryForDialog() | 4769–4802 | Account dialog open | Load and render user's session history (recent codes they've joined) |
+| loadHistoryForDialog() | lazy `account-ui.js` | Account dialog open | Load and render user's session history (recent codes they've joined) |
 
 ### Resume & Last Workshop (LocalStorage Persistence)
 

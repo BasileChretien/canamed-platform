@@ -88,67 +88,168 @@ test("no top-level name of account-ui.js is declared by another script of the pa
   }
 });
 
-/* script.js without its comments, position for position. Two regexes are not a
-   parser, so the result is COMPILED: had they eaten code, or left half a
-   comment behind, this fails instead of quietly searching less of the file. */
-const CODE = (() => {
-  const blank = (m) => m.replace(/[^\n]/g, " ");
-  const out = SCRIPT.replace(/\/\*[\s\S]*?\*\//g, blank)
-    .replace(/(^|[\s;{}),])\/\/.*$/mg, (m, a) => a + blank(m.slice(a.length)));
-  assert.doesNotThrow(() => new vm.Script(out), "script.js no longer compiles with its comments blanked");
-  assert.strictEqual(out.length, SCRIPT.length);
-  return out;
-})();
-
-/* The top-level function of script.js that the code at `at` belongs to: the
-   last one declared before it. (Top-level code between two functions is
-   attributed to the one above, which the test below then refuses as well.) */
-const TOP = [...CODE.matchAll(/^function ([A-Za-z_$][\w$]*)\(/gm)].map((m) => ({ name: m[1], at: m.index }));
-function enclosing(at) {
-  let found = "(before any function)";
-  for (const f of TOP) { if (f.at <= at) found = f.name; else break; }
-  return found;
+/* A script with its comments blanked, position for position. A scanner, not a
+   parser: it knows the two comment forms and what can hide one (strings,
+   template literals, regex literals). Whatever it is used on is COMPILED
+   afterwards, so a file it misreads fails here instead of being searched less. */
+const REGEX_AFTER = new Set(["return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "throw",
+  "case", "do", "else", "yield", "await"]);
+function withoutComments(src) {
+  const out = src.split("");
+  const blank = (a, b) => { for (let k = a; k < b; k++) if (out[k] !== "\n") out[k] = " "; };
+  const stack = [];   // "`" inside a template's text; a number (brace depth) inside one of its ${ }
+  const n = src.length;
+  let i = 0, last = "", word = "";
+  while (i < n) {
+    const c = src[i], d = src[i + 1];
+    if (stack[stack.length - 1] === "`") {
+      if (c === "\\") { i += 2; continue; }
+      if (c === "`") { stack.pop(); last = "`"; word = ""; i++; continue; }
+      if (c === "$" && d === "{") { stack.push(0); last = "{"; word = ""; i += 2; continue; }
+      i++; continue;
+    }
+    if (c === "/" && d === "/") { let j = i; while (j < n && src[j] !== "\n") j++; blank(i, j); i = j; continue; }
+    if (c === "/" && d === "*") { let j = src.indexOf("*/", i + 2); j = j === -1 ? n : j + 2; blank(i, j); i = j; continue; }
+    if (c === "'" || c === '"') {
+      let j = i + 1;
+      while (j < n && src[j] !== c && src[j] !== "\n") j += src[j] === "\\" ? 2 : 1;
+      i = j + 1; last = c; word = ""; continue;
+    }
+    if (c === "`") { stack.push("`"); i++; continue; }
+    /* A slash starts a regex where a value cannot end: after an operator, an
+       opening bracket, a closing brace, or a keyword such as `return`. */
+    if (c === "/" && (last === "" || "(,=:[!&|?{};+-*%<>~^}".includes(last) ||
+        (/[\w$]/.test(last) && REGEX_AFTER.has(word)))) {
+      let j = i + 1, cls = false;
+      while (j < n && src[j] !== "\n" && (cls || src[j] !== "/")) {
+        if (src[j] === "\\") { j += 2; continue; }
+        if (src[j] === "[") cls = true; else if (src[j] === "]") cls = false;
+        j++;
+      }
+      j++;
+      while (j < n && /[a-z]/i.test(src[j])) j++;
+      i = j; last = "/"; word = ""; continue;
+    }
+    if (typeof stack[stack.length - 1] === "number") {
+      if (c === "{") stack[stack.length - 1]++;
+      else if (c === "}" && stack[stack.length - 1]-- === 0) { stack.pop(); i++; continue; }
+    }
+    if (/[\w$]/.test(c)) { word = (/[\w$]/.test(src[i - 1] || "") ? word : "") + c; last = c; }
+    else if (!/\s/.test(c)) { last = c; word = ""; }
+    i++;
+  }
+  return out.join("");
 }
 
-test("script.js names a function of the chunk only inside accountUI()'s callbacks", () => {
-  /* Where the chunk is named, and by whom. Each of these four is a function
-     whose every use of the chunk is a callback handed to accountUI() (asserted
-     below), or accountUI() itself asking whether the chunk is in. */
+/* Every script the platform serves from its top folder, the chunk aside: what
+   a visitor's page can run beside it, whichever page that is. */
+const SERVED = fs.readdirSync(PLATFORM).filter((f) => /\.js$/.test(f) && f !== "account-ui.js").sort();
+const CODE = Object.fromEntries(SERVED.map((f) => {
+  const src = read(PLATFORM, f);
+  const out = withoutComments(src);
+  assert.strictEqual(out.length, src.length, f);
+  assert.doesNotThrow(() => new vm.Script(out, { filename: f }), f + " no longer compiles with its comments blanked");
+  return [f, out];
+}));
+const CHUNK_CODE = withoutComments(CHUNK);
+assert.doesNotThrow(() => new vm.Script(CHUNK_CODE), "account-ui.js no longer compiles with its comments blanked");
+
+/* The function the code at `at` belongs to: the last one declared before it, at
+   any depth. (Code that follows a function's end is attributed to that
+   function, which the tests below then refuse as well.) */
+function enclosing(code, at) {
+  let found = "(before any function)";
+  for (const m of code.matchAll(/^[ \t]*(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/gm)) {
+    if (m.index > at) break;
+    found = m[1];
+  }
+  return found;
+}
+/* Where `names` are used in `code`, as { name: [function, ...] }. `x.name` is a
+   property of something else — unless x is the global object, which is the
+   same name by another spelling. */
+function usesOf(code, names) {
   const uses = {};
-  for (const name of CHUNK_NAMES) {
-    for (const m of CODE.matchAll(new RegExp("(?<![\\w$.])" + name.replace(/\$/g, "\\$") + "(?![\\w$])", "g"))) {
-      (uses[name] = uses[name] || new Set()).add(enclosing(m.index));
+  for (const name of names) {
+    for (const m of code.matchAll(new RegExp("(?<![\\w$])" + name.replace(/\$/g, "\\$") + "(?![\\w$])", "g"))) {
+      const before = code.slice(Math.max(0, m.index - 16), m.index);
+      if (/\.\s*$/.test(before) && !/(?:^|[^\w$.])(?:window|globalThis|self)\s*\.\s*$/.test(before)) continue;
+      (uses[name] = uses[name] || new Set()).add(enclosing(code, m.index));
     }
   }
-  const found = Object.fromEntries(Object.keys(uses).sort().map((k) => [k, [...uses[k]].sort()]));
+  return Object.fromEntries(Object.keys(uses).sort().map((k) => [k, [...uses[k]].sort()]));
+}
+/* A top-level function of script.js, from its declaration to the next one. */
+function body(name) {
+  const code = CODE["script.js"];
+  const top = [...code.matchAll(/^function ([A-Za-z_$][\w$]*)\(/gm)];
+  const k = top.findIndex((m) => m[1] === name);
+  assert.notStrictEqual(k, -1, name + "() is not a top-level function of script.js");
+  return code.slice(top[k].index, k + 1 < top.length ? top[k + 1].index : code.length);
+}
+
+test("no served script names the chunk's functions, except where the chunk is known to be in", () => {
+  /* Every top-level script the platform serves is searched, not script.js
+     alone: any of them can run in a page that has not fetched the chunk. */
+  assert.ok(SERVED.length > 40 && SERVED.includes("script.js") && SERVED.includes("data-rights.js"),
+    "only " + SERVED.length + " scripts found in the platform's folder");
+  const found = {};
+  for (const f of SERVED) {
+    const uses = usesOf(CODE[f], CHUNK_NAMES);
+    if (Object.keys(uses).length) found[f] = uses;
+  }
   assert.deepStrictEqual(found, {
-    authErrorMessage: ["showAuthError"],
-    openAccountDialog: ["openAccount"],
-    profileSetupSubmit: ["submitProfileSetup"],
-    wireAccountChunk: ["accountUI"]
+    /* script.js: four functions, each of whose uses is a callback handed to
+       accountUI() — or accountUI() itself asking whether the chunk is in. */
+    "script.js": {
+      authErrorMessage: ["showAuthError"],
+      openAccountDialog: ["openAccount"],
+      profileSetupSubmit: ["submitProfileSetup"],
+      wireAccountChunk: ["accountUI"]
+    },
+    /* The loader asks, once the file has loaded, whether it declared anything. */
+    "script-loader.js": { wireAccountChunk: ["ensureAccountUI"] },
+    /* THE ONE EXCEPTION: another chunk calling into this one. deleteMyAccount()
+       puts an auth error into words when the sign-in account cannot be deleted.
+       It is safe only because of who calls it, which is asserted below. */
+    "data-rights.js": { authErrorMessage: ["deleteMyAccount"] }
   });
 
-  const body = (name) => {
-    const a = TOP.find((f) => f.name === name).at;
-    const next = TOP.find((f) => f.at > a);
-    return CODE.slice(a, next ? next.at : CODE.length);
-  };
   assert.match(body("showAuthError"), /accountUI\(null, \(\) => splashHintErr\(hint, authErrorMessage\(e\)\),/);
   assert.match(body("openAccount"), /accountUI\("dialog", \(\) => openAccountDialog\(\),/);
   assert.match(body("submitProfileSetup"), /accountUI\("setup", \(\) => profileSetupSubmit\(\),/);
-  /* accountUI() itself: `typeof` only, which is safe on a name not declared yet. */
-  const probes = [...body("accountUI").matchAll(/(\w+)?\s*wireAccountChunk/g)].map((m) => m[1]);
-  assert.ok(probes.length >= 2 && probes.every((p) => p === "typeof"),
-    "accountUI() may only ask `typeof wireAccountChunk`, never call or read it");
+  /* `typeof` only, in both places that ask: it is safe on a name not declared yet. */
+  const loaderFn = CODE["script-loader.js"].slice(CODE["script-loader.js"].indexOf("function ensureAccountUI()"));
+  for (const [where, code] of [["accountUI()", body("accountUI")],
+    ["ensureAccountUI()", loaderFn.slice(0, loaderFn.indexOf("\n  }") + 4)]]) {
+    const probes = [...code.matchAll(/(\w+)?\s*wireAccountChunk/g)].map((m) => m[1]);
+    assert.ok(probes.length >= 1 && probes.every((p) => p === "typeof"),
+      where + " may only ask `typeof wireAccountChunk`, never call or read it");
+  }
 });
 
-test("the chunk declares no top-level `let` or `const` that script.js could read too early", () => {
+test("deleteMyAccount() is called from the chunk and from nowhere else", () => {
+  /* What makes data-rights.js's call to authErrorMessage() safe: the chunk is
+     in whenever deleteMyAccount() runs, because accountDelete() — declared in
+     the chunk — is the one thing that calls it. */
+  const callers = {};
+  for (const f of SERVED) {
+    const uses = usesOf(CODE[f], ["deleteMyAccount"]);
+    if (uses.deleteMyAccount) callers[f] = uses.deleteMyAccount;
+  }
+  assert.deepStrictEqual(callers, { "data-rights.js": ["deleteMyAccount"] },
+    "outside the chunk, deleteMyAccount may appear only where it is declared");
+  assert.deepStrictEqual(usesOf(CHUNK_CODE, ["deleteMyAccount"]), { deleteMyAccount: ["accountDelete"] });
+});
+
+test("the chunk declares no top-level `let` or `const` that another script could read too early", () => {
   /* `typeof` on a function not declared yet is "undefined"; on a `let` whose
-     script threw before reaching it, it THROWS. So script.js probes a function,
-     and the chunk's one binding is its own. */
+     script threw before reaching it, it THROWS. So the page probes a function,
+     and the chunk's one binding is its own (the search above covers it: it is
+     one of the chunk's names). */
   const bindings = [...CHUNK.matchAll(/^(?:let|const)\s+([A-Za-z_$][\w$]*)/gm)].map((m) => m[1]);
   assert.deepStrictEqual(bindings, ["_accountChunkWired"]);
-  assert.ok(!new RegExp("(?<![\\w$])_accountChunkWired(?![\\w$])").test(CODE), "script.js must not read the chunk's flag");
+  assert.ok(CHUNK_NAMES.includes("_accountChunkWired"), "premise: the search above looks for it");
 });
 
 test("the chunk wires its own controls when it is evaluated, whoever loaded it", () => {
@@ -166,8 +267,9 @@ test("the loader exposes ensureAccountUI(), versions the address, and never pref
   assert.ok(at > 0, "script-loader.js must declare ensureAccountUI()");
   const fn = LOADER.slice(at, LOADER.indexOf("\n  }", at));
   assert.match(fn, /var src = v\("account-ui\.js"\);/, "the address must go through v(): root-absolute, with ?v=");
-  assert.match(fn, /return loadScript\(src\)\.catch\(function \(e\) \{ inflight\.delete\(src\); throw e; \}\);/,
-    "a fetch that failed must be forgotten, so that the next click asks again");
+  /* What it does with a fetch that failed, or that brought something else than
+     the file, is executed in tests/account-dialog-state.test.js (section J). */
+  assert.match(fn, /return loadScript\(src\)\.then\(/);
   assert.match(LOADER, /^\s*ensureAccountUI,\s*$/m, "must be on the public CanamedLoader namespace");
   const idle = LOADER.slice(LOADER.indexOf("function prefetchAfterIdle()"));
   assert.ok(idle.length > 200, "could not find prefetchAfterIdle()");

@@ -224,11 +224,19 @@
      loaded ON CLICK from _wireDataRightsExport(), never on the splash. */
   function ensureDataRights() { return loadScript(v("data-rights.js")); }
   /* account-ui.js — the sign-in view, the account dialog and the profile-setup
-     save, behind accountUI() in script.js. A fetch that FAILED is forgotten, so
-     the next click asks again instead of being handed the same rejection. */
+     save, behind accountUI() in script.js. A fetch that failed, or that brought
+     something else than the file (a captive portal's page "loads" too), is
+     forgotten and its <script> taken out, so the next click really asks again:
+     loadScript() would otherwise answer from what it kept. */
   function ensureAccountUI() {
     var src = v("account-ui.js");
-    return loadScript(src).catch(function (e) { inflight.delete(src); throw e; });
+    return loadScript(src).then(function () {
+      if (typeof wireAccountChunk !== "function") throw new Error("account-ui.js arrived and declared nothing");
+    }).catch(function (e) {
+      inflight.delete(src);
+      document.querySelectorAll('script[src="' + src + '"]').forEach(function (t) { t.remove(); });
+      throw e;
+    });
   }
   /* modA-triage.js + .css — the ?triage=1 slice, LAZY because the feature is
      default-off and cost ~5 KB gz on every splash. Resolves only when BOTH are

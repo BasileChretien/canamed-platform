@@ -284,7 +284,8 @@ function makeWorld(opts) {
   el("user-chip").classList.add("hidden");
 
   /* The network, for account-ui.js. Every <script> the real loader appends is a
-     request: `net.requests` holds those for that file. One is answered a turn
+     request: `net.requests` holds those for that file, and `net.inPage` the
+     ones still in the document (the loader may remove one). One is answered a turn
      of the event loop later, never inside the call, and as a browser does it:
      the file is run in the page's scope, then `load` fires. With `net.hold` set
      nothing is answered until the test calls net.answer() or net.refuse()
@@ -292,7 +293,7 @@ function makeWorld(opts) {
      A request for any other file (`net.others`) is never answered. */
   const last = () => net.requests[net.requests.length - 1];
   const net = {
-    requests: [], others: [], hold: false,
+    requests: [], inPage: [], others: [], hold: false,
     answer(tag) { net.answerWith(CHUNK, tag); },
     answerWith(source, tag) { vm.runInContext(source, sandbox); (tag || last()).fire("load"); },
     refuse(tag) { (tag || last()).fire("error"); }
@@ -305,6 +306,8 @@ function makeWorld(opts) {
     head: { appendChild(tag) {
       if (!/^\/account-ui\.js\?v=v\d+$/.test(String(tag.src))) { net.others.push(tag); return tag; }
       net.requests.push(tag);
+      net.inPage.push(tag);
+      tag.remove = () => { net.inPage = net.inPage.filter((t) => t !== tag); };
       if (!net.hold) setImmediate(() => net.answer(tag));
       return tag;
     } },
@@ -317,12 +320,14 @@ function makeWorld(opts) {
       if (m) return radios[m[1]].find((r) => r.value === m[2]) || null;
       // The loader asks whether a <script> for this address is already there.
       m = /^script\[src="([^"]+)"\]$/.exec(sel);
-      if (m) return net.requests.concat(net.others).find((t) => t.src === m[1]) || null;
+      if (m) return net.inPage.concat(net.others).find((t) => t.src === m[1]) || null;
       throw new Error("fake document.querySelector: unexpected selector " + sel);
     },
     querySelectorAll(sel) {
-      const m = /^input\[name="([\w-]+)"\]$/.exec(sel);
-      return m ? radios[m[1]] : [];
+      let m = /^input\[name="([\w-]+)"\]$/.exec(sel);
+      if (m) return radios[m[1]];
+      m = /^script\[src="([^"]+)"\]$/.exec(sel);
+      return m ? net.inPage.filter((t) => t.src === m[1]) : [];
     }
   };
 
@@ -2185,6 +2190,32 @@ test("J: nor is a loader too old to know the chunk, or a file that arrives empty
   assert.strictEqual(w.toasts.length, 1);
 });
 
+test("J: after a file that arrived and declared nothing, the next click fetches it again", async () => {
+  /* FOUND IN REVIEW. A captive portal or an intercepting proxy answers 200 with
+     a page of its own: `load` fires, nothing is declared, and the message says
+     "try again". But the loader had kept that load as a success, and the
+     <script> it left in the page marked as loaded — so a second click asked the
+     network for nothing and got the same message until a reload. */
+  const w = await pageWithoutChunk();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.el("user-chip").fire("click");
+  await w.settle();
+  w.net.answerWith("");
+  await w.settle();
+  assert.strictEqual(w.toasts.length, 1, "premise: the first click said it could not be opened");
+  assert.match(w.toasts[0], TRY_AGAIN);
+
+  w.el("user-chip").fire("click");
+  await w.settle();
+  assert.strictEqual(asked(w), 2, "a second <script> for the file must really be requested");
+  assert.strictEqual(w.net.inPage.length, 1, "and the one that brought nothing is no longer in the page");
+  w.net.answer();
+  await w.settle();
+  assert.strictEqual(w.el("account-dialog").open, true);
+  assert.deepStrictEqual(w.dialog(), ALICES);
+  assert.strictEqual(w.toasts.length, 1, "and nothing more is said once it works");
+});
+
 test("J: an account that takes over while the chunk is on its way is not given the dialog the other one asked for", async () => {
   /* She clicks; he replaces her before the file is in, and his profile is still
      being read. Opened for him then, the dialog would show the defaults under
@@ -2225,14 +2256,50 @@ test("J: nor is the visitor left after a sign-out made while the chunk was on it
   assert.strictEqual(w.el("account-dialog").open, false);
 });
 
-test("J: a fetch that fails for an account that has gone says nothing to the next one", async () => {
+test("J: a fetch that fails for an account that has gone says nothing to the next one, and leaves its opener working", async () => {
   const w = await pageWithoutChunk();
   await w.signIn(ALICE, ALICE_PROFILE);
   w.el("user-chip").fire("click");
-  await w.replaceWith(BOB);
+  await w.replaceWith(BOB);                     // a new account: asked for a profile, its openers on screen
+  assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [true, true], "premise");
   w.net.refuse();
   await w.settle();
   assert.deepStrictEqual(w.toasts, []);
+
+  /* Her request was dropped, not answered. It must not go on counting as "on
+     its way": his own click would then wait for a fetch nobody is making. */
+  w.el("user-chip").fire("click");
+  await w.settle();
+  assert.strictEqual(asked(w), 2, "his click must ask for the chunk again");
+  w.net.answer();
+  await w.settle();
+  assert.strictEqual(w.el("account-dialog").open, true);
+  assert.strictEqual(w.dialog().email, "bob@example.test");
+});
+
+test("J: the next account's own click, made while the first one's request is on its way, is the one that acts", async () => {
+  /* FOUND IN REVIEW. She clicks; the account becomes his (another tab); he
+     clicks while the same fetch is still pending. His click was ignored because
+     hers was already waiting, and hers was dropped on arrival for being hers:
+     nothing opened. Never the wrong account, never twice — but his click lost.
+     A click made while the chunk is on its way now REPLACES the one waiting. */
+  const w = await pageWithoutChunk();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.db.seed("users/uidBob/profile", BOB_PROFILE);
+  w.el("user-chip").fire("click");              // hers
+  await w.replaceWith(BOB);
+  assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Bob" },
+    "premise: his profile is read and his own opener is on screen");
+  w.el("user-chip").fire("click");              // his
+  await w.settle();
+  assert.strictEqual(asked(w), 1, "premise: still the one request");
+  assert.strictEqual(w.el("account-dialog").open, false);
+
+  w.net.answer();
+  await w.settle();
+  assert.strictEqual(w.dialogShows(), 1, "shown once: hers is dropped, his acts");
+  assert.deepStrictEqual(w.dialog(),
+    { email: "bob@example.test", name: "Bob", university: "Caen", year: "2", english: "B1", role: "student" });
 });
 
 const SETUP = { name: "Alice A", university: "Nagoya", year: "5", english: "C1" };
@@ -2280,6 +2347,28 @@ test("J: a submit that waited for the chunk saves nothing for whoever is there w
   assert.deepStrictEqual(w.views(), ["profile-setup"]);
 });
 
+test("J: the next account's own submit, made while the first one's is waiting, is the one that is saved", async () => {
+  // The same loss as for the dialog, on the other entry that belongs to an account.
+  const w = await pageWithoutChunk();
+  await w.signIn(ALICE);
+  w.fill("splash-prof", SETUP);
+  w.db.writes.length = 0;
+  w.el("splash-profile-setup-form").fire("submit");     // hers
+  await w.replaceWith(BOB);                             // a new account too: on his own setup form
+  w.fill("splash-prof", { name: "Bob B", university: "Caen", year: "2", english: "B1" });
+  w.el("splash-profile-setup-form").fire("submit");     // his
+  await w.settle();
+  assert.strictEqual(asked(w), 1, "premise: still the one request");
+  assert.deepStrictEqual(w.db.writes, [], "premise: nothing is saved yet");
+
+  w.net.answer();
+  await w.settle();
+  assert.deepStrictEqual(w.db.writes, ["users/uidBob/profile"], "his form, once, under his uid — and nothing of hers");
+  assert.deepStrictEqual(w.stored("uidBob"), { name: "Bob B", university: "Caen", role: "student", year: 2, english: "B1" });
+  assert.strictEqual(w.db.get("users/uidAlice"), null);
+  assert.deepStrictEqual(w.views(), ["enter"]);
+});
+
 test("J: when the chunk cannot be fetched the setup form says nothing was saved, and the next submit asks again", async () => {
   const w = await pageWithoutChunk();
   await w.signIn(ALICE);
@@ -2317,6 +2406,19 @@ test("J: the link's view does not replace profile setup, if an account arrived w
   await w.settle();
   assert.strictEqual(w.chunkIn(), true, "premise: the chunk did arrive");
   assert.deepStrictEqual(w.views(), ["profile-setup"]);
+});
+
+test("J: nor does the link's view change inside a front page the visitor has left for a session", async () => {
+  /* FOUND IN REVIEW. Nothing would be seen — the front page is hidden — but it
+     would be left on the sign-in view for whoever comes back to it. The page's
+     own handler makes the same check before it moves the front page's view. */
+  const w = await pageWithoutChunk();
+  w.el("splash-go-account").fire("click");
+  w.el("splash").classList.add("hidden");       // a session code was accepted meanwhile
+  w.net.answer();
+  await w.settle();
+  assert.strictEqual(w.chunkIn(), true, "premise: the chunk did arrive");
+  assert.deepStrictEqual(w.views(), ["enter"]);
 });
 
 test("J: but the visitor's own anonymous sign-in arriving meanwhile does not lose the click", async () => {

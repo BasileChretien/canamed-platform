@@ -240,6 +240,31 @@ test("so does the header chip, inside a session", async ({ page }) => {
 
 /* ---- 3. the wait, and a fetch that fails ---------------------------------- */
 
+/* Count how often the dialog is shown, in window.__shows. A function declared
+   at the top of a classic script is a property of window, and the chunk's own
+   call looks it up there. (Nothing on screen tells one showing from two: a
+   browser of today ignores showModal() on a dialog already open as a modal.) */
+const countShowings = (page) => page.evaluate(() => {
+  window.__shows = 0;
+  const show = dialogShow;
+  window.dialogShow = (dlg) => { window.__shows++; return show(dlg); };
+});
+/* Hold the chunk's request until release() is called. */
+async function holdChunk(page) {
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  await page.route(CHUNK, async (route) => { await held; await route.continue(); });
+  return release;
+}
+/* The account becomes another one under the page, as when it changes in
+   another tab; the app's own handler then repaints the row for it. */
+const NEXT = { uid: "u_next", email: "next@example.test", isAnonymous: false };
+const becomeNextAccount = (page) => page.evaluate((next) => {
+  currentUser = next;
+  paintUserChip();
+}, NEXT);
+const storedUsers = (page) => page.evaluate(() => db.ref("users").once("value").then((s) => s.val()));
+
 /* These hold or refuse the chunk's request, which page.route() cannot do for a
    request a service worker makes on the page's behalf. */
 test.describe("while the chunk is on its way, or cannot come", () => {
@@ -248,19 +273,9 @@ test.describe("while the chunk is on its way, or cannot come", () => {
   test("clicks made before it has arrived are neither lost nor doubled", async ({ page }) => {
     const errors = collectErrors(page);
     const seen = watch(page);
-    let release;
-    const held = new Promise((resolve) => { release = resolve; });
-    await page.route(CHUNK, async (route) => { await held; await route.continue(); });
+    const release = await holdChunk(page);
     await signedInOnFrontPage(page);
-    /* Count how often the dialog is shown. A function declared at the top of a
-       classic script is a property of window, and the chunk's own call looks it
-       up there. (Nothing on screen tells one showing from two: a browser of
-       today ignores showModal() on a dialog that is already open as a modal.) */
-    await page.evaluate(() => {
-      window.__shows = 0;
-      const show = dialogShow;
-      window.dialogShow = (dlg) => { window.__shows++; return show(dlg); };
-    });
+    await countShowings(page);
 
     const account = page.locator("#splash-signed-in-account");
     await account.click();
@@ -348,5 +363,105 @@ test.describe("while the chunk is on its way, or cannot come", () => {
     const saved = await page.evaluate(() => db.ref("users/u_local/profile").once("value").then((s) => s.val()));
     expect(saved.name).toBe("Local Student");
     expect(saved.university).toBe(uni);
+  });
+
+  /* FOUND IN REVIEW (PR #450). The next four are sequences the review ran. */
+
+  test("the next account's own click, made while the first one's request is on its way, opens ITS dialog", async ({ page }) => {
+    /* The first account clicks; the account changes; the next one clicks while
+       the same fetch is pending. That click was ignored (one was already
+       waiting) and the first was dropped on arrival (its account had gone):
+       nothing opened. The click that waits is now the latest one. */
+    const errors = collectErrors(page);
+    const seen = watch(page);
+    const release = await holdChunk(page);
+    await signedInOnFrontPage(page);
+    await countShowings(page);
+    const account = page.locator("#splash-signed-in-account");
+
+    await account.click();
+    await expect.poll(() => seen.chunk.length).toBe(1);
+    await becomeNextAccount(page);
+    await account.click();
+    await expect(page.locator("#account-dialog")).toBeHidden();
+    expect(seen.chunk.length, "still the one request").toBe(1);
+
+    release();
+    await expect(page.locator("#account-dialog"), "the next account's click must not be lost").toBeVisible();
+    await expect(page.locator("#account-email")).toHaveText(NEXT.email);
+    expect(await page.evaluate(() => window.__shows), "once: the first click is dropped, the second acts").toBe(1);
+    expect(errors).toEqual([]);
+  });
+
+  test("so is the next account's own submit of profile setup the one that is saved", async ({ page }) => {
+    const seen = watch(page);
+    const release = await holdChunk(page);
+    await signedInOnFrontPage(page);
+    await page.evaluate(() => {
+      populateProfileSelects("splash-prof-uni");
+      splashShowView("profile-setup");
+    });
+    const uni = await page.locator("#splash-prof-uni option:not([disabled])").first().getAttribute("value");
+    await page.locator("#splash-prof-uni").selectOption(uni);
+    await page.locator("#splash-prof-name").fill("First Person");
+    await page.locator("#splash-profile-setup-submit").click();
+    await expect.poll(() => seen.chunk.length).toBe(1);
+
+    await becomeNextAccount(page);
+    await page.locator("#splash-prof-name").fill("Next Person");
+    await page.locator("#splash-profile-setup-submit").click();
+    expect(seen.chunk.length, "still the one request").toBe(1);
+    expect((await storedUsers(page)).u_next, "premise: nothing is saved while the chunk is on its way").toBeUndefined();
+
+    release();
+    await expect(page.locator("#splash-view-enter")).toBeVisible();
+    const users = await storedUsers(page);
+    expect(users.u_next.profile.name, "the next account's form, under its own uid").toBe("Next Person");
+    expect(users.u_local.profile, "and nothing of the first account's submit").toBeUndefined();
+  });
+
+  test("a file that arrives and is not the chunk says so, and the next click fetches it again", async ({ page }) => {
+    /* A captive portal or an intercepting proxy answers 200 with a page of its
+       own. `load` fires, nothing is declared, and the message says "try again"
+       — which asked the network for nothing until the page was reloaded. */
+    const seen = watch(page);
+    let portal = true;
+    await page.route(CHUNK, (route) => {
+      if (!portal) return route.continue();
+      portal = false;
+      return route.fulfill({ status: 200, contentType: "text/html", body: "<!doctype html><title>Sign in to Wi-Fi</title>" });
+    });
+    await page.goto("/");
+    await page.locator("#splash-go-account").click();
+
+    const toast = page.locator("#toast");
+    await expect(toast).toBeVisible();
+    await expect(toast).toContainText(/check your connection and try again/i);
+    await expect(page.locator("#splash-view-enter")).toBeVisible();
+    expect(await chunkIn(page), "premise: what arrived declared nothing").toBe(false);
+    expect(seen.chunk.length).toBe(1);
+
+    await page.locator("#splash-go-account").click();
+    await expect(page.locator("#splash-view-account"), "'try again' must be true here too").toBeVisible();
+    expect(seen.chunk.length, "the second click really asked again").toBe(2);
+    expect(await tags(page), "and the <script> that brought nothing is gone").toBe(1);
+    expect(await chunkIn(page)).toBe(true);
+  });
+
+  test("the link's late answer does not move the view of a front page that has been left", async ({ page }) => {
+    const seen = watch(page);
+    const release = await holdChunk(page);
+    await page.goto("/");
+    await page.locator("#splash-go-account").click();
+    await expect.poll(() => seen.chunk.length).toBe(1);
+    // A session code was accepted meanwhile: the front page is hidden, as entering a session hides it.
+    await page.evaluate(() => { document.getElementById("splash").classList.add("hidden"); });
+
+    release();
+    await expect.poll(() => chunkIn(page)).toBe(true);
+    /* The `hidden` attributes, not what is visible: nothing of a hidden front
+       page is visible either way. It must be left on the view it was on. */
+    expect(await page.evaluate(() => ["enter", "account"].map((v) =>
+      document.getElementById("splash-view-" + v).hidden))).toEqual([false, true]);
   });
 });
