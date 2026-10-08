@@ -120,6 +120,8 @@ async function createSession(adminPage) {
 }
 
 test("nor does entering a code, joining and working in a room", async ({ page, context }) => {
+  // Two tabs and a whole join: well over the default 30 s on the WebKit projects.
+  test.setTimeout(240_000);
   const admin = watch(page);
   const code = await createSession(page);
 
