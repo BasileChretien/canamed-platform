@@ -1976,10 +1976,15 @@ that could not be confirmed from the code is marked.*
   > client can read. It is recorded under the identity of the user making
   > the reset; only that user can write or remove it, and only that user's
   > record opens the hash. The former location accepts a deletion and
-  > nothing else, and no rule consults it. Until both halves are live a
-  > reset is refused rather than exposed: a browser still running the
-  > earlier client is told the recovery code does not match, and must be
-  > reloaded.
+  > nothing else, and no rule consults it. With only one of the two halves
+  > live, a browser that has that half is refused rather than exposed:
+  > under the new rules, a browser still running the earlier client is told
+  > the recovery code does not match, and must be reloaded; the new client
+  > under the earlier rules is refused as well. **A browser still running
+  > the earlier client under the earlier rules is not refused: its reset
+  > completes as before and exposes the code as before.** A deployment
+  > passes through that state — the client is published first — so it is
+  > the release of the rules, not of the client, that ends new exposure.
   > **Residual:** a code obtained before that date stays valid for as long
   > as its session is open — a reset does not issue a new code, and the
   > record still cannot be replaced. A facilitator who used the

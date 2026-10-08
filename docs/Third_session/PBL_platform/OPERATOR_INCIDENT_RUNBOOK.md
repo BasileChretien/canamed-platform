@@ -254,12 +254,17 @@ A reset is refused once the session has been **closed**.
   short-lived record holding the recovery code to
   `adminSecrets/<code>/reset/<your uid>`, a part of the database no
   client can read, and removes it once the new password is in place.
-  Nothing is written under the session. (Until 2026-10 it was written
-  to `sessions/<code>/_superadminReset`, which every participant of the
-  session could read while the reset was in progress. **If you used
-  this path before that change on a session that is still open, treat
-  its recovery code as known to its participants**; once the session is
-  closed, no further reset can be opened with it.)
+  Nothing is written under the session. **This is true once the
+  database rules of that change have been released** — a step that can
+  fail on its own after the site has been published; how to check is in
+  the repository's `CLAUDE.md`, under "A session's recovery code".
+  (Before that it was written to `sessions/<code>/_superadminReset`,
+  which every participant of the session could read while the reset was
+  in progress, and a browser still running the earlier client goes on
+  doing so until those rules are released. **If you used this path
+  before then on a session that is still open, treat its recovery code
+  as known to its participants**; once the session is closed, no
+  further reset can be opened with it.)
 - **No audit trail** — the record is removed as soon as the reset is
   done and never held a history. This section used to describe one; it
   did not exist.

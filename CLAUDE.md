@@ -1645,8 +1645,10 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     and not at `closed` — as they always have. The exposure empties on
     the retention clock: it is over once every session that existed before the
     deploy has been purged — a state, not a date.
-    **⚠️ TWO HALVES, AND EITHER ONE ALONE REFUSES RESETS RATHER THAN LEAKING**
-    (both measured as raw writes — cells 3 and 4 of the spec's table):
+    **⚠️ TWO HALVES. A BROWSER THAT HAS ONE OF THEM IS REFUSED RATHER THAN
+    LEAKING — BUT ONLY THE RULES RELEASE ENDS NEW EXPOSURE**
+    (the two mixed states measured as raw writes — cells 3 and 4 of the
+    spec's table; the third bullet is `main` as it was):
     - *new rules, a browser still on the old shell* — it writes the code to
       the old node, is DENIED, and nothing is stored or delivered to a
       listener. The panel then says "That recovery code doesn't match this
@@ -1658,6 +1660,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     - *new shell, old rules* (the gap between Hosting and the rules release,
       or a rules step that failed — it is `continue-on-error`): the old rules
       declare nothing at `adminSecrets/<code>/reset`, so the write is denied.
+    - *old shell, old rules* — NOT refused. A browser still on its cached
+      shell, in that same gap, completes its reset through the old node and
+      hands the code to a listener exactly as before. The new shell stops
+      nothing for such a browser, and every deploy passes through this state
+      (Hosting first). "Either half alone refuses" was true per browser and
+      false per deployment (found in review): do not date the exposure as
+      ended from the Hosting deploy — only from `released successfully`.
     `Verify:` `node --test tests/reset-flag-unreadable.test.js`; on the
     emulator `PORT=8771 npm run test:e2e:rules -- reset-flag-unreadable` (four
     cases: both trees, the real client's reset panel, and the purge's update
