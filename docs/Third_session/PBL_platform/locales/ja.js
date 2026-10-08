@@ -87,6 +87,7 @@
   "splash.my-sessions.close-live-warning": "⚠ {n}名の参加者がこのセッションに参加しています — 閉じると全員のセッションが終了します。",
   "splash.my-sessions.closed-btn": "閉じました",
   "splash.my-sessions.close-failed": "閉じることができませんでした — 接続を確認してもう一度お試しください。",
+  "splash.my-sessions.close-refused": "サーバーが、このブラウザからセッションを閉じる操作を拒否しました。セッションのパスワードを使って開き、管理ダッシュボードから終了してください。",
   "privacy.title": "CaNaMED — プライバシーポリシー",
   "privacy.subtitle": "あなたのデータの使い方と、あなたの権利",
   "privacy.lang-not-available": "選択された言語によるプライバシーポリシー全文の翻訳はまだご用意できていません。下記の英文が法的拘束力を持つ版です。レビュー済みの<a href=\"privacy.html?lang=fr\">フランス語</a>版または<a href=\"privacy.html?lang=ja\">日本語</a>版もご利用いただけます。",

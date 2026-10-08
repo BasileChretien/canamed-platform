@@ -3482,8 +3482,9 @@ what reads the date.
   log states how many sessions were purged for this reason and never which.
 - **Rules.** Both dates must lie within twelve hours of the server clock, on
   either side, in both trees. Twelve hours rather than seconds, because the
-  client sends the device's own clock: a facilitator's laptop set to the right
-  wall time in the wrong time zone — seven or eight hours for one carried
+  client sent the device's own clock when the rule was written, and a browser
+  running a stored copy of that client still does: a facilitator's laptop set
+  to the right wall time in the wrong time zone — seven or eight hours for one carried
   between France and Japan — must still be able to create and close a session.
   A narrower window would gain nothing, since the purge already takes a date
   up to a day ahead at face value; twelve hours behind is enough to stop a
@@ -3517,9 +3518,13 @@ that it ran; the run's log does.
   restored session keeps its impossible date and is purged again at the next
   run. So a session run properly and closed from a device whose date was days
   ahead would lose its 30 days, and its chat for good.
-- **What a refused date does.** A facilitator whose device clock is more than
-  twelve hours wrong is refused, and the product handles that refusal badly.
-  The client sends its own clock, not the server's.
+- **What a refused date does — corrected in the client on 2026-10-08, for a
+  browser that has loaded the corrected client; unchanged for one that has
+  not.** A facilitator whose device clock is more than twelve hours wrong was
+  refused, and the product handled that refusal badly, because the client sent
+  its own clock, not the server's. What follows describes that client. It
+  still describes any browser running a stored copy of it, which is why it is
+  kept and why the twelve-hour window was not narrowed.
   - *Creating.* Only the dated write is refused; the others in the same batch
     land. What is left is a partial session with no date, which the purge
     removes at its next run as a session with no timestamps. Its recovery code
@@ -3543,14 +3548,48 @@ that it ran; the run's log does.
     close one from its own list. An earlier wording of this paragraph said no
     device that could run a session was newly refused. That was wrong.
 
-  The remedy is for the client to send the server's time for these two writes,
-  as it already does for a password reset. That is a change to the client, was
-  not made here, and would not reach a browser still running a stored copy of
-  the client — which is why the window was widened rather than left to it.
+  **The remedy, made on 2026-10-08.** The client now takes every date it
+  stores from the server's clock: its own clock corrected by the difference
+  the database publishes. Not only these two dates. Checking them showed the
+  same fault on a much larger scale: the rules compare a client-supplied date
+  with the server's clock in 185 places, and 92 of them allow five seconds
+  ahead and no more — among them the two writes by which a participant joins,
+  which also allow only two minutes behind. A participant whose device was a
+  minute fast could therefore not take part at all, and was shown nothing
+  that said so; the same held for answers, votes, chat turns and a withdrawal
+  of consent. With the corrected client and the device clock set one hour and
+  thirteen hours wrong, in each direction, a session is created, joined,
+  advanced, written to and closed, and each date read back from the database
+  is the server's (`tests-e2e/emulator/device-clock.spec.js`; before the
+  correction the same test failed at the first date).
+
+  What this does **not** do:
+  - *It does not reach a browser still running a stored copy of the old
+    client*, which goes on sending its own clock until it next loads the
+    application. The twelve-hour window is what covers that browser, and it
+    was deliberately left as it is.
+  - *It does not make the dates trustworthy against the person writing them.*
+    The date is still supplied by the client; the corrected client supplies
+    an honest one. The limits on what a dishonest one can gain are the rule's
+    window and the purge's tolerance, unchanged, as set out above.
+  - *It does not change what a refused creation leaves behind.* Creation
+    still issues its writes together, so a `created` refused for any reason
+    still leaves a partial session. Writing `created` first and the rest
+    only once it is accepted would stop that; it alters the order every
+    session creation follows, and was proposed rather than made.
+  - *The corrected client's clock is an estimate*, taken when the connection
+    is made and good to the delay of one message. A device whose clock is
+    changed during a session keeps the old correction until it reconnects.
+
+  The two messages a facilitator saw when a close was refused were corrected
+  with it: neither now blames the connection, or asks for the database rules
+  to be deployed, when it was the server that refused.
 - **Other client-written dates still have no upper bound** (`summary/at`,
   `pool/…/consent/at`, `users/<uid>/history/…/joinedAt` among them). None of
   them decides a deletion today; a retention job that came to read one would
-  repeat this defect.
+  repeat this defect. The corrected client takes these from the server's
+  clock too, but the rules still accept any number for them, and it is the
+  rules such a job would be relying on.
 
 `Verify:` `node --test tests/session-retention.test.js`, which runs the real
 purge in a child process against the same database on two dates five years

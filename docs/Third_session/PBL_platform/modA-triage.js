@@ -20,6 +20,10 @@
  * loads on room entry, long after that, so the ordering is safe.
  */
 
+/* A shell cached before serverNow() existed can still load this chunk: there,
+   dates come from the device clock, as they did before. */
+if (typeof serverNow !== "function") window.serverNow = function () { return Date.now(); };
+
 const DECLINE_INDICATED_PENALTY = 4;   // cost of ruling out a test that WAS needed
 // Ruling out an inappropriate test is the right DECISION; the REASON is then
 // graded and can WIN OR LOSE points — the sharpest reason wins most, an
@@ -81,7 +85,7 @@ function _reasonLabel(key, lang) {
 function writeTriage(id, reason) {
   if (!refTriage || revealed[id]) return;
   triageOpen.delete(id);
-  const entry = { disposition: "ruleout", reason: reason, by: myName, at: Date.now() };
+  const entry = { disposition: "ruleout", reason: reason, by: myName, at: serverNow() };
   /* set(), not a first-write-wins transaction: a rule-out is REFINABLE by
      design — a team that talks it through and picks a sharper reason should be
      able to say so. The DB rule agrees (no !data.exists() on triage/$itemId),
@@ -371,7 +375,7 @@ function _triagePenaltyPass() {
         const rpid = "declinereason_" + id;
         if (dpen[rpid]) return;
         refScore.child("penalties").child(rpid).transaction(cur =>
-          (cur == null ? { points: -pts, at: Date.now() } : undefined)
+          (cur == null ? { points: -pts, at: serverNow() } : undefined)
         ).then(res => {
           if (res && res.committed) logEvent(myRoom, "score.penalty", { penaltyId: rpid, points: -pts });
         }).catch(e => console.error("Decline-reason penalty write failed", e));
@@ -383,7 +387,7 @@ function _triagePenaltyPass() {
       const pid = "declinepen_" + id;
       if (dpen[pid]) return;
       refScore.child("penalties").child(pid).transaction(cur =>
-        (cur == null ? { points: DECLINE_INDICATED_PENALTY, at: Date.now() } : undefined)
+        (cur == null ? { points: DECLINE_INDICATED_PENALTY, at: serverNow() } : undefined)
       ).then(res => {
         if (res && res.committed) logEvent(myRoom, "score.penalty", { penaltyId: pid, points: DECLINE_INDICATED_PENALTY });
       }).catch(e => console.error("Decline-penalty write failed", e));

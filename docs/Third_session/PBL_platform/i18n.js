@@ -157,6 +157,7 @@
       "splash.my-sessions.close-live-warning": "⚠ {n} participant(s) have joined this session — closing ends it for everyone.",
       "splash.my-sessions.closed-btn": "Closed",
       "splash.my-sessions.close-failed": "Could not close — check your connection and try again.",
+      "splash.my-sessions.close-refused": "The server refused to close this session from this browser. Open it with its facilitator password and end it from the dashboard.",
 
       // privacy page — R3 deep-i18n: privacy.html is a single dynamic
       // page; reviewed body copy lives inline as <section data-priv-lang>.

@@ -733,6 +733,17 @@
   }
 
   // ---------------------------------------------------------------
+  // serverNow
+  // ---------------------------------------------------------------
+  // The device clock plus the offset the database publishes (0 in LOCAL mode).
+  // Every date stored in the database, or compared with one, comes from here.
+  let serverOffset = 0;
+  function setServerOffset(ms) {
+    if (typeof ms === "number" && isFinite(ms)) serverOffset = ms;
+  }
+  function serverNow() { return Date.now() + serverOffset; }
+
+  // ---------------------------------------------------------------
   // exports
   // ---------------------------------------------------------------
   return {
@@ -751,6 +762,8 @@
     verifyPassword: verifyPassword,
     generateSessionCode: generateSessionCode,
     generateRecoveryCode: generateRecoveryCode,
+    serverNow: serverNow,
+    setServerOffset: setServerOffset,
     computeCohortCounts: computeCohortCounts,
     localCountryName: localCountryName,
     buildCohortPair: buildCohortPair,

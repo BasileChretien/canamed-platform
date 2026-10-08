@@ -29,6 +29,7 @@ const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const lib = require("../docs/Third_session/PBL_platform/lib.js");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 /* Read as LF. A Windows checkout has core.autocrlf=true, and a regex that walks
@@ -413,6 +414,8 @@ function makeWorld(opts) {
     currentUser: null, currentProfile: null,
     authReady: null, _authReadyResolve: null, _anonSignInPromise: null,
     stableId: "s0", STABLE_ID_KEY: "canamed_stable_id",
+    /* The clock a saved profile is dated with; lib.js's own, as on the page. */
+    serverNow: lib.serverNow,
     COHORTS: [{ id: "Caen", label: "Caen" }, { id: "Nagoya", label: "Nagoya" }],
     CFG: {}, tc: (x) => x, t: (k) => k,
     resetStableId() {},

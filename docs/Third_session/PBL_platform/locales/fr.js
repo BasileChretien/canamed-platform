@@ -87,6 +87,7 @@
   "splash.my-sessions.close-live-warning": "⚠ {n} participant(s) ont rejoint cette session — la fermer y met fin pour tout le monde.",
   "splash.my-sessions.closed-btn": "Fermée",
   "splash.my-sessions.close-failed": "Impossible de fermer — vérifiez votre connexion et réessayez.",
+  "splash.my-sessions.close-refused": "Le serveur a refusé de fermer cette session depuis ce navigateur. Ouvrez-la avec son mot de passe et terminez-la depuis le tableau de bord.",
   "privacy.title": "CaNaMED — Politique de confidentialité",
   "privacy.subtitle": "Comment nous utilisons vos données, et vos droits",
   "privacy.lang-not-available": "Une traduction complète de cette politique de confidentialité dans la langue que vous avez choisie n'est pas encore disponible. Le texte anglais ci-dessous est la version juridiquement contraignante. Une version révisée en <a href=\"privacy.html?lang=fr\">français</a> ou en <a href=\"privacy.html?lang=ja\">japonais</a> est également disponible.",
