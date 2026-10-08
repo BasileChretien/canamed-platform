@@ -130,45 +130,45 @@
         },
         "controller": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (!root.child('sessions').child($sessionId).child('creatorUid').exists() || root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid) && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 120)"
         },
         "workshopLabel": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (!root.child('sessions').child($sessionId).child('creatorUid').exists() || root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid) && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 80)"
         },
 
         "scenarioId": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 60 && newData.val().matches(/^[a-z0-9_-]+$/))"
         },
         "sections": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (!root.child('sessions').child($sessionId).child('creatorUid').exists() || root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid) && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 400 && newData.val().matches(/^[A-Za-z0-9_-]{1,48}(,[A-Za-z0-9_-]{1,48})*$/))"
         },
         "sectionBodies": {
           ".read": "auth != null",
           "$slot": {
-            ".write": "auth != null && !data.exists()",
+            ".write": "auth != null && !data.exists() && root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
             ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072 && newData.parent().parent().child('sections').val().contains('custom-' + $slot)"
           }
         },
         "modules": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 64 && newData.val().matches(/^[A-Za-z0-9_-]{1,16}(,[A-Za-z0-9_-]{1,16})*$/))"
         },
         "scenarioCustomJson": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 262144)"
         },
         "scenarioRef": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
           ".validate": "newData.val() == null || (newData.hasChildren(['ownerUid','scenarioId','source']) && newData.child('ownerUid').isString() && newData.child('ownerUid').val().length > 0 && newData.child('ownerUid').val().length <= 128 && newData.child('scenarioId').isString() && newData.child('scenarioId').val().matches(/^[a-z0-9_-]{1,60}$/) && newData.child('source').isString() && (newData.child('source').val() == 'private' || newData.child('source').val() == 'shared'))"
         },
 
@@ -944,45 +944,45 @@
             },
             "controller": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid) && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 120)"
             },
             "workshopLabel": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid) && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 80)"
             },
 
             "scenarioId": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 60 && newData.val().matches(/^[a-z0-9_-]+$/))"
             },
             "sections": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid) && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 400 && newData.val().matches(/^[A-Za-z0-9_-]{1,48}(,[A-Za-z0-9_-]{1,48})*$/))"
             },
             "sectionBodies": {
               ".read": "auth != null",
               "$slot": {
-                ".write": "auth != null && !data.exists()",
+                ".write": "auth != null && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
                 ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072 && newData.parent().parent().child('sections').val().contains('custom-' + $slot)"
               }
             },
             "modules": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 64 && newData.val().matches(/^[A-Za-z0-9_-]{1,16}(,[A-Za-z0-9_-]{1,16})*$/))"
             },
             "scenarioCustomJson": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 262144)"
             },
             "scenarioRef": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
               ".validate": "newData.val() == null || (newData.hasChildren(['ownerUid','scenarioId','source']) && newData.child('ownerUid').isString() && newData.child('ownerUid').val().length > 0 && newData.child('ownerUid').val().length <= 128 && newData.child('scenarioId').isString() && newData.child('scenarioId').val().matches(/^[a-z0-9_-]{1,60}$/) && newData.child('source').isString() && (newData.child('source').val() == 'private' || newData.child('source').val() == 'shared'))"
             },
 
