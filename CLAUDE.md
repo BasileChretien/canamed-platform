@@ -1241,7 +1241,10 @@ the database the tool deletes the whole `users/<uid>` even with `--session`;
 get a marker, so once the strict rule is on its participants are refused in
 the product for good and told to "try again"** — a decision that is taken
 when an operator confirms the backfill, and that nobody has taken yet;
-a device clock more than 5 s fast is still refused; and **a session whose
+a device clock more than 5 s fast was refused its withdrawal until the client
+began sending the server's time (2026-10-08 — the `created.at` entry under
+"Round-3 — TRACKED hardening"; a browser on an older shell still is); and
+**a session whose
 `created/at` or `closed/at` was dated in the future was never purged** — found
 by running the purge, and corrected by a SEPARATE change (#438:
 `scripts/lib/session-retention.js` plus a bound on both dates in the rules).
@@ -2286,12 +2289,84 @@ observed — LOCAL mode models no rules — so these are static findings:**
     downloading the archive again, and the session STAYS OPEN: participants
     never see it end, it takes the 90-day path, and it never reaches the
     research export, which takes closed sessions only. All of that now needs a
-    clock more than 12 h wrong. **If a facilitator reports "can't create a
-    session" or "can't close", check their clock first.** The real fix is
-    `ServerValue.TIMESTAMP` for these two writes (the R3-D1 pattern already
-    used for `_superadminReset`) — a client change, shell bump, LOCAL mode must
-    not be handed the sentinel object, and it does not help a browser still on
-    a cached shell, which is why the window was widened first.
+    clock more than 12 h wrong — **and, since the client fix below, a browser
+    still running a shell from before it.** If a facilitator reports "can't
+    create a session" or "can't close", have them reload first, then check
+    their clock.
+  - **✅ THE CLIENT NOW SENDS THE SERVER'S TIME — fixed in code 2026-10-08,
+    for EVERY date it stores, not only these two.** "In code" is the claim: it
+    reaches a browser when that browser loads the shell carrying it (the
+    version is assigned at merge — read `SHELL_VERSION` in `sw.js`, not this
+    line), and a browser on an older shell sends its device clock exactly as
+    before. **That is why the ±12 h window stays. Do not narrow it on the
+    strength of this change.**
+    - **The defect was much wider than create and close.** The rules compare
+      a client-supplied date with `now` 185 times; 92 of those allow five
+      seconds of lead and no more, most with a floor as well (2 min for
+      `members` and `pool`, 30 min for an answer, ±5 s for `stageAt`). The
+      client sent `Date.now()`. So a participant whose laptop was a minute
+      fast could not JOIN: `members` and `pool` were refused, the waiting
+      screen showed anyway, and a `permission_denied` in the console was the
+      only trace. Answers, votes, chat turns, stage timers and withdrawals
+      went the same way. Reproduced on the emulator before any code changed,
+      with the page's clock moved: at ±1 h `created` landed an hour wrong; at
+      ±13 h the create form and "Sessions you created → Close" both failed.
+    - **How.** `serverNow()` in `lib.js` is `Date.now()` plus the offset the
+      SDK publishes at `.info/serverTimeOffset` (subscribed in `dbInit()`,
+      shared mode only; the scenario editor is a separate page and keeps its
+      own). A NUMBER, deliberately not `ServerValue.TIMESTAMP`: the
+      placeholder is an object until the server replaces it, LocalDB would
+      store that object as the date, and some sixty sites read back, sort by
+      or subtract what they wrote. The placeholder stays where it already was
+      (`_superadminReset`, R3-D1). A stored date is also COMPARED on the
+      server's clock now — minutes on a stage, the "facilitator may be
+      offline" banner, whether a chat reply is new.
+    - **To fake a device clock in a test, replace `Date` itself**, not
+      `Date.now()`: the SDK measures its offset with `new Date().getTime()`,
+      so overriding `Date.now()` alone builds a device that cannot exist — the
+      page sees a wrong clock, the SDK an honest one, and every write is
+      refused for a reason no real device has. And a callback passed to
+      `.on("value")` runs SYNCHRONOUSLY when the value is cached, before the
+      handle `.on()` returns can be assigned: the first version of the control
+      test hung on exactly that, and read as "the SDK is broken on a slow
+      clock".
+    - **Offset not known = device clock.** It arrives with the connection
+      handshake, before any read can resolve, and every flow that stores a
+      date reads first (the code probe, the uniqueness check, the head-count
+      before a close). That is an observation about today's flows, not
+      something a test enforces: a write composed before any read is dated by
+      the device. A device whose clock is CHANGED mid-session keeps the old
+      offset until its socket reconnects.
+    - **Every lazy chunk that dates a write carries a one-line fallback**
+      (`if (typeof serverNow !== "function") window.serverNow = …`). After a
+      deploy, a page already past the splash is not reloaded, and it asks for
+      its lazy chunks from the network: NEW chunk, OLD `lib.js`. Without the
+      line, the dashboard on such a page could not close the session and the
+      chat would not start. **Any new global a lazy chunk takes from the
+      eager shell needs the same thought** — `sw.js` matches cache entries
+      with `ignoreSearch: false`, so a precached chunk is never what answers
+      a `?v=` request.
+    - **The helper is in `lib.js`, not `pure-utils.js`**, because
+      `pure-utils.js` is also the verify page's and carries that page's own
+      version marker: touching it forces a second bump. For the same reason
+      `minsSince()` there was left alone and now has no caller in the app;
+      the dashboard uses `minsSinceStored()`.
+    - **The two close messages** no longer blame the connection, or tell a
+      facilitator to run `firebase deploy`, when the SERVER refused the write
+      (`code === "PERMISSION_DENIED"`); they say it refused and what to do.
+    - **Still open — proposed on the PR, not done:** a refused `created` still
+      leaves a partial session, because the create batch issues its writes
+      together. Awaiting `created` before the rest would stop that; it changes
+      the ordering every session creation passes through. And the dashboard
+      still downloads the archive again on every retry of a failed close.
+    - `Verify:` `node --test tests/server-time.test.js` — the helper; an
+      INVENTORY of every device-clock read left in the client, so a new
+      `Date.now()` fails until someone says what it is for; and the dated
+      fields, derived from the rules. `tests-e2e/emulator/device-clock.spec.js`
+      — the real client with its clock ±1 h and ±13 h creates, joins,
+      advances, writes and closes, every refusal paired with an allow. Those
+      test the REPO. Live: set a device's clock an hour ahead, join a session
+      and read `pool/<clientId>/at`. Not done here — it needs a session.
   - **Purge (the half that closes it — a rule cannot reach a session already in
     the database):** `scripts/lib/session-retention.js` treats a date more than
     24 h ahead as impossible and the session as due. The tolerance is a day on
@@ -2320,7 +2395,9 @@ observed — LOCAL mode models no rules — so these are static findings:**
       otherwise queried.
   - **Still unbounded, and NOT read by any deletion job today:** `summary.at`,
     `pool/$cid/consent/at`, `users/$uid/history/$code/joinedAt`. Bound one
-    before a retention job starts reading it, not after.
+    before a retention job starts reading it, not after. (The client dates all
+    three from the server's clock since 2026-10-08; the RULES still accept any
+    number, and it is the rules a retention job would be relying on.)
 - `answers/.../edits/$editId` has no explicit owner check (possible
   collaborative-edit by design — decide + document).
 

@@ -34,7 +34,9 @@ test("sessionSignal aggregates pacing, help-calls and quiet rooms from allRooms"
   const fn = SCRIPT.slice(SCRIPT.indexOf("function sessionSignal"),
     SCRIPT.indexOf("function sessionSignal") + 1400);
   assert.match(fn, /roomNames\(roomCount\)/, "must iterate the session's rooms");
-  assert.match(fn, /minsSince\(d\.stageAt\)/, "must read each room's time-in-stage");
+  /* minsSinceStored(): `stageAt` was written by another device, so the minutes
+     are counted on the server's clock, not on this dashboard's. */
+  assert.match(fn, /minsSinceStored\(d\.stageAt\)/, "must read each room's time-in-stage");
   /* S1b: planned minutes are keyed by role + section type, not stage index. */
   assert.match(fn, /stageMinutes\(st\)/, "must compare against the planned stage duration");
   assert.match(fn, /callForHelp && !d\.callForHelp\.ack/, "must count rooms calling for help");

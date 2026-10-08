@@ -528,7 +528,7 @@ function reportSharedScenario(shareId, reason) {
   if (!db || !auth || !auth.currentUser) {
     return Promise.reject(new Error("report: not signed in"));
   }
-  const payload = { at: Date.now() };
+  const payload = { at: serverNow() };
   if (reason) payload.reason = String(reason).slice(0, 500);
   return db.ref("reports/scenarios/" + shareId + "/" + auth.currentUser.uid).set(payload);
 }
@@ -557,7 +557,7 @@ function saveScenario(scenarioId, body, share) {
     return Promise.reject(new Error("Scenario is too large (" + bodyJson.length +
       " bytes, max 262144). Split content across modules or trim long narrative."));
   }
-  const now = Date.now();
+  const now = serverNow();
   const path = "scenarios/" + uid + "/" + scenarioId;
   return db.ref(path + "/meta/createdAt").once("value").then(snap => {
     const createdAt = snap.val() || now;
@@ -2024,7 +2024,7 @@ function withdrawalPath(code, uid) {
 function withdrawResearchConsent(code, uid, opts) {
   opts = opts || {};
   if (!db || !code || !uid) return Promise.reject(new Error("not ready"));
-  const payload = { research: false, at: Date.now() };
+  const payload = { research: false, at: serverNow() };
   if (opts.alsoRequestErasure) payload.erasure = true;
   return db.ref(withdrawalPath(code, uid)).set(payload).then(() => {
     // A rejoin of `code` reads these copies, whatever session this page is in.
@@ -2792,6 +2792,8 @@ function dbInit() {
     // scripts/sim/simulate-session.js so the sim no longer relies on
     // LocalDB's flaky cross-tab storage events. No-op in production.
     _maybeWireEmulators(db);
+    // serverNow() (lib.js) adds this: the server's clock minus the device's.
+    try { db.ref(".info/serverTimeOffset").on("value", s => setServerOffset(s.val())); } catch (e) {}
     // live connection indicator - a silent write failure mid-workshop is worse
     // than a visible "Reconnecting" badge
     try {
@@ -3391,7 +3393,7 @@ function joinParticipant() {
     transcript: cTranscript,
     verification: cVerification,
     version: CONSENT_NOTICE_VERSION,
-    at: Date.now()
+    at: serverNow()
   };
   role = "participant";
   dbInit();
@@ -3462,7 +3464,7 @@ function joinParticipant() {
 function claimMembership(roleStr) {
   if (!db || !currentUser || !currentUser.uid || !sessionNum) return Promise.resolve();
   try {
-    const payload = { at: Date.now() };
+    const payload = { at: serverNow() };
     if (roleStr) payload.role = String(roleStr).slice(0, 20);
     return db.ref(sPath("members/" + currentUser.uid)).set(payload).catch(e => {
       // Tolerated: legacy DBs without the members rule reject the write.
@@ -3582,7 +3584,7 @@ function writeRoster() {
   if (currentUser.isAnonymous || !currentUser.email) return Promise.resolve();
   if (!myConsent || myConsent.research !== true) return Promise.resolve();
   try {
-    const entry = { email: String(currentUser.email).slice(0, 254), at: Date.now() };
+    const entry = { email: String(currentUser.email).slice(0, 254), at: serverNow() };
     if (myName) entry.name = String(myName).slice(0, 120);
     if (myUniversity) entry.university = String(myUniversity).slice(0, 120);
     return db.ref("rosters/" + sPath(currentUser.uid)).set(entry).catch(e => {
@@ -3612,7 +3614,7 @@ function _joinParticipantWireUp() {
   try { refMyPool.onDisconnect().cancel(); } catch (e) {}
   refMyPool.set({
     name: myName, university: myUniversity, year: myYear,
-    english: myEnglish, at: Date.now(), room: resumeRoom,
+    english: myEnglish, at: serverNow(), room: resumeRoom,
     consent: myConsent,
     // R2-24/25: stableId is a per-person identifier (Google uid for
     // signed-in users, localStorage random for anonymous) that lets
@@ -3655,7 +3657,7 @@ function _joinParticipantWireUp() {
       try { refMyPool.onDisconnect().cancel(); } catch (e) {}
       refMyPool.set({
         name: myName, university: myUniversity, year: myYear,
-        english: myEnglish, at: Date.now(), room: myRoom || null,
+        english: myEnglish, at: serverNow(), room: myRoom || null,
         consent: myConsent,
         stableId: stableId   // R2-24/25: persistent per-person id
       });
@@ -3781,14 +3783,14 @@ function _saveTestAnswer(which, qid, choiceIndex) {
   const ref = _testRef(which);
   if (!ref) return Promise.resolve(false);
   return ref.child("answers/" + qid)
-    .set({ choice: choiceIndex, at: Date.now() })
+    .set({ choice: choiceIndex, at: serverNow() })
     .then(() => true).catch(e => { console.warn("test save failed", e); return false; });
 }
 
 function _saveTestStart(which) {
   const ref = _testRef(which);
   if (!ref) return Promise.resolve(false);
-  return ref.child("startedAt").transaction(cur => (cur == null ? Date.now() : undefined))
+  return ref.child("startedAt").transaction(cur => (cur == null ? serverNow() : undefined))
     .then(() => {
       // R4 linkage: tag the test with the durable per-person id so a
       // researcher can link pre↔post↔questionnaire reliably (the test node
@@ -3803,7 +3805,7 @@ function _saveTestStart(which) {
 function _saveTestComplete(which, score) {
   const ref = _testRef(which);
   if (!ref) return Promise.resolve(false);
-  return ref.update({ completedAt: Date.now(), score: score })
+  return ref.update({ completedAt: serverNow(), score: score })
     .then(() => true).catch(() => false);
 }
 
@@ -3812,7 +3814,7 @@ function _saveTestSkipped(which) {
   if (!ref) return Promise.resolve(false);
   // ensure a startedAt exists so the rules validation passes
   return ref.transaction(cur => {
-    const now = Date.now();
+    const now = serverNow();
     const prev = cur || {};
     const next = Object.assign({}, prev, {
       startedAt: prev.startedAt || now,
@@ -4077,7 +4079,7 @@ function _loadSurveyStatus() {
 function _saveSurveyStart() {
   const ref = _surveyRef();
   if (!ref) return Promise.resolve(false);
-  return ref.child("startedAt").transaction(cur => (cur == null ? Date.now() : undefined))
+  return ref.child("startedAt").transaction(cur => (cur == null ? serverNow() : undefined))
     .then(() => {
       if (typeof stableId === "string" && stableId) ref.child("stableId").set(stableId).catch(() => {});
       return true;
@@ -4087,7 +4089,7 @@ function _saveSurveySkipped() {
   const ref = _surveyRef();
   if (!ref) return Promise.resolve(false);
   return ref.transaction(cur => {
-    const now = Date.now();
+    const now = serverNow();
     const prev = cur || {};
     const next = Object.assign({}, prev, { startedAt: prev.startedAt || now, skipped: true });
     if (typeof stableId === "string" && stableId) next.stableId = stableId;
@@ -4097,7 +4099,7 @@ function _saveSurveySkipped() {
 function _saveSurveyComplete(responses) {
   const ref = _surveyRef();
   if (!ref) return Promise.resolve(false);
-  const update = { completedAt: Date.now() };
+  const update = { completedAt: serverNow() };
   Object.keys(responses).forEach(qid => { update["responses/" + qid] = responses[qid]; });
   return ref.update(update).then(() => true).catch(e => { console.warn("survey save failed", e); return false; });
 }
@@ -4242,7 +4244,7 @@ function _mountSurveyForm(preview) {
     Object.keys(getters).forEach(qid => {
       const v = getters[qid]();
       if (v === null || v === undefined || v === "") return;
-      responses[qid] = { v: v, at: Date.now() };
+      responses[qid] = { v: v, at: serverNow() };
     });
     _saveSurveyComplete(responses).then(() => {
       body.innerHTML = "";
@@ -5146,7 +5148,7 @@ function startRoom() {
 
   if (!isRoomAdmin) {
     const myPresence = refPresence.child(clientId);
-    myPresence.set({ name: myName, at: Date.now() });
+    myPresence.set({ name: myName, at: serverNow() });
     myPresence.onDisconnect().remove();
     refTyping.child(clientId).onDisconnect().remove();
     // Drop my role pick when I disconnect so a stale claim doesn't linger.
@@ -5729,7 +5731,7 @@ function logEvent(roomName, kind, payload) {
     const envelope = {
       kind: String(kind || "").slice(0, 30),
       by: (typeof myName === "string" && myName ? myName : "system").slice(0, 40),
-      at: Date.now()
+      at: serverNow()
     };
     if (payload && typeof payload === "object") {
       try {
@@ -6005,7 +6007,7 @@ function renderStudentDebrief() {
   const st = typeof room.stage === "number" ? room.stage : 0;
   const at = typeof room.stageAt === "number" ? room.stageAt : null;
   if (at) {
-    const mins = Math.max(1, Math.round((Date.now() - at) / 60000));
+    const mins = Math.max(1, Math.round((serverNow() - at) / 60000));
     const row = document.createElement("div");
     row.className = "sd-row";
     const h = document.createElement("strong");
@@ -6343,7 +6345,7 @@ function initCallProf() {
     if (isRoomAdmin) { refCallForHelp.remove(); return; }   // admin: resolve the call
     if (callForHelp && callForHelp.ack) {
       // a prof acknowledged but the room still needs help - raise a fresh call
-      const now = Date.now();
+      const now = serverNow();
       if (now < lastHelpCallAt + HELP_CALL_THROTTLE_MS) {
         const wait = Math.ceil((lastHelpCallAt + HELP_CALL_THROTTLE_MS - now) / 1000);
         const msg = tFallback("room.call.throttle-recall",
@@ -6358,10 +6360,10 @@ function initCallProf() {
     } else if (callForHelp) {
       // cancel a pending (un-acked) call — record the cancel time as the
       // throttle anchor so a quick cancel-then-recall is throttled too
-      lastHelpCallAt = Date.now();
+      lastHelpCallAt = serverNow();
       refCallForHelp.remove();
     } else {
-      const now = Date.now();
+      const now = serverNow();
       if (now < lastHelpCallAt + HELP_CALL_THROTTLE_MS) {
         const wait = Math.ceil((lastHelpCallAt + HELP_CALL_THROTTLE_MS - now) / 1000);
         const msg = tFallback("room.call.throttle-again",
@@ -6428,7 +6430,7 @@ function renderCallProf() {
  * like any other help call (the reason rides in callForHelp.msg, ≤200 chars). */
 function _callFacilitatorToAdvance(msgKey, fallbackMsg) {
   if (!refCallForHelp || isRoomAdmin) return false;
-  const now = Date.now();
+  const now = serverNow();
   if (now < lastHelpCallAt + HELP_CALL_THROTTLE_MS) {
     const wait = Math.ceil((lastHelpCallAt + HELP_CALL_THROTTLE_MS - now) / 1000);
     const msg = tFallback("room.call.throttle-again",
@@ -6867,7 +6869,7 @@ function reveal(id) {
     toast("✓ " + q, a);
   }
 
-  const entry = { by: myName, at: Date.now() };
+  const entry = { by: myName, at: serverNow() };
   myPendingReveal = id;
   // undefined aborts - if someone already revealed this item, do not re-write it
   refRevealed.child(id).transaction(cur => (cur == null ? entry : undefined))
@@ -7329,7 +7331,7 @@ function checkScoreEvents() {
 
   Object.keys(want).forEach(ev => {
     refScore.child("auto").child(ev).transaction(cur =>
-      (cur == null ? { points: want[ev], at: Date.now() } : undefined)
+      (cur == null ? { points: want[ev], at: serverNow() } : undefined)
     ).then(res => {
       // only emit the event when WE wrote the score - the transaction returns
       // committed=true on the writer, false on a loser; this keeps the event
@@ -7348,7 +7350,7 @@ function checkScoreEvents() {
       if (pen[p.id]) return;                       // already lost
       if (!revealed[p.item]) return;               // the wrong choice not made
       refScore.child("penalties").child(p.id).transaction(cur =>
-        (cur == null ? { points: p.points, at: Date.now() } : undefined)
+        (cur == null ? { points: p.points, at: serverNow() } : undefined)
       ).then(res => {
         if (res && res.committed) {
           logEvent(myRoom, "score.penalty", { penaltyId: p.id, points: p.points });
@@ -7372,7 +7374,7 @@ function checkScoreEvents() {
       if (opt.correct) {
         if (earned["decision_" + d.id]) return;
         refScore.child("auto").child("decision_" + d.id).transaction(cur =>
-          (cur == null ? { points: d.points, at: Date.now() } : undefined)
+          (cur == null ? { points: d.points, at: serverNow() } : undefined)
         ).then(res => {
           if (res && res.committed) {
             logEvent(myRoom, "score.auto", { itemId: "decision_" + d.id, points: d.points });
@@ -7381,7 +7383,7 @@ function checkScoreEvents() {
       } else if (d.penalty > 0) {
         if (pen["decpen_" + d.id]) return;
         refScore.child("penalties").child("decpen_" + d.id).transaction(cur =>
-          (cur == null ? { points: d.penalty, at: Date.now() } : undefined)
+          (cur == null ? { points: d.penalty, at: serverNow() } : undefined)
         ).then(res => {
           if (res && res.committed) {
             logEvent(myRoom, "score.penalty", { penaltyId: "decpen_" + d.id, points: d.penalty });
@@ -7614,7 +7616,7 @@ function castVote(decisionId, choiceIndex) {
     }
   }
   refVotes.child(decisionId).child("ballots").child(bkey)
-    .set({ choice: choiceIndex, at: Date.now() })
+    .set({ choice: choiceIndex, at: serverNow() })
     .catch(e => console.error("Vote write failed", e));
   logEvent(myRoom, "vote.cast", { voteId: decisionId, choice: choiceIndex });
 }
@@ -7644,7 +7646,7 @@ function commitDecision(decisionId) {
     return;
   }
   refVotes.child(decisionId).child("committed").transaction(cur =>
-    (cur == null ? { choice: best, at: Date.now() } : undefined)
+    (cur == null ? { choice: best, at: serverNow() } : undefined)
   ).then(res => {
     if (res && res.committed) {
       logEvent(myRoom, "vote.lockin", { voteId: decisionId, choice: best });
@@ -8808,7 +8810,7 @@ function initHypotheses() {
     refHypotheses.push({
       by: myName, cid: clientId,
       university: myUniversity || "",
-      text: text, at: Date.now()
+      text: text, at: serverNow()
     })
       .then(() => { input.value = ""; })
       .catch(e => console.error("hypothesis push failed", e));
@@ -9016,7 +9018,7 @@ function initRolePicker() {
     try {
       if (refRoleChoices && clientId && !isRoomAdmin) {
         refRoleChoices.child(clientId).set({
-          role: chip.dataset.role, name: myName || "", at: Date.now()
+          role: chip.dataset.role, name: myName || "", at: serverNow()
         });
       }
     } catch (e) { /* offline / rules — local pick still stands */ }
@@ -9126,7 +9128,7 @@ function assignRolesRandomly() {
   const order = _fisherYates(roster);
   const assignments = {};
   order.forEach((cid, i) => { assignments[cid] = deck[i]; });
-  refRoleAssign.set({ assignments: assignments, by: clientId, at: Date.now() })
+  refRoleAssign.set({ assignments: assignments, by: clientId, at: serverNow() })
     .catch(() => { /* offline — apply my own slot locally as a fallback */
       if (assignments[clientId]) _applyAssignedRole(assignments[clientId]);
     });
@@ -9156,7 +9158,7 @@ function _applyAssignedRole(role) {
   try { localStorage.setItem("canamed_modB_role", role); } catch (e) {}
   try {
     if (MODE === "shared" && refRoleChoices && clientId && !isRoomAdmin) {
-      refRoleChoices.child(clientId).set({ role: role, name: myName || "", at: Date.now() });
+      refRoleChoices.child(clientId).set({ role: role, name: myName || "", at: serverNow() });
     }
   } catch (e) { /* offline — local pick stands */ }
   if (typeof updateModBNextStep === "function") updateModBNextStep();
@@ -9297,7 +9299,7 @@ function applyRoleSwap(steps, round) {
     try { localStorage.setItem("canamed_modB_role", next); } catch (e) {}
     try {
       if (MODE === "shared" && refRoleChoices && clientId && !isRoomAdmin) {
-        refRoleChoices.child(clientId).set({ role: next, name: myName || "", at: Date.now() });
+        refRoleChoices.child(clientId).set({ role: next, name: myName || "", at: serverNow() });
       }
     } catch (e) { /* offline — local pick still stands */ }
     if (typeof updateModBNextStep === "function") updateModBNextStep();
@@ -9649,7 +9651,7 @@ function openCounterBullet(entry, li, stance) {
       text: text.slice(0, 400),
       by:   (myName || "anon").slice(0, 40),
       cid:  clientId,
-      at:   Date.now(),
+      at:   serverNow(),
       stance: form.dataset.stance === "support" ? "support" : "disagree"
     }).then(() => { form.remove(); })
       .catch(() => { send.disabled = false; });
@@ -9705,7 +9707,7 @@ function addAnswer(moduleKey, bulletKey) {
   // included when present so structured answers carry their bucket.
   const payload = {
     by: myName, cid: clientId, university: myUniversity || "",
-    text: text, at: Date.now()
+    text: text, at: serverNow()
   };
   if (bulletKey) payload.bulletKey = bulletKey;
   refAnswers[moduleKey].push(payload)
@@ -9753,7 +9755,7 @@ function editAnswer(moduleKey, entry, li) {
       // append-only `edits` log BEFORE overwriting, so researchers can see how
       // the group's reasoning evolved. `text` still holds the current value, so
       // every existing render/export path is unchanged.
-      return ref.child("edits").push({ text: priorText, by: myName, at: Date.now() })
+      return ref.child("edits").push({ text: priorText, by: myName, at: serverNow() })
         .then(() => ref.child("text").set(v))
         .then(() => logEvent(myRoom, "answer.edit." + moduleKey, {
           by: myName, fromLen: priorText.length, toLen: v.length,
@@ -9795,7 +9797,7 @@ function deleteAnswer(moduleKey, id) {
     const cur = snap.val();
     const archive = (cur && db && typeof myRoom === "string" && myRoom)
       ? db.ref(sPath("rooms/" + myRoom + "/answersDeleted")).push({
-          text: (cur.text || ""), by: myName, module: moduleKey, at: Date.now(),
+          text: (cur.text || ""), by: myName, module: moduleKey, at: serverNow(),
           cid: clientId, bulletKey: cur.bulletKey || "",
           university: cur.university || ""
         }).catch(e => { console.warn("answersDeleted archive failed", e && e.code); })
@@ -10275,7 +10277,7 @@ function renderFacilitatorPresenceBanner() {
   const seen = banner.dataset.seenAt ? parseInt(banner.dataset.seenAt, 10) : 0;
   if (at > seen) banner.dataset.seenAt = String(at);
   const everSeen = (banner.dataset.seenAt && parseInt(banner.dataset.seenAt, 10) > 0);
-  const stale = everSeen && (Date.now() - at) > FACILITATOR_STALE_MS;
+  const stale = everSeen && (serverNow() - at) > FACILITATOR_STALE_MS;
   const shouldShow = stale ? "1" : "0";
   if (banner.dataset.shown === shouldShow) return; // no DOM churn when state unchanged
   banner.dataset.shown = shouldShow;
@@ -10775,7 +10777,7 @@ function closeMySession(code, btn, statusEl) {
 
     const write = () => db.ref(oPath(c, "closed")).set({
       by: (myName || "Admin").toString().slice(0, 40),
-      at: Date.now()
+      at: serverNow()
     });
 
     // ensureSignedIn() is the platform's standard pre-write gate. The
@@ -10792,27 +10794,23 @@ function closeMySession(code, btn, statusEl) {
       setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 700);
     }).catch(e => {
       console.warn("Could not close session", c, e);
-      // Distinguish "session no longer exists" from a genuine transient
-      // failure. The close-write is denied (PERMISSION_DENIED) when the
-      // session's adminPasswordHash is absent — which is exactly what happens
-      // once a session has been ended long ago or removed by the retention
-      // policy. Such a session can never be closed and is already effectively
-      // over, so drop the stale local entry with an honest message instead of
-      // nagging the facilitator about their connection. Only fall back to the
-      // generic retry message when the session DOES still exist (or we can't
-      // tell).
+      /* A refusal is the server's answer, not a bad connection: say which. A
+         session that is gone (ended long ago, or purged) is refused too and can
+         never be closed; that one leaves the list. */
+      const refused = e && e.code === "PERMISSION_DENIED";
       const showRetry = () => {
-        if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
-          "Could not close — check your connection and try again.");
+        if (statusEl) statusEl.textContent = refused
+          ? tFallback("splash.my-sessions.close-refused",
+              "The server refused to close this session from this browser. Open it with its facilitator password and end it from the dashboard.")
+          : tFallback("splash.my-sessions.close-failed",
+              "Could not close — check your connection and try again.");
         if (btn) {
           btn.disabled = false;
           btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
         }
       };
-      // Only treat the failure as "already ended" when sessionStatus can
-      // CONFIRM the session is gone (reachable + no `created` node). On an
-      // unreachable/unknown read, show the retry message rather than wrongly
-      // dropping a session that's merely offline.
+      // Gone only when sessionStatus CONFIRMS it (reachable, no `created`):
+      // an unreachable read must not drop a session that is merely offline.
       const probe = (typeof sessionStatus === "function")
         ? sessionStatus(c) : Promise.reject();
       probe.then(st => {
@@ -11816,7 +11814,7 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       const recoveryCode = generateRecoveryCode();
       // write the markers - `created` first so a half-finished create is still
       // recognisable (and easy to clean up), then the password hash
-      const at = Date.now();
+      const at = serverNow();
       const writes = [
         db.ref(oPath(code, "created")).set({ by: creatorName, at: at }),
         // recovery/sessions/<code> or recovery/orgs/<slug>/sessions/<code>
@@ -12369,7 +12367,7 @@ function loadProfile() {
 function saveProfile(updates) {
   const user = currentUser;
   if (!user || user.isAnonymous || !db) return Promise.reject(new Error("Not signed in"));
-  const now = Date.now();
+  const now = serverNow();
   const merged = Object.assign({}, currentProfile || {}, updates, { updatedAt: now });
   if (!merged.createdAt) merged.createdAt = now;
   return db.ref("users/" + user.uid + "/profile").set(merged).then(
@@ -12407,7 +12405,7 @@ function pushSessionToHistory(code) {
     workshopName: fit([CFG.workshopName]),
     scenarioName: fit((pickedSections() || [{ name: window.CURRENT_SCENARIO_NAME }])
       .map(s => tc(s.name, "en"))),
-    joinedAt: Date.now()
+    joinedAt: serverNow()
   }).then(() => true, e => {
     console.warn("Could not write session history", e);
     try { CanamedTelemetry.record("history-write-failed", { code: String(e && e.code) }); } catch (_) {}

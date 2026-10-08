@@ -209,6 +209,8 @@ function openPage(storage, o) {
     },
     /* script.js wraps lib.js's function with the deployment's cohort list. */
     sanitizeResume: (r) => lib.sanitizeResume(r, ["Caen", "Nagoya"]),
+    /* The clock every stored date is taken from; lib.js's own, as on the page. */
+    serverNow: lib.serverNow,
     CONSENT_NOTICE_VERSION: NOTICE,
     RESUME_KEY: "canamed_resume",
     /* As a freshly loaded page has them: in no session, nobody joined. */

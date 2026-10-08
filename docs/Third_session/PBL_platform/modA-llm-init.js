@@ -41,6 +41,10 @@
 (function () {
   "use strict";
 
+  /* A shell cached before serverNow() existed can still load this chunk: there,
+     dates come from the device clock, as they did before. */
+  if (typeof serverNow !== "function") window.serverNow = function () { return Date.now(); };
+
   /* Region of the hfPatient callable. MUST stay in lockstep with
      `region:` in functions/index.js — see the note at the httpsCallable
      call site for why a mismatch fails silently rather than loudly. */
@@ -804,7 +808,7 @@
     // replays EVERY existing turn. Only flag turns created AFTER this init
     // started as "new" — otherwise a re-init while the student is away from
     // Dialogue would inflate the badge to the whole transcript's history.
-    var initStartedAt = Date.now();
+    var initStartedAt = serverNow();
     // Every turn of the room, all slots, in arrival order — the source the
     // panel is rebuilt from when the student moves to another section.
     var turns = [];
@@ -905,7 +909,7 @@
         if (awarded[famId]) return;
         awarded[famId] = true;
         var pts = (fam && fam.points) || 0;
-        var now = Date.now();
+        var now = serverNow();
         // 1. Fine-grained inspection log (one record per family, with at + points)
         refs.awardedFor(sl).child(famId).transaction(function (cur) {
           return cur == null ? { at: now, points: pts } : undefined;
@@ -926,7 +930,7 @@
         if (awarded[famId]) return;
         awarded[famId] = true;
         var pts = (fam && fam.points) || 0;
-        var now = Date.now();
+        var now = serverNow();
         // 1. Fine-grained inspection log (negative points to mark it as penalty)
         refs.awardedFor(sl).child(famId).transaction(function (cur) {
           return cur == null ? { at: now, points: -pts } : undefined;
@@ -954,7 +958,7 @@
       },
       persistTurn: function (role, content, characterId, slot) {
         if (role === "assistant") _stopWaiting();   // before the write renders the reply
-        var turn = { role: role, content: content, at: Date.now() };
+        var turn = { role: role, content: content, at: serverNow() };
         /* Only a plural cast tags its turns with a character: a single-patient
            section keeps the shape it always wrote, and the rules accept both. */
         if (characterId && _isMulti()) turn.character = String(characterId);
