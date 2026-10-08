@@ -9,7 +9,8 @@
  * Output: $RUNNER_TEMP/canamed-backup-YYYY-MM-DD.json containing the
  * full /sessions subtree with adminPasswordHash stripped from every
  * session (same as the in-app archive — passwords don't belong in
- * backups).
+ * backups), and with it any leftover password-reset flag, which holds the
+ * session's recovery code in clear (scripts/lib/reset-flag.js).
  *
  * Two delivery modes:
  *   - PRIVATE-REPO mode (no GCS env): the local file is the deliverable;
@@ -46,6 +47,7 @@ const path = require("path");
 const { chooseDestination, uploadArchive, describeDestination } = require("./lib/archive");
 const { writeBackupMarker } = require("./lib/backup-marker");
 const { readSessionLocations } = require("./lib/session-trees");
+const { withoutLegacyResetFlag } = require("./lib/reset-flag");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -102,13 +104,29 @@ async function main() {
   // archive does. Passwords are recoverable via the super-admin set
   // panel, so they don't need to live in backups.
   let stripped = 0;
+  /* …and a leftover reset flag. Until the flag moved to the unreadable
+   * adminSecrets tree, opening a password reset wrote the session's RECOVERY
+   * CODE, in clear, inside the session, and removed it a moment later
+   * (lib/reset-flag.js). A removal that failed left the code in the session
+   * body — and this job archived it, for 90 days, with everything else. No
+   * client can write that node any more; this is for the ones that were
+   * already there. A snapshot taken BEFORE this line existed may still hold
+   * one until it expires, which is why restore-sessions.js withholds it too.
+   * A count is printed, never which session. */
+  let resetFlags = 0;
   for (const key of Object.keys(sessions)) {
     if (sessions[key] && sessions[key].adminPasswordHash) {
       delete sessions[key].adminPasswordHash;
       stripped++;
     }
+    const flagless = withoutLegacyResetFlag(sessions[key]);
+    if (flagless.stripped) {
+      sessions[key] = flagless.session;
+      resetFlags++;
+    }
   }
   console.log(`Stripped adminPasswordHash from ${stripped}/${locations.length} sessions.`);
+  console.log(`Stripped a leftover reset flag from ${resetFlags}/${locations.length} sessions.`);
 
   const payload = {
     backupTakenAt: new Date().toISOString(),

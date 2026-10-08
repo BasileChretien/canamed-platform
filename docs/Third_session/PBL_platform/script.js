@@ -5541,7 +5541,7 @@ function joinSuperAdmin() {
 
   // D21 — the SUPERADMIN_KEY is no longer the security boundary for a
   // password RESET; the per-session recovery code is (it gates
-  // _superadminReset in the rules, which gates the adminPasswordHash
+  // the reset flag in the rules, which gates the adminPasswordHash
   // overwrite). The key, when a deployment sets one, is kept as an
   // additional client-side gate on this panel — but the public deployment
   // sets it to null, and the recovery-code path MUST work there. So we only
@@ -5569,19 +5569,19 @@ function joinSuperAdmin() {
   //
   // D21 recovery flow: if a hash already EXISTS (forgotten-password case
   // during a live session), the adminPasswordHash rule refuses a bare
-  // overwrite. The reset must first write a fresh `_superadminReset` flag
+  // overwrite. The reset must first write a fresh reset flag
   // whose `code` equals the unreadable /recovery/.../code; the rule then
   // allows a single hash overwrite within its 30s window. We clear the flag
   // afterwards to shut the door early (the window self-expires regardless).
   //
   // SECURITY NOTE: the recovery code is the real gate. It is generated with
-  // ~59.5 bits of entropy, shown to the creator exactly once, and stored in
-  // the unreadable /recovery subtree — so a participant who only knows the
-  // (spoken-aloud) session code cannot read it, cannot inject one (the
-  // /recovery write is locked once a password exists), and therefore cannot
-  // pass the _superadminReset rule. A wrong/blank code is rejected by the
-  // rules as a generic permission error, which we translate into a helpful
-  // hint below rather than claiming success.
+  // ~59.5 bits of entropy, shown to the creator exactly once, stored in the
+  // unreadable /recovery subtree and presented in a flag in the equally
+  // unreadable adminSecrets tree — so a participant who only knows the
+  // (spoken-aloud) session code cannot read it or inject one (the /recovery
+  // write is locked once a password exists). A wrong/blank code is rejected
+  // by the rules as a generic permission error, which we translate into a
+  // helpful hint below rather than claiming success.
   ensureSignedIn()
     .then(() => hashPassword(newPass, sessionNum))
     .then(h => {
@@ -5617,17 +5617,15 @@ function joinSuperAdmin() {
         // Date.now() so a client clock skewed beyond ±5 s of server time still
         // passes the rule's freshness window. Falling back to Date.now()
         // preserves behaviour in non-Firebase test contexts.
-        const refReset = db.ref(sPath("_superadminReset"));
+        // The flag carries the recovery code, so it goes where NO client can
+        // read: adminSecrets/…/reset/<own uid>. Under the session it was
+        // readable by every member, who could keep the code. Keyed by uid, so
+        // only this client can write the hash in the 30s window (R3 race).
+        const refReset = db.ref(adminSecretPath(sessionNum, "reset/" + (currentUser && currentUser.uid)));
         const TS = (typeof firebase !== "undefined" &&
           firebase.database && firebase.database.ServerValue &&
           firebase.database.ServerValue.TIMESTAMP) || Date.now();
-        // FINDING-07 + recovery: the reset payload MUST carry the recovery code
-        // (the rule compares it against /recovery/.../code), and the real hash
-        // is written to the unreadable adminSecrets tree (refSecret).
-        // uid binds the reset flag to its initiator so only this client (the
-        // one that supplied the recovery code) can write the hash during the
-        // 30s window — closes the recovery-race (2026-05-30 R3 review).
-        return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode, uid: (currentUser && currentUser.uid) })
+        return refReset.set({ requestedAt: TS, code: recoveryCode })
           .then(() => refSecret.set(h))
           .then(() => refReset.remove())
           .catch(err => {

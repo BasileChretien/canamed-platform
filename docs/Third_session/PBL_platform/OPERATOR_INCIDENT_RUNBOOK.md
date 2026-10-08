@@ -230,47 +230,65 @@ days preliminary report to PPC** under APPI Art. 26.
 ## §10 Super-admin password recovery
 
 You forgot the session admin password while a live workshop is running.
-The Round-2 super-admin recovery flow is the supported path.
+What resets it is the session's **recovery code** — the twelve-character
+code shown once, when the session was created. (This section said until
+2026-10 that a super-admin key was required and that recovery was
+impossible without one. That has not been true since the recovery code
+was introduced: the key is checked only on a deployment that sets one,
+and the public deployment sets none.)
 
-1. **Confirm the deployment has a super-admin key.** If
-   `SUPERADMIN_KEY` is unset in `firebase-config.js` / your deployment
-   config, recovery is impossible — proceed to §9 escalation.
+1. **Find the recovery code.** Without it the panel cannot reset an
+   existing password — go to "When recovery itself doesn't work" below.
 2. **Open the lobby** (`canamed-69785.web.app/` or your deployment
-   URL). Expand "I am a facilitator", then click
-   **"Forgot the password? Reset with super-admin key →"**. The
-   discoverability link added in Round 3 takes you straight to the
-   recovery panel.
-3. **Enter the super-admin key + the new session password TWICE** (the
-   confirm field added in Round 3 catches typos). Submit. You should
-   land in the admin dashboard with `role = "superadmin"`.
+   URL), enter the session code, expand "I am a facilitator", then
+   follow the **"Forgot the password?"** link to the recovery panel.
+3. **Enter your name, the new session password TWICE, and the recovery
+   code.** If your deployment sets a `SUPERADMIN_KEY`, enter that too.
+   Submit. You should land in the admin dashboard.
+
+A reset is refused once the session has been **closed**.
 
 ### Known constraints
 
-- **Client-clock skew** — the database rule allows the
-  `_superadminReset` write only when `requestedAt` is within ±5 s of
-  the Firebase server clock. A laptop with a clock drifted by more than
-  5 s will fail with `PERMISSION_DENIED`. Sync the operator's clock
-  (Settings → Date & Time → "Set automatically") and retry.
-- **Audit trail** — every recovery writes a `_superadminReset` node
-  with `{ requestedAt, by }`. Multiple recoveries during a single
-  session produce multiple entries; this is **expected** and **not** a
-  sign of compromise. The `by` field is the operator's display name;
-  it is automatically stripped from the JSON archive before download
-  (R3-D4 defence-in-depth).
-- **30-second window** — after the `_superadminReset` write, the rule
-  allows a single `adminPasswordHash` overwrite within 30 s. The flag
-  is removed by the client after the overwrite; if the removal step
-  fails, the rule self-expires.
+- **Where the reset is recorded** — to open a reset the client writes a
+  short-lived record holding the recovery code to
+  `adminSecrets/<code>/reset/<your uid>`, a part of the database no
+  client can read, and removes it once the new password is in place.
+  Nothing is written under the session. (Until 2026-10 it was written
+  to `sessions/<code>/_superadminReset`, which every participant of the
+  session could read while the reset was in progress. **If you used
+  this path before that change on a session that is still open, treat
+  its recovery code as known to its participants**; once the session is
+  closed, no further reset can be opened with it.)
+- **No audit trail** — the record is removed as soon as the reset is
+  done and never held a history. This section used to describe one; it
+  did not exist.
+- **30-second window** — after the record is written, the rule allows
+  the password hash to be overwritten for 30 s, by the same user only.
+  If the removal step fails, the window still expires by itself.
+- **Clock skew does not matter** — the record is stamped with the
+  server's time, not the laptop's.
 
 ### When recovery itself doesn't work
 
-If the recovery flow returns `PERMISSION_DENIED` repeatedly even after
-clock sync:
+The panel answers every refusal with *"That recovery code doesn't match
+this session"*, whatever the cause. In order of likelihood:
 
-1. Re-deploy the rules (`firebase deploy --only database`) — older
-   sessions created before the R2-D21 rules were deployed lack the
-   `_superadminReset` carve-out.
-2. As a last resort, escalate to §9.
+1. **The code is mistyped**, or belongs to another session.
+2. **The browser is running an older copy of the app.** A copy cached
+   before the 2026-10 change still writes the reset where it used to,
+   and the rules now refuse that — with the same message. Reload the
+   page, wait a few seconds, and reload again (the first reload fetches
+   the new version in the background, the second one runs it), then
+   retry.
+3. **The session is closed.** A closed session cannot be reset.
+4. **The recovery code is lost.** No client can read it back. Escalate
+   to §9: the project owner can read it in the Firebase Console at
+   `recovery/sessions/<code>/code` (for an organisation,
+   `recovery/orgs/<slug>/sessions/<code>/code`).
+5. If none of those applies, check that the database rules of the
+   current release are deployed (`firebase deploy --only database`),
+   then escalate to §9.
 
 ---
 

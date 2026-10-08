@@ -462,7 +462,13 @@ test("REAL SCRIPT: a live session keeps everything, its recovery code included",
      AT one of its paths, BELOW one, or ABOVE one. The last is the one a search
      for the session's code misses — `recovery/orgs/<slug>: null` names no code
      and deletes every live code in that org (found in review: exactly that
-     mutant survived the whole suite). */
+     mutant survived the whole suite).
+
+     ONE write below a live session is meant, and it is named rather than
+     waved through: a null at <session>/_superadminReset, the old reset-flag
+     node, where a leftover holds the recovery code in clear. No client can
+     write that node any more, so the purge clears it for every session it
+     keeps — in an update of its own, which must carry nothing else. */
   const live = sessionLocationsFromKeys([CODES.dfltLive], { [SLUG]: [CODES.orgLive] });
   const livePaths = live.flatMap((loc) =>
     Object.entries(loc).filter(([prop]) => prop === "path" || /Path$/.test(prop)).map(([, p]) => p));
@@ -470,10 +476,20 @@ test("REAL SCRIPT: a live session keeps everything, its recovery code included",
     livePaths.includes("recovery/orgs/" + SLUG + "/sessions/" + CODES.orgLive),
     "the live sessions' recovery paths are not among the paths being protected");
 
+  const meant = live.map((loc) => loc.path + "/_superadminReset").sort();
+  const clearing = purge().writes.filter((w) =>
+    w.op === "update" && w.path === "" && w.keys.some((k) => meant.includes(k)));
+  assert.strictEqual(clearing.length, 1,
+    "expected exactly one update clearing the old reset-flag node of the sessions kept" + purge().log);
+  assert.deepStrictEqual(clearing[0].keys.slice().sort(), meant,
+    "that update must name the old reset-flag node of EVERY session kept, and nothing " +
+    "else — not a purged session's (its subtree is gone), not another node of a live one");
+
   const written = purge().writes.flatMap((w) =>
     (w.keys && w.keys.length ? w.keys : [""]).map((k) => (w.path ? w.path + (k ? "/" + k : "") : k)));
   const hits = [];
   for (const k of written) {
+    if (meant.includes(k)) continue;
     for (const p of livePaths) {
       if (k === p || k.startsWith(p + "/") || p.startsWith(k + "/") || k === "") {
         hits.push(k + "  (reaches " + p + ")");

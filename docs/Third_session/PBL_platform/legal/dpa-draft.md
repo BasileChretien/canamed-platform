@@ -904,7 +904,7 @@ arising from the termination itself, without prejudice to accrued rights.
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
 | G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; they are swept daily since PIS v12 and disclosed in the notice (sections 4 and 8). The Art. 15 route is untouched, and the older usage log is still not in the notice |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed three times on 2026-10-07, still open.** (3) Recovery records are now deleted with their session; admin secrets have been since 2026-07-23. The records left behind before that need the one-off sweep, which has only been DRY-RUN (34 records to delete, 2026-10-07) - see the first note at G8. The password reset now needs a password to reset (Annex II section 3). (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed three times on 2026-10-07, still open.** (3) Recovery records are now deleted with their session; admin secrets have been since 2026-07-23. The records left behind before that need the one-off sweep, which has only been DRY-RUN (34 records to delete, 2026-10-07) - see the first note at G8. In the rules [OPERATOR - DATE THOSE RULES WERE DEPLOYED: ____ ], the password reset needs a password to reset. By a further change (PR #451) [OPERATOR - DATE ON WHICH BOTH ITS RULES AND ITS CLIENT WERE LIVE: ____ ] it no longer writes the recovery code where the session's participants can read it; until that date this is not in force, and a code exposed before it stays valid while its session is open (Annex II section 3, first limit). (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
@@ -1934,9 +1934,10 @@ that could not be confirmed from the code is marked.*
   value, so the comparison happens server-side and the hash never travels to a
   client.
 - The hash can only be overwritten by the user who initiated a recovery reset
-  (their UID is recorded and checked), and can only be set initially by the
-  session creator. This closes a race in which another user could seize an
-  in-creation session.
+  (the reset is recorded under their UID, and the rule looks for the record of
+  the user who is writing), and can only be set initially by the session
+  creator. This closes a race in which another user could seize an in-creation
+  session.
 
   > ⚠️ **"Can only be set initially by the session creator" was not what the
   > rules enforced before the rule change of 2026-10 (PR #447), and is still
@@ -1956,26 +1957,50 @@ that could not be confirmed from the code is marked.*
   > | No password, **no creator on record** (written by hand, or older than that field) | **Any signed-in user** (any allowlisted one while the session-creation gate is enforced) — unchanged, and by the hash rule itself | Nobody until it has a password |
   > | Closed, with a creator on record | Its creator, if it has no password | Nobody |
   >
-  > Three limits a Controller should know. **The first is open and is a way
-  > to take over a session.** While a facilitator is using the
-  > forgotten-password path, the recovery code is written, for the moment the
-  > reset takes, to a part of the session that every participant of that
-  > session can read — and anyone signed in who knows the session code can
-  > make themselves a participant. Someone watching at that moment obtains
-  > the code. It cannot be replaced afterwards, and it lets them reset the
-  > password themselves for as long as the session stays open. Found by the
-  > independent review of PR #447 and then measured against the rules; it
-  > predates the changes described here and is not closed by them. Closing it means moving that write to a place
-  > no participant can read, which is a separate change. [OPERATOR — DATE
-  > CLOSED: ____ ] Until then: a facilitator who uses the forgotten-password
-  > path on a live session should treat that session's recovery code as
-  > known to its participants.
-  > Second: a recovery record that outlived an
+  > Three limits a Controller should know. **The first was a way to take over
+  > a session. It is closed in the code by a further change (PR #451), with one
+  > residual.** [OPERATOR — DATE ON WHICH BOTH THE RULES AND THE CLIENT OF
+  > THAT CHANGE WERE LIVE: ____ ] Until that date, while a facilitator was
+  > using the forgotten-password path, the recovery code was written, for the
+  > moment the reset takes, to a part of the session that every participant
+  > of that session can read — and anyone signed in who knows the session
+  > code can make themselves a participant. Someone watching at that moment
+  > obtained the code. It cannot be replaced afterwards, and it let them
+  > reset the password themselves for as long as the session stayed open.
+  > Found by the independent review of PR #447 and then measured against the
+  > rules in both session trees
+  > (`tests-e2e/emulator/reset-flag-unreadable.spec.js` keeps that run beside
+  > the present one).
+  > **Now:** for that moment the code is written to the part of the database
+  > that holds the password hashes, which has no read rule and which no
+  > client can read. It is recorded under the identity of the user making
+  > the reset; only that user can write or remove it, and only that user's
+  > record opens the hash. The former location accepts a deletion and
+  > nothing else, and no rule consults it. Until both halves are live a
+  > reset is refused rather than exposed: a browser still running the
+  > earlier client is told the recovery code does not match, and must be
+  > reloaded.
+  > **Residual:** a code obtained before that date stays valid for as long
+  > as its session is open — a reset does not issue a new code, and the
+  > record still cannot be replaced. A facilitator who used the
+  > forgotten-password path before that date, on a session that is still
+  > open, should treat that session's recovery code as known to its
+  > participants; once the session is closed no further reset can be
+  > opened. Where a reset had failed half-way, the code could also be left
+  > behind in the session itself, readable there by its participants — and
+  > the nightly backup used to copy it, in clear, with the rest of the
+  > session, as did the archive a facilitator downloads on closing. Such a
+  > leftover is now removed by the nightly purge, left out of the nightly
+  > backup and of the facilitator's download, and withheld when a backup is
+  > restored — but a backup taken before that date may contain one until it
+  > expires (90 days).
+  > **Second:** a recovery record that outlived an
   > earlier session at the same session code is still a valid recovery code for
   > whatever session is created there once that session has a password; the
   > rules cannot tell it from a fresh one, and removing such records is the
-  > purge's and the sweep's job (G8). And "its creator" means the same sign-in
-  > account — for a facilitator who was not signed in, the same browser.
+  > purge's and the sweep's job (G8). **Third:** "its creator" means the same
+  > sign-in account — for a facilitator who was not signed in, the same
+  > browser.
 - Account passwords (Google or email/password sign-in is optional) must be at
   least 8 characters and use at least 3 character classes.
 
@@ -2053,8 +2078,9 @@ that could not be confirmed from the code is marked.*
 
 - Daily automated backup of all session data to a private Cloud Storage bucket
   configured with uniform bucket-level access and public-access prevention, with
-  the administrator password hash stripped from every record. The job fails loudly
-  rather than silently writing PII into world-readable CI logs.
+  the administrator password hash stripped from every record — and, with it, any
+  record a failed password reset left behind in a session (§3, first limit). The
+  job fails loudly rather than silently writing PII into world-readable CI logs.
 - Object lifecycle rules delete backups and pseudonymised exports after 90 days
   and re-identification linkage tables after 14 days.
 - Retention jobs run in "quiet" mode because the repository is public, so session
@@ -3057,8 +3083,13 @@ same day.)*
 > ⚠️ **Narrowed 2026-10-07 for recovery records — and "admin secrets" had been
 > wrong here since 2026-07-23** (both checked by running the purge, not by
 > reading it). Admin secrets (`adminSecrets/…`: the facilitator's password hash
-> and the proof writes) have been deleted with their session since the purge
-> first covered both session trees. Recovery records had not. Creating a
+> and the proof writes — and, since the change described at item (4) below,
+> the record that opens a password reset, which holds the recovery code under
+> the resetting user's identifier for the moment the reset takes and is then
+> removed by the client; one whose removal failed stays there, unreadable by
+> any client, until its session is purged) have been deleted with their
+> session since the purge first covered both session trees. Recovery records
+> had not. Creating a
 > session writes one to `recovery/sessions/<code>` — or
 > `recovery/orgs/<slug>/sessions/<id>` — holding a random twelve-character
 > secret that is shown to the facilitator once and that the rules compare
@@ -3134,10 +3165,14 @@ same day.)*
 > of this note said it "does not work after a restore in any case"; that is
 > true only once the record has been deleted.) (3) A session with no creator
 > on record can still be given its first password by any signed-in user.
-> (4) **Open, and the one that matters most:** while a reset is in progress the
-> recovery code can be read by the participants of that session, and kept —
-> Annex II §3, first limit. It predates these changes and is not closed by
-> them.
+> (4) **Closed in the code by a further change (PR #451), with a residual**
+> [OPERATOR — DATE ON WHICH BOTH ITS RULES AND ITS CLIENT WERE LIVE: ____ ]:
+> while a reset was in progress the recovery code could be read by the
+> participants of that session, and kept. It predates the two changes above
+> and was not closed by them. The code is now written where no client can
+> read; a code obtained before that date stays valid while its session is
+> open — Annex II §3, first limit, which also says what happens to a code a
+> failed reset left behind in a session or in a backup.
 
 > ⚠️ **Narrowed again 2026-10-07, for a SIGNED-IN account that deletes ITSELF —
 > the item stays open.** Until then the client's own `accountDelete()` removed

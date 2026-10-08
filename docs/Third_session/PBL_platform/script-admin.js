@@ -308,8 +308,8 @@ function enterAdminApp() {
     // D21 recovery: pre-provisioning a NEW session number (no hash yet) needs
     // no code — the rule's !data.exists() branch allows it. OVERWRITING an
     // existing session's password requires that session's recovery code: the
-    // rule gates _superadminReset on the code matching the unreadable
-    // /recovery/.../code, and the hash overwrite on a fresh _superadminReset.
+    // rule gates the reset flag on the code matching the unreadable
+    // /recovery/.../code, and the hash overwrite on a fresh reset flag.
     hashPassword(np, targetSession)
       .then(h => {
         // FINDING-07: legacy path stores the real hash in unreadable
@@ -328,21 +328,24 @@ function enterAdminApp() {
               : refSecret.set(h);
           }
           // OVERWRITE an existing session's password — requires that session's
-          // recovery code (the rule gates _superadminReset on it). Validate it
+          // recovery code (the rule gates the reset flag on it). Validate it
           // is non-empty client-side for a clear message vs a bare denial.
           if (!recoveryCode) {
             const err = new Error("recovery-code-required");
             err._canamedRecovery = true;
             throw err;
           }
-          const refReset = db.ref(oPath(targetSession, "_superadminReset"));
+          // The flag carries the recovery code, so it goes where NO client
+          // can read: adminSecrets/…/reset/<own uid>. Under the session it
+          // was readable by every member, who could keep the code.
+          const refReset = db.ref(adminSecretPath(targetSession, "reset/" + (currentUser && currentUser.uid)));
           // ServerValue.TIMESTAMP (R3-D1) so a skewed client clock still
           // passes the rule's ±5s freshness window; Date.now() fallback for
           // non-Firebase test contexts.
           const TS = (typeof firebase !== "undefined" &&
             firebase.database && firebase.database.ServerValue &&
             firebase.database.ServerValue.TIMESTAMP) || Date.now();
-          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode, uid: (currentUser && currentUser.uid) })
+          return refReset.set({ requestedAt: TS, code: recoveryCode })
             .then(() => refSecret.set(h))
             .then(() => refReset.remove())
             .catch(err => {
@@ -2120,6 +2123,8 @@ function closeSession() {
       const tree = result.tree;
       // strip the password hash from the archive
       if (tree.adminPasswordHash) delete tree.adminPasswordHash;
+      // …and a leftover of the old reset flag: it held the recovery code.
+      delete tree._superadminReset;
       downloadFullArchive(tree, sessionNum);
       if (result.alreadyClosed) {
         resetBtn("Session closed ✓ — re-download archive");

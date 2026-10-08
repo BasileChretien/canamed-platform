@@ -1234,7 +1234,7 @@
             <!-- D21 — recovery-code field. To OVERWRITE a forgotten password
                  the new database rules require the per-session recovery code
                  (shown once at creation) to be presented; it gates
-                 _superadminReset, which in turn gates the adminPasswordHash
+                 the reset flag, which in turn gates the adminPasswordHash
                  overwrite. The super-admin key alone can no longer reset a
                  password — and on public deployments the key is null, so this
                  field is the only working recovery path. Leave it blank when
