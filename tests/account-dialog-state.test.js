@@ -2115,7 +2115,7 @@ test("J: clicks made while the chunk is on its way ask for it once, and each of 
 
   w.net.answer();
   await w.settle();
-  assert.strictEqual(w.dialogShows(), 1, "three clicks, one dialog: showModal() on an open dialog throws");
+  assert.strictEqual(w.dialogShows(), 1, "three presses of an opener, one dialog");
   assert.deepStrictEqual(w.views(), ["account"]);
   assert.deepStrictEqual(clicks(w), ONCE, "and the chunk wired its controls once");
   assert.strictEqual(w.el("splash-back-from-account").count("click"), 1);

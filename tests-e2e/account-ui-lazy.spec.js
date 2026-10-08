@@ -250,6 +250,15 @@ test.describe("while the chunk is on its way, or cannot come", () => {
     const held = new Promise((resolve) => { release = resolve; });
     await page.route(CHUNK, async (route) => { await held; await route.continue(); });
     await signedInOnFrontPage(page);
+    /* Count how often the dialog is shown. A function declared at the top of a
+       classic script is a property of window, and the chunk's own call looks it
+       up there. (Nothing on screen tells one showing from two: a browser of
+       today ignores showModal() on a dialog that is already open as a modal.) */
+    await page.evaluate(() => {
+      window.__shows = 0;
+      const show = dialogShow;
+      window.dialogShow = (dlg) => { window.__shows++; return show(dlg); };
+    });
 
     const account = page.locator("#splash-signed-in-account");
     await account.click();
@@ -263,9 +272,7 @@ test.describe("while the chunk is on its way, or cannot come", () => {
     release();
     await expect(page.locator("#account-dialog"), "the click is not lost").toBeVisible();
     await expect(page.locator("#account-email")).toHaveText("local@example.test");
-    /* Opened ONCE: showModal() on a dialog that is already open throws, and the
-       app then falls back to its polyfill, which marks the dialog. */
-    await expect(page.locator("#account-dialog")).not.toHaveClass(/dialog-polyfill/);
+    expect(await page.evaluate(() => window.__shows), "two presses of Account, one dialog").toBe(1);
     expect(seen.chunk.length, "one file, one request").toBe(1);
     expect(await tags(page)).toBe(1);
     await page.locator("#account-dialog-close").click();
