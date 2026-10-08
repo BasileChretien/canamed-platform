@@ -1885,12 +1885,14 @@ that could not be confirmed from the code is marked.*
 - **Session data: two different read scopes, not one.**
   - Most of a session (`sessions/$sessionId`) requires being an authenticated
     **member**: `auth != null && data.child('members').hasChild(auth.uid)`.
-  - **But nine child paths override that with a bare `".read": "auth != null"` —
+  - **But thirteen child paths override that with a bare `".read": "auth != null"` —
     no membership test at all.** Verified in `database.rules.json`:
     `adminPasswordHash`, `creatorUid`, `created` (whose `by` field is the
-    **facilitator's display name**, ≤40 chars), `workshopLabel`, `scenarioId`,
+    **facilitator's display name**, ≤40 chars), `controller`, `workshopLabel`,
+    `scenarioId`, `sections`, `sectionBodies`, `modules`,
     **`scenarioCustomJson` (up to 262,144 characters of authored scenario)**,
-    `scenarioRef`, `closed`, and `summary`. Any authenticated user of the
+    `scenarioRef`, `closed`, and `summary`. (This sentence said nine until
+    2026-10-08; G3 had carried the count of thirteen since 2026-09-03.) Any authenticated user of the
     platform — including an anonymous participant in a *different* facilitator's
     session — can read these for any session code they know or guess. Session
     codes are 6 characters over a 31-character alphabet (~30 bits) and are
@@ -1903,19 +1905,35 @@ that could not be confirmed from the code is marked.*
   `survey/$cid`, which have no read rule of their own, are readable by **every
   other participant** — including the 2,000-character free-text reflections. See
   Annex VI, item G2.
-- Writes are bound to ownership: a browser identity is bound write-once to a
-  Firebase auth UID (`clientMapping`, `stableIdMapping`) and most per-room
-  writes are gated on the writer's room claim (`roomOf`; the `uidMembers` list
-  this paragraph used to name was replaced on 2026-08-03), so a member of one
-  room cannot tamper with another room's data through them. **Seven per-room
-  writes carry no such gate** — Annex VI, G14, item 5.
+- Writes are bound to ownership **in part**: a browser identity is bound
+  write-once to a Firebase auth UID (`clientMapping`, `stableIdMapping`), and
+  each rule tree has 35 write rules inside a room. Counted from the rules on
+  2026-10-08:
+  - **17 are gated on the writer's room claim** (`roomOf`; the `uidMembers`
+    list this paragraph used to name was replaced on 2026-08-03). A member of
+    one room cannot tamper with another room's data through *these* — among
+    them answers and their deletion log, hypotheses, scoring, the committed
+    vote, a section's phase and role assignment.
+  - **3 are the facilitator's alone** (the stage, its date, a manual score).
+  - **8 are bound to a browser identity and to no room**: presence, the typing
+    indicator, a vote's ballots, the observer flag, a role choice, the two
+    tests and the survey. While the session is open, a participant can write
+    their own entry into **another room** through any of them — the
+    application counts every ballot it finds in a room — and under an identity
+    nobody has claimed, so can anyone signed in who has the session code. Read
+    from the rules and the application; not run. Annex VI, R3 and G14, item 5.
+  - **7 carry no gate at all** — Annex VI, G14, item 5.
+
+  (Until 2026-10-08 this paragraph said "most per-room writes are gated on the
+  writer's room claim". Seventeen of thirty-five are.)
 - **A session's configuration is written during its creation, by its
-  creator** (since 2026-10-08): the controller named on the join screen, the
-  facilitator's label, and the six fields that decide what the session runs
-  can be written once, only before the session has a password, and — once the
-  session has a creator — only by that account. Until that date the rule was
-  "once, by anyone signed in". What that allowed, and what the change does not
-  repair, is Annex VI, item G14.
+  creator** — in the rules since 2026-10-08, and in force from the date they
+  are deployed, which Annex VI, G14 records: the controller named on the join
+  screen, the facilitator's label, and the six fields that decide what the
+  session runs can be written once, only before the session has a password,
+  and — once the session has a creator — only by that account. Before, the
+  rule was "once, by anyone signed in". What that allowed, and what the change
+  does not repair, is Annex VI, item G14.
 - Roster emails are readable **only** by the session creator, and writable only
   by the participant themselves or the creator, and only while the session is
   open.
@@ -2562,7 +2580,9 @@ was not). The live privacy notice names the wrong controller.**
 > and Art. 27(5) citations is kept, so nothing changes for the canonical
 > deployment or for sessions predating the field.
 >
-> ⚠️ **"Write-once" was not "written by the facilitator" until 2026-10-08.**
+> ⚠️ **"Write-once" was not "written by the facilitator" — corrected in the
+> rules on 2026-10-08, in force from the date G14 records for their
+> deployment.**
 > The rule on `controller` accepted its first write from anyone signed in. The
 > current create form always writes it, so a session created by it was not
 > exposed; a session created by the application as it was before 2026-09-03 —
@@ -2571,10 +2591,11 @@ was not). The live privacy notice names the wrong controller.**
 > name one. Measured on the emulator: the join screen then read "*‹their
 > string›*, the data controller for this session, collects your first name or
 > nickname…", and the session's creator could neither change nor remove it.
-> The string was shown as text: markup in it was not interpreted. Once a
-> session has a password, the rule now accepts the write from nobody; while it
-> is being created, from its creator — see G14, including what it cannot tell
-> about sessions already in the database.
+> The string was shown as text: markup in it was not interpreted. The
+> corrected rule accepts the write from nobody once a session has a password,
+> and while it is being created, from its creator — see G14, including the
+> deployment date and what the rule cannot tell about sessions already in the
+> database.
 >
 > ⚠️ **The first attempt substituted only the institution NAME** and rendered
 > "Universiteit Leiden, joint controllers under GDPR Art. 26" — a single body
@@ -4456,8 +4477,10 @@ application itself was not changed.
    `scripts/lib/pseudonymise.js`; not run). Four of them are free text:
    `workshopLabel`, `controller`, `scenarioCustomJson` at up to 262,144
    characters, and each `sectionBodies` entry at up to 131,072. See R7.
-3. **A code that no session uses yet can still be written to, in three
-   fields.** On a code with no creator and no password, a visitor can write
+3. **A code that no session uses yet can still be written to, in three of
+   these eight fields** (and through the other open writes item 5 counts,
+   which do not ask for a session to exist either). On a code with no creator
+   and no password, a visitor can write
    `controller`, `workshopLabel` or `sections`. If a facilitator's creation
    later draws that code, it is refused at its own write of the same field and
    the facilitator sees an error and creates again; a field the facilitator's
@@ -4468,9 +4491,12 @@ application itself was not changed.
 4. **The binding is to the account that created the session, not to a
    person.** While the creation gate is off (its default), any visitor may
    create a session of their own and configure it; what they can no longer do
-   is configure somebody else's. The creator, holding the session's recovery
-   code, can reset its password and in doing so reopen the configuration to
-   themselves alone (read from the rules; not run).
+   is configure somebody else's. An ordinary password reset reopens nothing:
+   it replaces the password, and the session still has one. The rules do
+   leave one way back in, which the application never takes: whoever holds the
+   session's recovery code can, during a reset, remove the password marker
+   instead of replacing it, and the configuration is then open again — to the
+   session's creator alone (read from the rules; not run).
 5. **Seven other writes inside a session's rooms name no identity at all**: a
    room's team name, its roleplay round, a call for help, the revealing of a
    case item (two paths), the room's event log, and replies to answers. Run on
@@ -4480,11 +4506,24 @@ application itself was not changed.
    have would limit a writer to the one room they joined; it would not exclude
    a visitor who has the code, since the code is all that joining asks for. The
    repository's tests now list every write in a session that some way through
-   its rule leaves open — these seven, ten that are open only for a browser
-   identity nobody has claimed yet (R3), and the creation writes — so that the
-   list cannot grow unnoticed. Until the seven are corrected, R3's "a
-   participant with developer tools" understates who can do this: it is anyone
-   with the code, in the session or not.
+   its rule leaves open, so that the list cannot grow unnoticed. There are 23
+   in each rule tree: these seven; the five creation writes; the removal of a
+   password reset in progress, which any signed-in visitor may do; and ten
+   that are open for a browser identity nobody has claimed yet — the
+   participant list and the poll, and the eight room writes Annex II §2 names.
+   **R3 records the ten as "a narrow window before identity bindings commit".
+   The rules allow more than that, and no decision has been recorded on the
+   difference:** an identity the writer invents is never claimed by anyone, so
+   the write stays open for as long as the session does, to anyone signed in
+   who has the code, in any room — an entry in the participant list (with a
+   consent record of its own making), a ballot that is counted, and a test or
+   a survey row. The research export reads all of those nodes and keeps what
+   belongs to an entry recording consent; whether such a row reaches an
+   exported file was not run. Read from the rules and the export's code.
+   Correcting the seven changes none of this. Until both are settled, R3's "a participant with developer tools"
+   understates who can do this: it is anyone with the code, in the session or
+   not. **[CONTROLLER TO DECIDE: accept the ten as they are, with R3 reworded
+   to say what they allow, or have them bound to a claimed identity.]**
 
 [CONTROLLER — DATE THE RULES WERE DEPLOYED: ____ ]
 

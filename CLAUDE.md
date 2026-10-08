@@ -1846,7 +1846,10 @@ undoing it.
   the first writer's (that is what creating a session is, and the creation
   gate applies), the five others are refused to everybody until somebody holds
   the claim. No creator but a password — the shape from before `creatorUid`
-  (2026-05-27) — is closed to everyone.
+  (2026-05-27) — is closed to everyone while the password marker stands. (A
+  holder of that session's recovery code could remove the marker through the
+  reset branch, and the code would then be anyone's to claim. Read from the
+  rules; no such session should have outlived the 90-day purge.)
 - **No password-proof branch, unlike the Phase 4a nodes.** Those are written
   while a session runs; these are written before it has a password, when no
   proof can exist. Nothing in the product writes them later, and
@@ -1867,7 +1870,16 @@ undoing it.
     write, and the three in-batch fields);
   - 10 that are open for a client id nobody has claimed yet (`pool`, `poll`,
     `presence`, `typing`, `ballots`, `observers`, `roleChoices`, `tests` ×2,
-    `survey`) — the tolerant first-write branch, already recorded as accepted;
+    `survey`) — the tolerant first-write branch. ⚠️ **What is on record as
+    accepted is narrower than what the rules allow** (found in the review of
+    this change). "Accepted by design" and DPA R3 describe a brief window
+    before the join chain commits the mapping. But an id the writer INVENTS
+    is never claimed, so these stay open for as long as the session does, to
+    anyone signed in who has the code — and the eight under `rooms/` name no
+    room, so in any room: a pool entry with a consent record, a ballot the
+    client counts, `tests` and `survey` rows the research export reads. Read
+    from the rules, not run. Nobody has decided to accept THAT; DPA G14
+    item 5 puts the question to the controller;
   - `_superadminReset`, whose DELETE branch names nobody: any signed-in
     visitor can remove a reset in progress on an open session. Not this
     change's;

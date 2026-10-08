@@ -187,9 +187,10 @@ const CREATING =
   "and on any session that has a password";
 const UNCLAIMED_CLIENT_ID =
   "open for a client id nobody has claimed yet (the tolerant first-write branch): bound from the " +
-  "moment the join chain writes clientMapping. Recorded as accepted — CLAUDE.md \"Accepted by " +
-  "design\", DPA Annex VI R3. Until then any signed-in visitor who knows the code can write it " +
-  "under an id of their own making";
+  "moment the join chain writes clientMapping. Recorded — CLAUDE.md \"Accepted by design\", DPA " +
+  "Annex VI R3 — as a narrow window, which understates it: until then any signed-in visitor who " +
+  "knows the code can write it under an id of their own making, and an invented id is never " +
+  "claimed (DPA Annex VI G14, item 5: no decision recorded on the difference)";
 const ROOM_GATE =
   "NOT FIXED — any signed-in visitor who knows the code can write this in any room of an open " +
   "session, joined or not (run on the emulator 2026-10-08: ALLOWED). A different defect from the " +
@@ -261,6 +262,32 @@ test("every write in a session names the writer on every way through it, or is l
       "  or add it to OPEN with the reason.\n" +
       "  A path in OPEN that is not here has been closed since: delete its entry.");
   }
+});
+
+test("nothing at or above a session grants a write — one there would cascade over every rule below it", () => {
+  /* writesUnder() starts at the session node and reads each rule on its own.
+     A `.write` on an ancestor is outside what it walks, and RTDB grants it to
+     everything underneath whatever the deeper rules say: `"auth != null"` on
+     `sessions` would reopen all eight nodes and leave the test above green
+     (found in review, by adding one). The session node itself is included: a
+     rule there that names its writer would read as closed above and still
+     hand that writer the whole subtree. */
+  const above = [
+    ["the root", rules],
+    ["sessions", rules.sessions],
+    ["sessions/$sessionId", rules.sessions.$sessionId],
+    ["orgs", rules.orgs],
+    ["orgs/$orgSlug", rules.orgs.$orgSlug],
+    ["orgs/$orgSlug/sessions", rules.orgs.$orgSlug.sessions],
+    ["orgs/$orgSlug/sessions/$sessionId", rules.orgs.$orgSlug.sessions.$sessionId],
+  ];
+  for (const [label, node] of above) {
+    const w = node[".write"];
+    assert.ok(w === undefined || w === false || w === "false",
+      `${label} carries ".write": ${JSON.stringify(w)}. A write granted here cascades over every ` +
+      "session node, the eight configuration nodes included, and no deeper rule can take it back.");
+  }
+  assert.strictEqual(rules[".write"], false, "the root must refuse writes outright, not leave them undeclared");
 });
 
 test("the eight configuration nodes carry one of two rules, and it is the right one for each", () => {
