@@ -353,7 +353,9 @@ for (const locale of LOCALES) {
   });
 }
 
-/* A phone with enlarged text. One language, and it has to be French: nothing
+/* A phone with enlarged text — modelled, as everywhere in this file, by a
+   larger default font size (the root font size). One language, and it has to be
+   French: nothing
    the dialog-level check measures depends on the withdraw label, but what the
    history list's own check measures does, and the French label is the longest
    of the three. Running it under all three measured the same thing three times
@@ -379,10 +381,11 @@ test.describe("the dialog on a phone with enlarged text, under the fr-FR labels"
           200%, the last word of the label clipped by 30px.
        3. That the dialog is on screen. It is centred in the layout viewport,
           and where the page behind it is wider than the screen — which the
-          front page was with enlarged text — Android widens that viewport: at
-          320px and 200% a quarter of the dialog hung off the right edge.
-          tests-e2e/splash-overflow.spec.js holds the page to its width; this
-          holds the consequence. */
+          front page was with a larger default font size — Android widens that
+          viewport: at 320px and 200% a quarter of the dialog hung off the right
+          edge. tests-e2e/splash-overflow.spec.js holds the page to its width;
+          this holds the consequence. A text-only zoom, which no font-size cap
+          survives, can still widen that page (see that file's header). */
     const height = page.viewportSize().height;
     for (const width of [320, 360, 393]) {
       await page.setViewportSize({ width, height });
