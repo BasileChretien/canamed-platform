@@ -1430,7 +1430,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   reset need a password to reset, IN THE RULES (live only once a deploy has
   released them); and the takeover route through the reset — the recovery
   code readable by every session member while a reset was in progress — is
-  CLOSED IN CODE by a change of its own, ⛔ live only once its rules AND its
+  CLOSED IN CODE by #451, ⛔ live only once its rules AND its
   shell have shipped, with one deliberate residual (its entry is the last
   sub-bullet below).**
   `createSession()` writes `recovery/sessions/<code>` (org:
@@ -1494,7 +1494,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     recovery code is its creator's to write. Two predicates, both trees.
     ⛔ LIVE ONLY ONCE A DEPLOY HAS RELEASED THE RULES [released: ____ ] — they
     ship in a `continue-on-error` step, see `Verify:`. #447 left four things
-    open. The first, a takeover route, has its own fix and its own entry
+    open. The first, a takeover route, has its own fix (#451) and its own entry
     directly below this one; THREE stay open and are listed here.** Before
     #447 the reset flag (then `sessions/<code>/_superadminReset`) asked only
     for a
@@ -1575,7 +1575,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     session purged BY MISTAKE and then restored used to come back beside its
     old recovery record, which blocked the stranger's write. (b) now blocks it
     on purpose.
-  - **✅ CLOSED IN CODE — THE RECOVERY CODE WAS READABLE BY EVERY SESSION
+  - **✅ CLOSED IN CODE BY #451 — THE RECOVERY CODE WAS READABLE BY EVERY SESSION
     MEMBER WHILE A RESET WAS IN PROGRESS (found by the independent review of
     #447). ⛔ LIVE ONLY ONCE BOTH HALVES HAVE SHIPPED — the rules AND the
     shell [rules released: ____ · shell: v___ ]. ⚠️ ONE RESIDUAL, DELIBERATE:
