@@ -2606,10 +2606,12 @@ body.locked > footer { display: none !important; }
 .splash-mark .arc-c { stroke: var(--caen-500, #e08a1e); }
 .splash-mark .heart { fill: var(--n-700, #38434f); }
 /* the wordmark: letterspaced all-caps SERIF — a university-press signature,
-   not a tech logo. Weight/tracking tuned for Source Serif 4 at display size. */
+   not a tech logo. Weight/tracking tuned for Source Serif 4 at display size.
+   The floor stops at 14.5vw: the word is 5.94em wide and cannot break, so with
+   enlarged text a bare rem floor made the page wider than a phone. */
 .splash-title {
   margin: 0 0 8px;
-  font-size: clamp(var(--fs-7), 6vw, calc(var(--fs-7) * 1.28));
+  font-size: clamp(min(var(--fs-7), 14.5vw), 6vw, calc(var(--fs-7) * 1.28));
   font-weight: var(--fw-semibold);
   letter-spacing: 0.12em;
   color: var(--ink);
@@ -3149,6 +3151,12 @@ body.locked > footer { display: none !important; }
   border-radius: var(--r-sm);
   outline: none;
   cursor: pointer;
+  /* WebKit counts a <select>'s longest option toward its ancestors' scroll
+     width even once the box fits, whatever sizing the select is given, and the
+     option grows with the text. Paint containment stops that: without it the
+     account dialog scrolls sideways in Safari below ~347px, and the create
+     form from 125% text. */
+  contain: paint;
   transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
               box-shadow var(--dur-base, .18s) var(--ease-out, ease);
 }
@@ -3685,10 +3693,6 @@ body.session-ended-shown { overflow: hidden; }
      which pushed the profile form out of a phone-width dialog. */
   min-width: 0;
 }
-/* WebKit counts a <select>'s longest option toward its ancestors' scroll width
-   even once the box fits, whatever sizing the select is given. Paint
-   containment stops that; without it Safari still scrolls below ~347px. */
-.account-fieldset select { contain: paint; }
 .account-fieldset legend {
   padding: 0 6px;
   font-weight: 700;
@@ -3755,6 +3759,9 @@ body.session-ended-shown { overflow: hidden; }
   gap: var(--s-1) var(--s-3);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
+  /* A scenario name is authored text, up to 80 characters of anything, and
+     with enlarged text on a phone one word of the button label is too wide. */
+  overflow-wrap: anywhere;
 }
 .account-history-row:last-child { border-bottom: none; }
 .account-history-code {
@@ -3769,8 +3776,6 @@ body.session-ended-shown { overflow: hidden; }
      wraps to the next line instead. At 0 enlarged text left a 25px column, and
      at 12ch a long name still ran to nine lines. */
   flex: 1 1 20ch;
-  /* A scenario name is authored text, up to 80 characters of anything. */
-  overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.84rem;
 }
@@ -4020,7 +4025,8 @@ body.session-ended-shown { overflow: hidden; }
 .splash-mission {
   margin: 0 0 var(--s-4);
   font-family: var(--font-serif);
-  font-size: clamp(var(--fs-6), 3.4vw, calc(var(--fs-7) * 1.15));
+  /* Floor capped like the wordmark's; its longest word is 6.16em. */
+  font-size: clamp(min(var(--fs-6), 13.5vw), 3.4vw, calc(var(--fs-7) * 1.15));
   font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
   line-height: var(--lh-tight);

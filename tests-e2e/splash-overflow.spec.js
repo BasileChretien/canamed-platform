@@ -141,3 +141,132 @@ test.describe("Splash fits the viewport", () => {
     await expectNoOverflow(page, "create view @device");
   });
 });
+
+/* ---------------------------------------------------------------------------
+ * The same contract with the text enlarged.
+ *
+ * Text-only zoom, or a larger default font, is approximated through the root
+ * font size: the page's type is rem-based, its gutters and breakpoints are not,
+ * which is exactly the combination a reader with enlarged text gets. Page zoom
+ * is a different thing — it scales everything, so it is just a narrower
+ * viewport, and the sweep above covers that.
+ *
+ * What it guards: display-size text whose size has a rem floor and no ceiling
+ * tied to the viewport. One word that cannot break — the wordmark, or the
+ * longest word of the mission line — was then wider than a phone: 370px of
+ * page in a 320px viewport at 150% text, 488px at 200%. Besides the sideways
+ * scroll, on Android that widened the layout viewport, and the account dialog,
+ * centred in it, hung off the right edge of the screen (tests-e2e/
+ * account-dialog.spec.js asserts it stays on screen).
+ *
+ * One language: the offending strings are not translated, and French, German
+ * and Japanese were measured to add none of their own.
+ * ------------------------------------------------------------------------- */
+
+/** iPhone SE, small Android, iPhone 14 Pro. */
+const ENLARGED_WIDTHS = [320, 360, 393];
+
+/** Sweeps the root font size from 100% to 200% in steps of 5 inside the page
+    and fails if the document is ever wider than the viewport, naming the text
+    or the box that reaches furthest right. Leaves the font size as it found it. */
+async function expectNoOverflowWhenEnlarged(page, where) {
+  const result = await page.evaluate(() => {
+    const root = document.documentElement;
+    const basePx = parseFloat(getComputedStyle(root).fontSize);
+    const shown = (el) => {
+      const cs = getComputedStyle(el);
+      return cs.display !== "none" && cs.visibility !== "hidden" && !el.closest("dialog:not([open])");
+    };
+    const label = (el) => el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
+      (typeof el.className === "string" && el.className.trim() ? "." + el.className.trim().split(/\s+/)[0] : "");
+    /* Text can overflow a box that itself stays inside the page, so both the
+       boxes and the text runs are measured. */
+    const furthestRight = (edge) => {
+      let worst = { right: edge, what: "nothing measurable" };
+      for (const el of document.body.querySelectorAll("*")) {
+        if (!shown(el)) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0 && r.right > worst.right) worst = { right: r.right, what: "the box of " + label(el) };
+      }
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const parent = node.parentElement;
+        if (!node.nodeValue.trim() || !parent || !shown(parent)) continue;
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        const r = range.getBoundingClientRect();
+        if (r.width > 0 && r.right > worst.right) {
+          worst = { right: r.right, what: `the text "${node.nodeValue.trim().slice(0, 28)}" in ${label(parent)}` };
+        }
+      }
+      /* Nothing past the edge and the page still too wide is WebKit and a <select>:
+         its longest option counts toward the scroll width whatever the box is
+         sized to, and the option grows with the text. */
+      if (worst.right <= edge) {
+        return "no box and no text (in WebKit: a <select>, whose longest option is counted — see contain: paint on .splash-field select)";
+      }
+      return `${worst.what}, ${Math.round(worst.right - edge)}px past the edge`;
+    };
+    const DISPLAY_TEXTS = ["#splash-title", ".splash-mission"];
+    const out = { sizes: 0, displayTexts: 0, violations: [] };
+    for (let pct = 100; pct <= 200; pct += 5) {
+      root.style.fontSize = pct + "%";
+      out.sizes++;
+      const rootPx = parseFloat(getComputedStyle(root).fontSize);
+      if (Math.abs(rootPx - basePx * pct / 100) > 0.5) {
+        out.violations.push(`${pct}%: the text was not enlarged (root font ${rootPx}px)`);
+      }
+      if (root.scrollWidth > root.clientWidth + 1) {
+        out.violations.push(`${pct}%: the page is ${root.scrollWidth}px wide in a ${root.clientWidth}px viewport; ` +
+          `furthest right is ${furthestRight(root.clientWidth)}`);
+      }
+      /* The two display-size texts are held to their own column as well. A word
+         can stick out of its box by the width of the page gutter before the
+         page itself gets wider, so the check above alone leaves that much play
+         in the two caps. */
+      for (const sel of DISPLAY_TEXTS) {
+        const el = document.querySelector(sel);
+        out.displayTexts += el ? 1 : 0;
+        if (el && el.scrollWidth > el.clientWidth + 1) {
+          out.violations.push(`${pct}%: ${sel} is ${el.scrollWidth}px of text in a ${el.clientWidth}px column`);
+        }
+      }
+    }
+    root.style.fontSize = "";
+    return out;
+  });
+  // 100% to 200% in steps of 5: the loop cannot have run empty.
+  expect(result.sizes, `${where}: every text size was measured`).toBe(21);
+  expect(result.displayTexts, `${where}: both display texts were found at every size`).toBe(21 * 2);
+  expect(result.violations.length, `${where}:\n` + result.violations.slice(0, 4).join("\n")).toBe(0);
+}
+
+test.describe("Splash fits the viewport with enlarged text", () => {
+  for (const width of ENLARGED_WIDTHS) {
+    test(`no horizontal overflow at ${width}px from 100% to 200% text — entry, signed in, create+sections`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      await page.waitForFunction(() => typeof paintUserChip === "function");
+      await expectNoOverflowWhenEnlarged(page, `entry view @${width}`);
+
+      // The signed-in row and its unbreakable address, as in the sweep above.
+      await page.evaluate(() => {
+        currentUser = {
+          uid: "u_local", isAnonymous: false,
+          email: "firstname.middlename.familyname.u4@student.mail.example-university.test"
+        };
+        paintUserChip();
+      });
+      await expect(page.locator("#splash-signed-in")).toBeVisible();
+      await expectNoOverflowWhenEnlarged(page, `signed-in entry view @${width}`);
+
+      await openCreate(page);
+      for (const id of ["chronic-pain-pbl", "sore-throat-roleplay", "jaundice-pbl"]) {
+        await page.selectOption("#splash-section-add", id);
+        await page.locator("#splash-section-add-btn").click();
+      }
+      await expect(page.locator(".splash-section-row")).toHaveCount(3);
+      await expectNoOverflowWhenEnlarged(page, `create view + 3 sections @${width}`);
+    });
+  }
+});

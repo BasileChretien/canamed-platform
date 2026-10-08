@@ -350,66 +350,97 @@ for (const locale of LOCALES) {
       expect(result.narrowestOverFloor, "the sweep samples the floor itself").toBeLessThan(12);
     });
 
-    test("on a phone, enlarged text does not make the dialog scroll sideways", async ({ page }) => {
-      await openDialogWithHistory(page, locale, LONG_EMAIL);
-      // A closed dialog measures 0 against 0 and would pass every size below.
-      await expect(page.locator("#account-dialog")).toBeVisible();
-
-      /* The width test above runs at 100% text and the sweep above at desktop
-         width; neither sees a phone with enlarged text, where a word that
-         cannot break is the first thing to stick out. At 320px the dialog
-         scrolled by 37px at 150% and by 106px at 200%: the two role options
-         side by side, and the one unbreakable token in the security hint.
-
-         Only the dialog is asserted on. The page behind it is the splash, which
-         scrolls sideways by itself at these sizes, dialog open or closed (370px
-         of content in a 320px viewport at 150%); that is the splash's defect,
-         and asserting it here would make this test fail for a reason that is
-         not the dialog's. */
-      const height = page.viewportSize().height;
-      for (const width of [320, 360, 393]) {
-        await page.setViewportSize({ width, height });
-        const result = await page.evaluate(() => {
-          const root = document.documentElement;
-          const inner = document.querySelector(".account-dialog-inner");
-          root.style.fontSize = "";
-          const basePx = parseFloat(getComputedStyle(root).fontSize);
-          const out = { vw: window.innerWidth, sizes: 0, violations: [] };
-          for (let pct = 100; pct <= 200; pct += 5) {
-            root.style.fontSize = pct + "%";
-            out.sizes++;
-            const rootPx = parseFloat(getComputedStyle(root).fontSize);
-            if (Math.abs(rootPx - basePx * pct / 100) > 0.5) {
-              out.violations.push(`${pct}%: the text was not enlarged (root font ${rootPx}px)`);
-            }
-            const over = inner.scrollWidth - inner.clientWidth;
-            if (over > 1) {
-              // Name what reaches furthest right, so the failure says where to look.
-              const contentRight = inner.getBoundingClientRect().right -
-                parseFloat(getComputedStyle(inner).paddingRight);
-              let worst = { right: -Infinity, what: "" };
-              for (const el of inner.querySelectorAll("*")) {
-                const r = el.getBoundingClientRect();
-                if (r.width > 0 && r.right >= worst.right) {
-                  worst = { right: r.right, what: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
-                    ` "${(el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 28)}"` };
-                }
-              }
-              out.violations.push(`${pct}%: the dialog scrolls sideways by ${over}px; furthest right is ` +
-                `${worst.what}, ${Math.round(worst.right - contentRight)}px past the content edge`);
-            }
-          }
-          root.style.fontSize = "";
-          return out;
-        });
-        expect(result.vw, `at ${width}px: the resize took effect`).toBe(width);
-        // 100% to 200% in steps of 5: the loop cannot have run empty.
-        expect(result.sizes).toBe(21);
-        expect(result.violations.length, `at ${width}px:\n` + result.violations.slice(0, 4).join("\n")).toBe(0);
-      }
-    });
   });
 }
+
+/* A phone with enlarged text. One language, and it has to be French: nothing
+   the dialog-level check measures depends on the withdraw label, but what the
+   history list's own check measures does, and the French label is the longest
+   of the three. Running it under all three measured the same thing three times
+   and still missed the one case where the language matters. */
+test.describe("the dialog on a phone with enlarged text, under the fr-FR labels", () => {
+  test.use({ locale: "fr-FR" });
+
+  test("it does not scroll sideways, nor does its history list, and it stays on screen", async ({ page }) => {
+    await openDialogWithHistory(page, "fr-FR", LONG_EMAIL);
+    // A closed dialog measures 0 against 0 and would pass every size below.
+    await expect(page.locator("#account-dialog")).toBeVisible();
+
+    /* The width test above runs at 100% text and the sweep above at desktop
+       width; neither sees a phone with enlarged text, where a word that cannot
+       break is the first thing to stick out. Three things are measured.
+
+       1. The dialog's own scroll width. At 320px it scrolled by 37px at 150%
+          and by 106px at 200%: the two role options side by side, and the one
+          unbreakable token in the security hint.
+       2. The history list's. It is its own scroll container (max-height and
+          overflow-y: auto make overflow-x scroll too), so nothing in (1) sees
+          it: at 320px under this label it was 194px of row in a 164px list at
+          200%, the last word of the label clipped by 30px.
+       3. That the dialog is on screen. It is centred in the layout viewport,
+          and where the page behind it is wider than the screen — which the
+          front page was with enlarged text — Android widens that viewport: at
+          320px and 200% a quarter of the dialog hung off the right edge.
+          tests-e2e/splash-overflow.spec.js holds the page to its width; this
+          holds the consequence. */
+    const height = page.viewportSize().height;
+    for (const width of [320, 360, 393]) {
+      await page.setViewportSize({ width, height });
+      const result = await page.evaluate((screen) => {
+        const root = document.documentElement;
+        const dialog = document.getElementById("account-dialog");
+        const inner = document.querySelector(".account-dialog-inner");
+        const list = document.getElementById("account-history");
+        root.style.fontSize = "";
+        const basePx = parseFloat(getComputedStyle(root).fontSize);
+        // Names what reaches furthest right inside `box`, so a failure says where to look.
+        const furthestRight = (box, edge) => {
+          let worst = { right: -Infinity, what: "" };
+          for (const el of box.querySelectorAll("*")) {
+            const r = el.getBoundingClientRect();
+            if (r.width > 0 && r.right >= worst.right) {
+              worst = { right: r.right, what: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
+                ` "${(el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 28)}"` };
+            }
+          }
+          return `${worst.what}, ${Math.round(worst.right - edge)}px past the edge`;
+        };
+        const out = { vw: window.innerWidth, sizes: 0, violations: [] };
+        for (let pct = 100; pct <= 200; pct += 5) {
+          root.style.fontSize = pct + "%";
+          out.sizes++;
+          const rootPx = parseFloat(getComputedStyle(root).fontSize);
+          if (Math.abs(rootPx - basePx * pct / 100) > 0.5) {
+            out.violations.push(`${pct}%: the text was not enlarged (root font ${rootPx}px)`);
+          }
+          const over = inner.scrollWidth - inner.clientWidth;
+          if (over > 1) {
+            const contentRight = inner.getBoundingClientRect().right -
+              parseFloat(getComputedStyle(inner).paddingRight);
+            out.violations.push(`${pct}%: the dialog scrolls sideways by ${over}px; furthest right is ` +
+              furthestRight(inner, contentRight));
+          }
+          const listOver = list.scrollWidth - list.clientWidth;
+          if (listOver > 1) {
+            out.violations.push(`${pct}%: the history list scrolls sideways by ${listOver}px; furthest right is ` +
+              furthestRight(list, list.getBoundingClientRect().left + list.clientWidth));
+          }
+          const d = dialog.getBoundingClientRect();
+          if (d.left < -1 || d.right > screen + 1) {
+            out.violations.push(`${pct}%: the dialog is not on screen: it spans ${Math.round(d.left)} to ` +
+              `${Math.round(d.right)}px on a ${screen}px screen`);
+          }
+        }
+        root.style.fontSize = "";
+        return out;
+      }, width);
+      expect(result.vw, `at ${width}px: the resize took effect`).toBe(width);
+      // 100% to 200% in steps of 5: the loop cannot have run empty.
+      expect(result.sizes).toBe(21);
+      expect(result.violations.length, `at ${width}px:\n` + result.violations.slice(0, 4).join("\n")).toBe(0);
+    }
+  });
+});
 
 const THEMES = ["light", "dark", "high-contrast"];
 
