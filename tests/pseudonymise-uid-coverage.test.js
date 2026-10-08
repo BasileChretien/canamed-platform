@@ -19,21 +19,32 @@
  * real function is RUN on each:
  *
  *   1. Walk a session body as `database.rules.json` declares it — every node,
- *      and every child that only its parent's `.validate` names.
+ *      and every child its parent's rules name (`newData.child('x')`,
+ *      `hasChild('x')`, `hasChildren(['x', …])`).
  *   2. A position holds an account identifier when the rules key it by a uid
- *      wildcard (`$uid`), require its value to be `auth.uid`, or name it
+ *      wildcard (`$uid`, or any wildcard its own rules compare with
+ *      `auth.uid`), require its value to be `auth.uid`, or name it
  *      `uid` / `…Uid`.
  *   3. Put a sentinel there, run pseudonymiseSession(), and look for the
  *      sentinel anywhere in the serialised output.
  *
- * WHAT THIS CAN AND CANNOT SEE.
+ * WHAT THIS CAN AND CANNOT SEE. It narrows the gap; it does not close it.
  *   - It reads the RULES. A field the client writes and no rule names is
  *     invisible to it. There is one that matters, `pool/<clientId>/stableId`,
  *     and it is added by hand in the last section, with where it was read.
- *   - Step 2's third test is a naming convention, and this trusts it: a field
+ *   - It reads the rules AS THEY ARE. A node the rules once declared and no
+ *     longer do is invisible, and its data outlives the rule: the session mail
+ *     queue held e-mail addresses until 2026-09-24. tests/pseudonymise.test.js
+ *     pins that one by hand.
+ *   - It sees an identifier, not a NAME. A display name inside a string — the
+ *     JSON payload of a room event — is not a position the rules describe at
+ *     all. That defect was found by a reviewer reading what the client writes,
+ *     after this file was written and had passed.
+ *   - Step 2's last test is a naming convention, and this trusts it: a field
  *     holding a uid under a name that says nothing (`owner`, `who`) and that no
- *     rule compares with `auth.uid` would pass unseen. `scenarioRef.ownerUid`
- *     is found by its name alone — its rule asks only for a string.
+ *     rule compares with `auth.uid` passes unseen. `scenarioRef.ownerUid` is
+ *     found by its name alone — its rule asks only for a string — and would
+ *     not have been found as `owner`.
  *   - It says nothing about free text. A uid typed into an answer is R7's
  *     subject (legal/dpa-draft.md), not this file's.
  *
@@ -61,23 +72,46 @@ const TREES = {
 
 const UID_WILDCARD = /^\$(uid|[A-Za-z]*Uid)$/;
 const UID_NAME = /^(uid|[A-Za-z]*Uid)$/;
-const OWN_VALUE_IS_AUTH_UID = /newData\.val\(\) ===? auth\.uid/;
-const CHILD_NAMED = /newData\.child\('[A-Za-z_]+'\)/g;
+/* `==` and `===`, and either operand first: the rules use both spellings. */
+const OWN_VALUE_IS_AUTH_UID = /newData\.val\(\) ===? auth\.uid|auth\.uid ===? newData\.val\(\)/;
+/* The three ways a rule names a child of the node it sits on. */
+const CHILD_NAMED = /newData\.child\('([A-Za-z_]+)'\)|hasChild\('([A-Za-z_]+)'\)/g;
+const CHILDREN_LISTED = /hasChildren\(\[([^\]]*)\]\)/g;
+
+function ruleText(node) {
+  return [node[".validate"], node[".write"], node[".read"]]
+    .filter((s) => typeof s === "string").join(" ");
+}
+
+function childrenNamedIn(text) {
+  const names = new Set();
+  for (const m of text.matchAll(CHILD_NAMED)) names.add(m[1] || m[2]);
+  for (const m of text.matchAll(CHILDREN_LISTED)) {
+    for (const q of m[1].match(/'[A-Za-z_]+'/g) || []) names.add(q.slice(1, -1));
+  }
+  return names;
+}
 
 /** Every field a session body can hold, as the rules declare it: a node of its
- *  own, or a child that only its parent's `.validate` / `.write` names. */
+ *  own, or a child that only its parent's rules name. */
 function declaredFields(sessionRules) {
   const out = [];
   (function walk(node, at) {
-    const text = [node[".validate"], node[".write"]]
-      .filter((s) => typeof s === "string").join(" ");
-    if (at.length) out.push({ path: at, valueIsAuthUid: OWN_VALUE_IS_AUTH_UID.test(text) });
-    const named = new Set((text.match(CHILD_NAMED) || []).map((m) => m.slice(15, -2)));
-    for (const child of named) {
+    const text = ruleText(node);
+    if (at.length) {
+      const last = at[at.length - 1];
+      /* A wildcard the node's own rules compare with `auth.uid` is a uid key
+         whatever it is called (`$memberId` with `auth.uid == $memberId`). */
+      const wild = last.startsWith("$") ? last.replace("$", "\\$") : null;
+      const keyIsAuthUid = !!wild && new RegExp(
+        "auth\\.uid ===? " + wild + "\\b|" + wild + " ===? auth\\.uid").test(text);
+      out.push({ path: at, valueIsAuthUid: OWN_VALUE_IS_AUTH_UID.test(text), keyIsAuthUid });
+    }
+    for (const child of childrenNamedIn(text)) {
       if (Object.prototype.hasOwnProperty.call(node, child)) continue; // walked below
-      const bound = new RegExp(
-        "newData\\.child\\('" + child + "'\\)\\.val\\(\\) ===? auth\\.uid").test(text);
-      out.push({ path: at.concat(child), valueIsAuthUid: bound });
+      const c = "newData\\.child\\('" + child + "'\\)\\.val\\(\\)";
+      const bound = new RegExp(c + " ===? auth\\.uid|auth\\.uid ===? " + c).test(text);
+      out.push({ path: at.concat(child), valueIsAuthUid: bound, keyIsAuthUid: false });
     }
     for (const k of Object.keys(node)) {
       if (k.startsWith(".")) continue;
@@ -97,7 +131,7 @@ function accountIdPositions(sessionRules) {
   for (const f of declaredFields(sessionRules)) {
     const last = f.path[f.path.length - 1];
     let kind = null;
-    if (UID_WILDCARD.test(last)) kind = "key";
+    if (UID_WILDCARD.test(last) || f.keyIsAuthUid) kind = "key";
     else if (f.valueIsAuthUid || (!last.startsWith("$") && UID_NAME.test(last))) kind = "value";
     if (!kind || seen.has(label(f))) continue;
     seen.add(label(f));
@@ -139,9 +173,8 @@ function sessionWith(position, sentinel, boundToParticipant) {
     const last = i === position.path.length - 1;
     let key = seg;
     if (seg.startsWith("$")) {
-      if (UID_WILDCARD.test(seg) || seg === "$stableId") {
-        key = (last && position.kind === "key") ? sentinel : "id1";
-      } else if (seg === "$clientId" || seg === "$cid") key = CID;
+      if (last && position.kind === "key") key = sentinel;
+      else if (seg === "$clientId" || seg === "$cid") key = CID;
       else key = seg === "$roomId" ? "r1" : seg.slice(1) + "1";
     }
     if (last && position.kind === "value") { node[key] = sentinel; return; }
@@ -227,15 +260,24 @@ for (const [treeName, tree] of Object.entries(TREES)) {
  * 2. stableId: the identifier the export DOES carry, listed
  * ------------------------------------------------------------------ *
  * `stableId` is the study's join key (Research_design/study_protocol_SAP.md,
- * section 9): pre-test, post-test and questionnaire are joined on it, and the
- * code a student copies into the questionnaire is derived from it. So the
- * export carries it, on purpose — and it is, by construction, the same in
- * every session a participant joins from one browser. For a participant who is
- * SIGNED IN it is not a random value at all: handleAuthStateChange() sets it to
- * their Firebase auth uid.
+ * section 9): one person's pre-test, post-test and questionnaire are joined on
+ * it across the tabs they used. The export carries it as written. For a
+ * participant who is SIGNED IN it is not a random value at all:
+ * handleAuthStateChange() sets it to their Firebase auth uid, the same in
+ * every session. For an anonymous one it is a random value kept in the
+ * browser, which carries into the next session unless they left through
+ * Leave / "use a different session" / "forget this session", each of which
+ * clears it.
  *
- * This list is NOT a decision that carrying it is right. legal/dpa-draft.md
- * Annex VI R8 leaves that to the controller. It is here so that the places it
+ * This list is NOT a decision that carrying it as written is right, and the
+ * in-platform joins do not require it: the pre-test, the post-test and the
+ * wrap-up questionnaire all sit inside ONE session, so a stand-in assigned per
+ * distinct stableId per session would keep every one of those joins and remove
+ * both the cross-session link and the raw uid. The one join it would break is
+ * to a questionnaire held OUTSIDE the platform, through a printed code derived
+ * from the stableId — which the protocol plans (unticked in its checklist) and
+ * the client does not show. legal/dpa-draft.md Annex VI R8 and R10 put the
+ * choice to the controller. The list is here so that the places a stableId
  * reaches are written down and cannot grow unnoticed, and so that whoever
  * changes its treatment finds every one of them.
  */
