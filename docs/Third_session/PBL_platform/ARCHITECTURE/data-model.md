@@ -147,7 +147,21 @@ Matches: /^[0-9a-f]{64}$/ (legacy PBKDF2v1, hex-encoded)
 
 **Read/Write Authority:**
 - `.read: "auth != null"`
-- `.write: "auth != null && !data.exists()"` — immutable at creation
+- `.write` (paths abbreviated) — once, and only before the session has a
+  password. Until 2026-10-08 it was `auth != null && !data.exists()`: once, by
+  anyone signed in. Now one of two rules, by WHEN the client writes the node:
+  - `workshopLabel`, `controller`, `sections` — sent in the create batch
+    together with `creatorUid`, so the rule does not depend on which lands
+    first: `!data.exists() && !adminPasswordHash.exists() &&
+    (!creatorUid.exists() || creatorUid == auth.uid) && <creation gate>` — the
+    recovery record's rule.
+  - `scenarioId`, `scenarioCustomJson`, `scenarioRef`, `modules`,
+    `sectionBodies/$slot` — not in the batch (the create form passes null for
+    the first four; authored bodies are chained after it):
+    `!data.exists() && creatorUid == auth.uid && !adminPasswordHash.exists()`.
+
+  `tests/session-config-creator-bound.test.js` pins both the rules and the
+  facts about `createSession()` they rest on.
 
 **Schema:**
 

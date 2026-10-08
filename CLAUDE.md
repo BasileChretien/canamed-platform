@@ -1610,7 +1610,9 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   == true` now sits on the first-write of `created`, `creatorUid`,
   `adminPasswordHash` (initial-set), `adminSecrets` hash (initial-set), **and the
   `recovery/…/<sessionId>` code write** — in **both** the `sessions/$id` and
-  `orgs/$slug/sessions/$id` trees (**10 rules**). The recovery-code write is
+  `orgs/$slug/sessions/$id` trees (**10 rules**; 16 since 2026-10-08, when
+  `controller`, `workshopLabel` and `sections` took the recovery record's rule —
+  see "A session's configuration is its creator's to write" below). The recovery-code write is
   itself a bootstrap field (written once at creation, before any hash), so gating
   it closes the recovery-bootstrap bypass. The `_superadminReset` write and the
   hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
@@ -1778,6 +1780,141 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   ever becomes graded / assessment (stakes appear) — then move scoring
   server-side. Until then accepted: Module A is formative, so the incentive
   to self-award is near-zero.
+
+### A session's configuration is its creator's to write (2026-10-08) — fixed in the rules; confirm the deploy before calling it live
+
+Eight nodes under `sessions/$sessionId` (and the org mirror) are written once,
+when a session is created: `controller`, `workshopLabel`, `scenarioId`,
+`sections`, `sectionBodies/$slot`, `modules`, `scenarioCustomJson`,
+`scenarioRef`. The rule on each was `auth != null && !data.exists()` — once, by
+ANYONE signed in, at any time. Whatever the creator left unset belonged to the
+first visitor who knew the code, and write-once then stopped the creator from
+undoing it.
+
+- **What the create form leaves unset** (run, not read): it always writes
+  `controller` and `sections`, and `workshopLabel` only when one is typed. So
+  on a session created by the current form `scenarioId`, `modules`,
+  `scenarioCustomJson` and `scenarioRef` were open, and the label when blank.
+  A session created by a shell from before 2026-09-03 has no `controller`; one
+  from before the section picker (end of July 2026) has no `sections`.
+- **What a stranger's write did — measured on the emulator on 2026-10-08**,
+  real create form, a second browser CONTEXT that knew only the code, a
+  participant already in the room at the PBL stage. (The probes are not in the
+  repository; the committed spec holds the denials.)
+
+  | written by the stranger | participant who reloads, or joins after |
+  | --- | --- |
+  | `modules` | nothing — the section pick takes precedence |
+  | `scenarioId` (another built-in) | nothing visible; the other case's cast is ambient until a section is on screen |
+  | `scenarioCustomJson` with `format:"branched"` | the PBL stage loses its left column, vignette and patient chat |
+  | `scenarioCustomJson` with a malformed `case` | page error; left on Welcome while the room is on stage 1 |
+  | `scenarioRef` to a scenario the stranger shared | as `scenarioCustomJson` — and the stranger can keep editing it |
+  | `controller`, session with none | join screen: "‹string›, the data controller for this session, collects…" |
+  | `sections` + `sectionBodies/1`, session with no pick | join screen announces the stranger's section; the stage flow becomes that one section |
+
+  A participant who did NOT reload saw nothing in any of them: the
+  configuration is read once, at load. And AT THE PBL STAGE of a session that
+  has a pick, the model's persona stayed the section's own — the stranger's
+  `characters` were not in the prompt (the request was captured). That was not
+  measured at Welcome or Wrap-up, where the ambient cast is what the chat
+  holds (the hazard recorded under "Scenario characters").
+- **The rules now — two of them, both trees.** All eight: once, and only while
+  the session has no password.
+  - `controller`, `workshopLabel`, `sections` — **the recovery record's rule,
+    word for word**: `!adminPasswordHash.exists() && (!creatorUid.exists() ||
+    creatorUid == auth.uid) && <creation gate>`. The creator; or, while the
+    session has no creator yet, whoever may create one.
+  - `scenarioId`, `modules`, `scenarioCustomJson`, `scenarioRef`,
+    `sectionBodies/$slot` — `creatorUid == auth.uid &&
+    !adminPasswordHash.exists()`. The creator and nobody else.
+- ⚠️ **Why two, and why script.js was NOT changed.** `createSession()` issues
+  `created`, `recovery`, `creatorUid` and the form's configuration in ONE
+  `Promise.all`. A rule requiring the claim to have LANDED first holds only if
+  the database applies one client's writes in the order it issued them. That
+  is almost certainly so, and the emulator bears it out — but it cannot be
+  shown on production before the rules are live, they deploy at once, and a
+  wrong guess is every facilitator unable to create a session (the #438
+  lesson: list what a REFUSAL does). So the three fields that ride the batch
+  do not depend on it. The other five can be creator-only with no such bet:
+  the only caller passes null for four of them, and the authored bodies are
+  chained after the batch has been acknowledged.
+  `tests/session-config-creator-bound.test.js` pins both facts. **Bring a
+  scenario back into the create batch and that test fails** — give the field
+  the in-batch rule, or chain it; do not delete the assertion.
+- **What a session with NO creator gets — decided, not left over.** No creator
+  and no password is a code nobody has claimed: the three in-batch fields are
+  the first writer's (that is what creating a session is, and the creation
+  gate applies), the five others are refused to everybody until somebody holds
+  the claim. No creator but a password — the shape from before `creatorUid`
+  (2026-05-27) — is closed to everyone.
+- **No password-proof branch, unlike the Phase 4a nodes.** Those are written
+  while a session runs; these are written before it has a password, when no
+  proof can exist. Nothing in the product writes them later, and
+  `ARCHITECTURE/data-model.md` describes them as "not changeable by admin
+  mid-session". One exception, and it is the creator's: whoever holds the
+  recovery code can remove the password marker through the reset branch
+  (`.validate` does not run on a delete), which reopens the window for the
+  creator alone. Read from the rules, not run.
+- **Why nothing caught it.** Three unit tests compared the rule with the exact
+  string `auth != null && !data.exists()` — green on the defect, red on the
+  fix. And every hardening pass since Phase 4a worked from a list of nodes
+  somebody had thought of; "write-once" read as "safe". The unit test now
+  DERIVES the list: it parses each `.write` (and the `.validate` beside it)
+  into its `&&` / `||` structure and asks whether there is a way through that
+  never mentions `auth.uid`. **23 writes per tree have one**, each listed in
+  that file's `OPEN` map with its reason:
+  - 5 that are creating a session (`created`, `adminPasswordHash`'s first
+    write, and the three in-batch fields);
+  - 10 that are open for a client id nobody has claimed yet (`pool`, `poll`,
+    `presence`, `typing`, `ballots`, `observers`, `roleChoices`, `tests` ×2,
+    `survey`) — the tolerant first-write branch, already recorded as accepted;
+  - `_superadminReset`, whose DELETE branch names nobody: any signed-in
+    visitor can remove a reset in progress on an open session. Not this
+    change's;
+  - and the 7 below.
+
+  It answers "does every way through name the writer", not "is the tie
+  enough": a first version matched ties by regex and counted the ten
+  client-id nodes as bound (found in review).
+- ⚠️ **NOT FIXED, found by that derivation — a different defect.** Seven room
+  writes name nobody at all: `teamName`, `roleplayRound`, `callForHelp`,
+  `sections/$slot/revealed/$itemId`, `moduleA/revealed/$itemId`,
+  `events/$pushId` and `answerReplies/…` (the last was already recorded). Run
+  on the emulator on 2026-10-08: a visitor who never joined wrote all seven
+  into a room of an open session — ALLOWED each time. The `roomOf` gate their
+  neighbours have would bind a writer to the ONE room they joined; it would
+  not keep out somebody who has the code, because joining is three writes.
+  Each has a client call site to check first.
+- ⚠️ **What the fix does not do.**
+  (a) It does not repair a session that already carries a stranger's value,
+  and nothing can tell one from the creator's — these nodes record no author.
+  Production was not queried. The purge bounds it: 30 days after closing, 90
+  after creation.
+  (b) **Seeding an unclaimed code is narrowed, not closed.** On a code with no
+  creator and no password, a visitor can still write `controller`,
+  `workshopLabel` or `sections`. A facilitator whose creation then draws that
+  code is refused at their own write of the same field and sees "Could not
+  create the session"; a field their client does NOT write — a blank label,
+  or the controller from a shell older than 2026-09-03 — would be carried
+  into the session. The odds are the number of seeded codes over 31^6
+  (887,503,681), and the nightly purge removes a session with no dates. The
+  five content fields cannot be seeded at all.
+  (c) A session restored by `restore-sessions.js` comes back with its
+  `creatorUid` and without its password, so its original creator can write
+  its unset configuration again until it is re-keyed. Nobody else can.
+  (d) The session body goes to the nightly backup and the research export
+  whole: `scripts/lib/pseudonymise.js` drops none of these eight (read, not
+  run), so a value written before the fix travels with its session.
+- **Four older emulator tests wrote `modules` / `sections` / `sectionBodies`
+  on a code nobody had claimed.** They now claim it first. A rules test that
+  seeds a session by hand must write `creatorUid` before the five creator-only
+  nodes, and every one of the eight before the password.
+
+`Verify:` `node --test tests/session-config-creator-bound.test.js`, and on the
+emulator `PORT=8791 npm run test:e2e:rules -- session-config-creator-bound`.
+Those test the REPOSITORY. For the live rules: the deploy step is best-effort,
+so read its log — `gh run view <deploy run> --log | grep -F 'released
+successfully'` — and do not take a green Deploy as proof.
 
 ### 2026-05-30 multi-agent security review — outcomes
 

@@ -1333,9 +1333,14 @@ test("rules: sessions/$id/modules — per-session module narrowing is write-once
   // NB sessions/$sessionId has NO $other catch-all, so an undeclared key would be
   // DENIED — this test is what proves the field is actually declared in BOTH trees.
   await page.goto("/");
-  await waitForUid(page);
+  const uid = await waitForUid(page);
   const rnd = () => Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const code = "mods-" + rnd();
+  /* The narrowing is the session CREATOR's to write, and nobody else's
+     (2026-10-08), so each session below is claimed first.
+     session-config-creator-bound.spec.js holds the denials. */
+  const claim = (base) => tryWrite(page, base + "/creatorUid", uid);
+  expect(await claim(`sessions/${code}`)).toBe("ALLOWED");
 
   // A valid CSV of module ids is accepted exactly once.
   expect(await tryWrite(page, `sessions/${code}/modules`, "A")).toBe("ALLOWED");
@@ -1351,6 +1356,7 @@ test("rules: sessions/$id/modules — per-session module narrowing is write-once
 
   // .validate rejects malformed selections.
   const code2 = "mods2-" + rnd();
+  expect(await claim(`sessions/${code2}`)).toBe("ALLOWED");
   const bad = ["", "A,,B", "A,", ",A", "A B", "x".repeat(80), 7, ["A"], { A: true }];
   for (const v of bad) {
     const res = await tryWrite(page, `sessions/${code2}/modules`, v);
@@ -1361,7 +1367,9 @@ test("rules: sessions/$id/modules — per-session module narrowing is write-once
   expect(await tryWrite(page, `sessions/${code2}/modules`, "A,B")).toBe("ALLOWED");
 
   // Org-tree parity — the org mirror must exist or org sessions fail closed.
-  const orgPath = `orgs/org${Math.floor(Math.random() * 1e6)}/sessions/s${Math.floor(Math.random() * 1e6)}/modules`;
+  const orgBase = `orgs/org${Math.floor(Math.random() * 1e6)}/sessions/s${Math.floor(Math.random() * 1e6)}`;
+  const orgPath = orgBase + "/modules";
+  expect(await claim(orgBase)).toBe("ALLOWED");
   expect(await tryWrite(page, orgPath, "B")).toBe("ALLOWED");
   expect(await tryWrite(page, orgPath, "A"), "org tree must be write-once too")
     .not.toBe("ALLOWED");
@@ -1511,9 +1519,15 @@ test("rules: per-slot answers validate exactly like the module-scoped ones", asy
 
 test("rules: the session's ordered section pick is write-once and bounded", async ({ page }) => {
   await page.goto("/");
-  await waitForUid(page);
+  const uid = await waitForUid(page);
   const code = "secpick-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const path = `sessions/${code}/sections`;
+  /* Both sessions are claimed first, as createSession() does. The pick would be
+     accepted on an unclaimed code too (it rides the create batch with the
+     claim), but that branch has its own test in
+     session-config-creator-bound.spec.js; here the writer is the creator. */
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uid)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}-b/creatorUid`, uid)).toBe("ALLOWED");
 
   /* S3a — an ordered CSV of section ids, modelled on M2's `modules`. Section
      ids are longer than module ids ("chronic-pain-pbl"), so the per-segment
@@ -1558,6 +1572,8 @@ test("rules: an authored section body can be snapshotted per slot, write-once", 
 
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
+  // The pick and its bodies are the session creator's to write: claim it first.
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uid)).toBe("ALLOWED");
   // The CSV keeps LEGAL tokens; the bodies live alongside it.
   expect(await tryWrite(page, `sessions/${code}/sections`, "chronic-pain-pbl,custom-2"))
     .toBe("ALLOWED");
@@ -1582,6 +1598,9 @@ test("rules: sectionBodies bounds the slot key and the payload size", async ({ p
   const code = "secbodyguard-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
+  /* Claimed first, so that every refusal below is the VALIDATOR's (slot key,
+     size, missing pick) and not the creator gate's. */
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uid)).toBe("ALLOWED");
   /* With NO pick at all, no body is writable — the node cannot be used as free
      storage on a fabricated session code. */
   expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, "{}"),
