@@ -1644,7 +1644,10 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     before the close keeps its 30 s, because the hash rules look at the flag
     and not at `closed` — as they always have. The exposure empties on
     the retention clock: it is over once every session that existed before the
-    deploy has been purged — a state, not a date.
+    RULES were released has been purged — a state, not a date. (Not "before
+    the deploy": a session created after the site is published and before the
+    rules step succeeds can still have its code exposed by a browser on the
+    old shell.)
     **⚠️ TWO HALVES. A BROWSER THAT HAS ONE OF THEM IS REFUSED RATHER THAN
     LEAKING — BUT ONLY THE RULES RELEASE ENDS NEW EXPOSURE**
     (the two mixed states measured as raw writes — cells 3 and 4 of the
