@@ -321,3 +321,281 @@ test("sessionHasConsent detects whether a session may be exported at all", () =>
   assert.strictEqual(sessionHasConsent({ pool: {} }), false);
   assert.strictEqual(sessionHasConsent({}), false);
 });
+
+/* ============ ACCOUNT IDENTIFIERS outside the two mapping tables ============
+ * Found 2026-10-08 by running the function, not by reading it. The header says
+ * `clientMapping` / `stableIdMapping` are dropped because a Firebase auth uid
+ * is the same in every session, and `members` is rekeyed for the same reason.
+ * Three more places held one and none was handled:
+ *   - `creatorUid`            the facilitator's account
+ *   - `scenarioRef.ownerUid`  the account of whoever authored the scenario —
+ *                             for a shared scenario, somebody who was never in
+ *                             the session
+ *   - `roomOf/<uid>`          a participant's account, as a key, with their
+ *                             clientId beside it: the join `clientMapping` was
+ *                             dropped to withhold, the other way round. Added
+ *                             to the rules on 2026-08-03, after this module's
+ *                             list of uid-keyed maps was written.
+ * tests/pseudonymise-uid-coverage.test.js derives that list from the rules so
+ * that it cannot be one short again; these pin the behaviour on a session
+ * shaped like a real one.
+ *
+ * NOT covered by these, on purpose: `stableId`. For a participant who is signed
+ * in it IS the auth uid, and the export still carries it (see the coverage
+ * file's second section). So no test here may be read, or named, as "no account
+ * identifier survives". */
+
+const FACILITATOR_UID = "FacilitatorAuthUid0000000001";
+const AUTHOR_UID = "ScenarioAuthorAuthUid0000002";
+const STUDENT_UID = "StudentAuthUid00000000000003";
+const DECLINER_UID = "DeclinerAuthUid0000000000004";
+
+function accountIdSession() {
+  return {
+    created: { by: "Dr Facilitator", at: 1 },
+    closed: { by: "Dr Facilitator", at: 1000 },
+    creatorUid: FACILITATOR_UID,
+    scenarioId: "chest-pain",
+    scenarioRef: { ownerUid: AUTHOR_UID, scenarioId: "chest-pain", source: "shared" },
+    members: {
+      [FACILITATOR_UID]: { at: 2 },
+      [STUDENT_UID]: { at: 10 },
+      [DECLINER_UID]: { at: 20 }
+    },
+    roomOf: {
+      [STUDENT_UID]: { room: "Room 1", cid: "c1" },
+      [DECLINER_UID]: { room: "Room 1", cid: "c2" }
+    },
+    clientMapping: { c1: STUDENT_UID, c2: DECLINER_UID },
+    pool: {
+      c1: { name: "Ann", university: "Caen", at: 10, room: "Room 1", consent: YES },
+      c2: { name: "Ben", university: "Caen", at: 20, room: "Room 1", consent: NO }
+    },
+    rooms: {
+      "Room 1": {
+        answers: { moduleA: { a1: { by: "Ann", cid: "c1", text: "differential is X", at: 30 } } }
+      }
+    }
+  };
+}
+
+test("creatorUid, scenarioRef.ownerUid and the roomOf keys do not reach the export", () => {
+  const sess = accountIdSession();
+  const before = JSON.stringify(sess);
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  for (const [who, uid] of [["the facilitator (creatorUid)", FACILITATOR_UID],
+                            ["the scenario author (scenarioRef.ownerUid)", AUTHOR_UID],
+                            ["a consenting participant (roomOf key)", STUDENT_UID],
+                            ["a participant who declined (roomOf key)", DECLINER_UID]]) {
+    // Anti-vacuity: a fixture that never held the uid would pass on its own.
+    assert.ok(before.includes(uid), "fixture is broken: it does not hold the uid of " + who);
+    assert.ok(!blob.includes(uid),
+      "the export still carries the Firebase auth uid of " + who + ". An auth uid is the " +
+      "same in every session, so it re-links what the per-session pseudonyms keep apart.");
+  }
+});
+
+test("the session's research content is still returned once the identifiers are gone", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.strictEqual(out.pool.c1.name, "Student-A");
+  assert.strictEqual(out.rooms["Room 1"].answers.moduleA.a1.text, "differential is X");
+  assert.strictEqual(out.rooms["Room 1"].answers.moduleA.a1.by, "Student-A");
+  assert.strictEqual(out.created.at, 1);
+  assert.strictEqual(out.closed.at, 1000);
+  assert.strictEqual(out.scenarioId, "chest-pain");
+});
+
+test("creatorUid is dropped, not replaced: one creator per session is not a variable", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.ok(!("creatorUid" in out));
+});
+
+test("a scenario reference keeps WHICH scenario ran and loses whose account holds it", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.deepStrictEqual(out.scenarioRef, { scenarioId: "chest-pain", source: "shared" });
+});
+
+test("ownerUid is dropped whatever it holds — the rules ask only for a string", () => {
+  /* `scenarioRef.ownerUid` is validated as a string of at most 128 characters,
+     not as the writer's own uid, and the rule on `scenarioRef` is "signed in,
+     and not yet written": any visitor who knows the code can be its first
+     writer. A replacement keyed on "is this a uid we know" would pass anything
+     else through. */
+  const sess = accountIdSession();
+  sess.scenarioRef.ownerUid = "someone@example.org";
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  assert.ok(!blob.includes("someone@example.org"));
+});
+
+test("roomOf is dropped: who was in which room is already in the pool, by clientId", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.ok(!("roomOf" in out));
+  assert.strictEqual(out.pool.c1.room, "Room 1",
+    "the room a participant was in must still be readable from their pool row");
+  // Serialised form, as for uidMembers above: the rekeyed map is null-prototype.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(out.members)), { "Student-A": { at: 10 } });
+});
+
+test("roomOf cannot be rekeyed safely: one account can stand behind two pool rows", () => {
+  /* Why it is dropped rather than rekeyed like `members`. Two students on one
+     browser are two pool rows under ONE auth uid, and `roomOf` is written once
+     per uid. Rekeyed by "the uid's pseudonym" the entry came out as
+     {"Student-B": {cid: "c1"}} — keyed as one student, holding the other's
+     row. Nothing may put a participant's pseudonym on another's record. */
+  const sess = {
+    clientMapping: { c1: "SharedBrowserUid", c2: "SharedBrowserUid" },
+    roomOf: { SharedBrowserUid: { room: "Room 1", cid: "c1" } },
+    pool: {
+      c1: { name: "Ann", at: 1, room: "Room 1", consent: YES },
+      c2: { name: "Bea", at: 2, room: "Room 1", consent: YES }
+    }
+  };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.ok(!("roomOf" in out));
+  assert.deepStrictEqual([out.pool.c1.room, out.pool.c2.room], ["Room 1", "Room 1"]);
+});
+
+test("what sits UNDER a rekeyed membership entry is scrubbed like everything else", () => {
+  /* The walker used to stop at a rekeyed map. `members/<uid>` has no sealed
+     schema — its rule asks for `at` and bounds `role` — so whatever else its
+     owner wrote there passed as written. */
+  const sess = {
+    clientMapping: { c1: STUDENT_UID },
+    members: { [STUDENT_UID]: { at: 1, name: "Ann Dupont", by: "Ann Dupont", creatorUid: STUDENT_UID } },
+    pool: { c1: { name: "Ann Dupont", at: 1, consent: YES } }
+  };
+  const out = pseudonymiseSession(sess, "S1", {});
+  const blob = JSON.stringify(out);
+  assert.ok(!blob.includes("Ann Dupont"), "a name under a membership entry reached the export");
+  assert.ok(!blob.includes(STUDENT_UID));
+  assert.strictEqual(out.members["Student-A"].at, 1);
+  assert.strictEqual(out.members["Student-A"].name, "Student-A");
+});
+
+/* ============ NAMES INSIDE EVENT PAYLOADS ============
+ * Found 2026-10-08 by the independent review of the change above, and it is the
+ * larger defect. logEvent() (script.js) writes a room event as
+ *     { kind, by, at, payload: JSON.stringify({ by: myName, university, len, … }) }
+ * for every answer, edit, deletion and hypothesis, and for a manual score with
+ * the FACILITATOR's name. The payload is a STRING. This walker rewrote the
+ * `by` beside it and never looked inside, so each such event carried the
+ * participant's real display name and university into the "pseudonymised" file
+ * — for participants who had declined research use as well — in every export
+ * since the first one.
+ *
+ * The author's own "run every field through the function" pass missed it: it
+ * put an opaque marker in `payload` and filed the field under free text. A
+ * field has to be filled with what the client WRITES there. */
+
+function eventSession() {
+  const ev = (kind, by, payload) => ({ kind, by, at: 50, payload: JSON.stringify(payload) });
+  return {
+    clientMapping: { c1: STUDENT_UID, c2: DECLINER_UID },
+    pool: {
+      c1: { name: "Ann Dupont", university: "Caen", at: 10, consent: YES },
+      c2: { name: "Ben Sato", university: "Nagoya", at: 20, consent: NO }
+    },
+    audit: { x1: { kind: "room.stage", by: "Dr Facilitator", at: 60,
+                   payload: JSON.stringify({ room: "Room 1", from: 0, to: 1 }) } },
+    rooms: {
+      "Room 1": {
+        events: {
+          e1: ev("answer.moduleA", "Ann Dupont",
+                 { by: "Ann Dupont", university: "Caen", len: 12, bulletKey: "b2" }),
+          e2: ev("hypothesis", "Ben Sato", { by: "Ben Sato", university: "Nagoya", len: 9 }),
+          e3: ev("score.manual", "Dr Facilitator", { tag: "good point", points: 5, by: "Dr Facilitator" }),
+          e4: ev("reveal", "Ann Dupont", { itemId: "ecg" })
+        }
+      }
+    }
+  };
+}
+
+test("an event payload no longer carries the participant's or the facilitator's real name", () => {
+  const sess = eventSession();
+  const before = JSON.stringify(sess);
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  for (const real of ["Ann Dupont", "Ben Sato", "Dr Facilitator", "Nagoya"]) {
+    assert.ok(before.includes(real), "fixture is broken: it does not hold " + real);
+    assert.ok(!blob.includes(real),
+      real + " reached the export, inside a JSON string the walker never opened");
+  }
+});
+
+test("a scrubbed payload is still JSON, and keeps everything that is not an identifier", () => {
+  const events = pseudonymiseSession(eventSession(), "S1", {}).rooms["Room 1"].events;
+  assert.deepStrictEqual(JSON.parse(events.e1.payload),
+    { by: "Student-A", university: "Univ-1", len: 12, bulletKey: "b2" });
+  assert.deepStrictEqual(JSON.parse(events.e2.payload),
+    { by: REDACTED_NAME, university: "Univ-2", len: 9 },
+    "a participant who declined is redacted inside the payload as beside it");
+  assert.deepStrictEqual(JSON.parse(events.e3.payload),
+    { tag: "good point", points: 5, by: REDACTED_NAME });
+  assert.deepStrictEqual(JSON.parse(events.e4.payload), { itemId: "ecg" });
+  assert.strictEqual(events.e1.by, "Student-A");
+  assert.strictEqual(events.e1.kind, "answer.moduleA");
+});
+
+test("an admin audit payload is kept as it was: it names a room and two stages", () => {
+  const out = pseudonymiseSession(eventSession(), "S1", {});
+  assert.deepStrictEqual(JSON.parse(out.audit.x1.payload), { room: "Room 1", from: 0, to: 1 });
+  assert.strictEqual(out.audit.x1.by, REDACTED_NAME);
+});
+
+test("a payload that cannot be read as a JSON object is removed, not passed through", () => {
+  /* logEvent() cuts the serialised payload at 500 characters, so a long one is
+     not valid JSON; and the rule accepts any string, from anyone who has the
+     session code. What cannot be opened cannot be scrubbed, so it does not go
+     out. The rest of the event does. */
+  const cut = JSON.stringify({ by: "Ann Dupont", note: "x".repeat(600) }).slice(0, 500);
+  const sess = eventSession();
+  sess.rooms["Room 1"].events.e5 = { kind: "answer.moduleA", by: "Ann Dupont", at: 70, payload: cut };
+  sess.rooms["Room 1"].events.e6 = { kind: "help", by: "Ann Dupont", at: 71, payload: "Ann Dupont needs help" };
+  sess.rooms["Room 1"].events.e7 = { kind: "help", by: "Ann Dupont", at: 72, payload: "\"Ann Dupont\"" };
+  const out = pseudonymiseSession(sess, "S1", {});
+  const events = out.rooms["Room 1"].events;
+  for (const id of ["e5", "e6", "e7"]) {
+    assert.ok(!("payload" in events[id]), id + ": an unreadable payload must not be exported");
+    assert.strictEqual(events[id].by, "Student-A", id + ": the event itself is kept");
+    assert.ok(typeof events[id].at === "number");
+  }
+  assert.ok(!JSON.stringify(out).includes("Ann Dupont"));
+});
+
+test("only `payload` is opened: an authored scenario is JSON in a string too, and is left alone", () => {
+  /* `scenarioCustomJson` and each `sectionBodies` entry hold the facilitator's
+     scenario as a JSON string, whose `name` keys are CHARACTERS ("Mr Lefebvre").
+     Opening every JSON-looking string would redact the cast. */
+  const scenario = JSON.stringify({ characters: [{ id: "p1", role: "patient", name: "Mr Lefebvre" }] });
+  const sess = eventSession();
+  sess.scenarioCustomJson = scenario;
+  sess.sectionBodies = { 1: scenario };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.strictEqual(out.scenarioCustomJson, scenario);
+  assert.strictEqual(out.sectionBodies[1], scenario);
+});
+
+/* ============ E-MAIL ADDRESSES in a node the rules no longer declare ============
+ * `sessions/<code>/mail/<id>` = { to: <e-mail>, subject, text, at } was the
+ * queue of the transactional-mail function. The function, the rule and the
+ * client code went on 2026-09-24 — and a rule being deleted does not delete
+ * what it guarded: a session created before that date keeps its queue for as
+ * long as the session lives. No rules-derived check can see such a node, so it
+ * is pinned here. */
+
+test("a legacy mail queue never reaches the export — it holds e-mail addresses", () => {
+  const sess = accountIdSession();
+  sess.mail = { m1: { to: "ann.dupont@example.org", subject: "Your link",
+                      text: "Dear Ann Dupont, here is your link.", at: 5,
+                      delivery: { state: "SUCCESS", at: 6 } } };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.ok(!("mail" in out));
+  assert.ok(!JSON.stringify(out).includes("example.org"));
+});
+
+test("only the session's own mail queue is removed, not a content id that happens to be 'mail'", () => {
+  const sess = accountIdSession();
+  sess.rooms["Room 1"].sections = { 1: { revealed: { mail: { by: "Ann", at: 40 } } } };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.deepStrictEqual(out.rooms["Room 1"].sections[1].revealed.mail, { by: "Student-A", at: 40 });
+});

@@ -85,7 +85,7 @@ from `.github/workflows/pseudonymise-export.yml` over every **closed**,
 | --- | --- |
 | (a) Controller and contact | [PLATFORM OPERATOR LEGAL NAME AND ADDRESS]; DPO [DPO]. The same placeholders as §1, and for the same reason — this record cannot be more determinate than the contract it sits beside. |
 | (b) Purposes | Educational-research analysis and publication (the CaNaMED study). |
-| (c) Categories of data subjects and of personal data | Participants in closed sessions **who gave research consent**. Pseudonymised session data; **free-text answers verbatim**; knowledge-test and wrap-up questionnaire responses; university (bucketed). Plus a real-name → pseudonym **linkage table**. |
+| (c) Categories of data subjects and of personal data | Participants in closed sessions **who gave research consent**: pseudonymised session data; **free-text answers verbatim**; knowledge-test and wrap-up questionnaire responses; university (bucketed); **the study's join key `stableId`, as written — for a signed-in participant, their account identifier**. **Participants who did NOT consent**, for what they wrote into a room's shared lists (free text, name redacted). **The facilitator**, for the text they authored (scenario, labels, score tags; name redacted). Plus a real-name → pseudonym **linkage table** (consenting participants only). ⚠️ **Files written by transform version 1 hold more than this row says** — see the note below the table. |
 | (d) Categories of recipients | The named CaNaMED research team at the controlling institutions. **Scaleway** (object storage, `fr-par`). **GitHub, Inc.** (executes the job — §4). |
 | (e) Third-country transfers | **GitHub Actions runners, United States** — DPF adequacy (§4). No other transfer identified for this activity; the storage is `fr-par`. |
 | (f) Retention | Research dataset **up to 5 years after publication**. Linkage table **14 days**, enforced by an object-storage lifecycle rule. |
@@ -109,6 +109,41 @@ onto the operator.**
    name, not a legal characterisation.
 3. **The APPI Art. 27/28 analysis for this activity is not done.** It is owed by
    the operator as controller, and is not covered by anything in §2.
+
+⚠️ **Row (c) was rewritten on 2026-10-08, after the export job was run and its
+file read for the first time** (DPA Annex VI **R10** and **G1**). Two things
+follow, and they are different.
+
+**What row (c) now admits, and is true of every file, old and new:**
+
+- **Participants who declined research use are data subjects of this export.**
+  Their pool row and everything keyed by their identifiers are removed; what
+  they wrote into shared lists is exported with the name redacted. The lawful
+  basis stated below — consent — does not cover them. That is an open question
+  for the controller (G1), not a drafting point.
+- **So is the facilitator**, through the text they authored.
+- **`stableId` is exported as written.** It has been for as long as the field
+  has existed; it is named because a record that calls the data
+  "pseudonymised" and omits the one identifier it keeps is not complete.
+
+**What files written by transform version 1 hold in addition** — that is, every
+file without a `transformVersion` field:
+
+- the **real display name and university of everyone who contributed**,
+  consenting or not, and the **facilitator's name**, inside the recorded room
+  events;
+- the **account identifier** (Firebase auth UID) of the facilitator who created
+  each session; of the scenario's author, in the few sessions that carry a
+  scenario reference; and, for sessions created from 2026-08-03, of
+  participants, as the key of their room claim;
+- **e-mail addresses**, in any session that still held the queue of the mail
+  function removed on 2026-09-24 (whether any did was not established).
+
+Transform version 2 removes all of these. **A file already written is not
+changed by that**, in the archive or in any copy taken from it, and the
+boundary is the file's own `transformVersion`, not a date. What is done about
+the version-1 files, and whether their contents must be assessed as a personal
+data breach, is the operator's decision as controller — R10, item 1.
 
 **A2 — [RESERVED].** DPA clause 2.4 lists further processing the operator carries
 out as a controller (operational security logs, facilitator accounts, the

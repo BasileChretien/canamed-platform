@@ -19,6 +19,29 @@
  * security review). Linkage table { sessionCode: { realName: pseudoCode } } is
  * written separately so researchers operate only on the pseudonymised export.
  *
+ * WHICH TRANSFORM WROTE A FILE is in the file: `transformVersion`
+ * (scripts/lib/pseudonymise.js, TRANSFORM_VERSION). A file WITHOUT that field
+ * was written by version 1, and carries what version 1 let through:
+ *   - the real display name and university of everyone who contributed —
+ *     participants who had declined research use included — and the
+ *     facilitator's name, inside the JSON string of each room event's `payload`;
+ *   - the facilitator's Firebase auth uid (`creatorUid`), the scenario
+ *     author's where a scenario reference was set (`scenarioRef.ownerUid`),
+ *     and a participant's as the key of each `roomOf` entry (sessions created
+ *     from 2026-08-03 on);
+ *   - e-mail addresses, where a session still held the queue of the mail
+ *     function removed on 2026-09-24.
+ * Do not date this by the calendar: the job runs once a night on whatever
+ * `main` holds, so the first file written by version 2 is the first one that
+ * says so. A fix to the transform does not rewrite a stored file; what is done
+ * about the files already written is the decision of the controller of this
+ * export (legal/dpa-draft.md, Annex VI R10).
+ * `stableId` is NOT removed by either version: see the transform's header.
+ * The `note` in the payload states all of this for whoever opens the file.
+ *
+ * tests/pseudonymise-export-run.test.js RUNS this script against an in-memory
+ * database and reads the file it writes.
+ *
  * Closed sessions only (active sessions could still receive writes that
  * would not be pseudonymised). Use the in-memory copy; don't mutate the
  * live database — researchers consume the export, not the DB.
@@ -62,7 +85,7 @@ const fs = require("fs");
 const path = require("path");
 const { chooseDestination, uploadArchive, describeDestination } = require("./lib/archive");
 const { pseudonymiseSession, sessionHasConsent, hasResearchConsent,
-        applyWithdrawals } = require("./lib/pseudonymise");
+        applyWithdrawals, TRANSFORM_VERSION } = require("./lib/pseudonymise");
 const { readSessionLocations } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -182,16 +205,34 @@ async function main() {
     exportTakenAt: new Date().toISOString(),
     databaseUrl: DB_URL,
     sessionCount: consentedCodes.length,
+    transformVersion: TRANSFORM_VERSION,
     sessions: pseudonymised,
-    note: "Pseudonymised export. CONTAINS ONLY PARTICIPANTS WHO GAVE RESEARCH CONSENT " +
-      "(pool/<clientId>/consent.research === true); everyone else — including anyone " +
-      "whose record predates the consent field — is excluded, and sessions where nobody " +
-      "consented are omitted entirely. Participant names -> Student-A/B/... per session; " +
-      "unknown names (facilitators) redacted; free-text LLM chat dropped; university " +
-      "bucketed to Univ-N; auth-uid mappings dropped and uid-keyed membership rekeyed to " +
-      "pseudonyms (no cross-session linkage). See scripts/lib/pseudonymise.js for " +
-      "guarantees. Linkage table is in a separate artefact with shorter retention " +
-      "(see workflow)."
+    note: "Pseudonymised export, written by transform version " + TRANSFORM_VERSION +
+      " (the transformVersion field; scripts/lib/pseudonymise.js). " +
+      "WHO IS IN IT: sessions where nobody consented to research are omitted. In the " +
+      "others, only a participant with pool/<clientId>/consent.research === true has a " +
+      "pool row, a linkage entry, or any node keyed by their identifiers. A participant " +
+      "who declined, or whose record predates the consent field, is NOT erased from " +
+      "the file: what they wrote into the room's shared lists (answers, replies, " +
+      "hypotheses, deleted answers) is still here, with the name redacted. " +
+      "NAMES: participant names -> Student-A/B/... per session, in name/by fields and " +
+      "inside the JSON payload of room events; names that are not a consenting " +
+      "participant's (facilitators, participants who declined) -> REDACTED-NAME; " +
+      "university bucketed to Univ-N; the LLM chat is dropped. A name typed inside " +
+      "free text is not caught, and free text other than the chat is exported as written. " +
+      "ACCOUNT IDENTIFIERS: the clientMapping and stableIdMapping tables, creatorUid, " +
+      "scenarioRef.ownerUid, roomOf and any legacy mail queue are dropped; the account " +
+      "uids keying members are replaced by the pseudonyms. " +
+      "NOT FREE OF CROSS-SESSION IDENTIFIERS: stableId, the study's join key, is kept " +
+      "as written (in pool, tests, survey, poll, and as the key of each ballot). For a " +
+      "participant who was signed in it is their Firebase account identifier, the same " +
+      "in every session; for an anonymous one it is a random value kept in the browser, " +
+      "carried into the next session unless they left through Leave or changed session. " +
+      "EARLIER FILES: a file with no transformVersion field was written by version 1 " +
+      "and also carries real names and universities inside event payloads " +
+      "(rooms/*/events/*/payload), creatorUid, scenarioRef.ownerUid, account uids as " +
+      "the keys of roomOf, and any mail queue with its e-mail addresses. " +
+      "The linkage table is a separate artefact with shorter retention (see workflow)."
   };
   const linkagePayload = {
     exportTakenAt: new Date().toISOString(),
