@@ -56,9 +56,14 @@
  *   - It pairs a `.write` with the `.validate` on the SAME node only. A
  *     `.validate` does not run on a delete, so a write tied only by its
  *     validator can still be deleted by whoever passes the `.write`.
- *   - It reads the two session subtrees and nothing above them: `recovery/`,
- *     `adminSecrets/`, `roomChat/` and the other top-level trees are not this
- *     file's.
+ *   - It reads each rule ON ITS OWN, and a `.write` cascades. A rule on a
+ *     container that names its writer reads as closed and still hands that
+ *     writer everything underneath. A separate test refuses any `.write` at
+ *     or above the session node and on a parent of the eight configuration
+ *     nodes; a writer-naming rule on another container (`rooms`, a room) is
+ *     NOT seen by anything here.
+ *   - `recovery/`, `adminSecrets/`, `roomChat/` and the other top-level trees
+ *     are not this file's.
  *   Whether a rule HOLDS is settled on the emulator
  *   (tests-e2e/emulator/session-config-creator-bound.spec.js), where every
  *   denial is paired with an allow.
@@ -283,11 +288,34 @@ test("nothing at or above a session grants a write — one there would cascade o
   ];
   for (const [label, node] of above) {
     const w = node[".write"];
-    assert.ok(w === undefined || w === false || w === "false",
+    assert.ok(w === undefined || w === false,
       `${label} carries ".write": ${JSON.stringify(w)}. A write granted here cascades over every ` +
-      "session node, the eight configuration nodes included, and no deeper rule can take it back.");
+      "session node, the eight configuration nodes included, and no deeper rule can take it back. " +
+      "(Only an absent rule or the boolean false is accepted: a string is an expression, and the " +
+      "test above would read it as a rule.)");
   }
-  assert.strictEqual(rules[".write"], false, "the root must refuse writes outright, not leave them undeclared");
+  assert.strictEqual(rules[".write"], false, "the root must refuse writes outright, with the boolean false");
+
+  /* The same cascade from BETWEEN the session node and one of the eight: a
+     `.write` on `sectionBodies` that names its writer — "any member" — reads
+     as closed above and hands that writer every `sectionBodies/$slot`, at any
+     time, past the creator-only rule (found in review, by adding one). Only
+     the eight are covered: `rooms` and the other containers are not this
+     file's subject, and a nested write is legitimate elsewhere
+     (`pool/$clientId` and `pool/$clientId/room`). */
+  for (const [label, node] of TREES) {
+    for (const at of IN_BATCH.concat(NOT_IN_BATCH)) {
+      const parts = at.split("/").filter(Boolean);
+      let n = node;
+      for (const part of parts.slice(0, -1)) {
+        n = n[part];
+        assert.ok(n && typeof n === "object", `${label}${at}: no rule node at '${part}'`);
+        assert.ok(n[".write"] === undefined || n[".write"] === false,
+          `${label}: '${part}', a parent of ${at}, carries ".write": ${JSON.stringify(n[".write"])} — ` +
+          `it cascades over ${at} whatever that node's own rule says`);
+      }
+    }
+  }
 });
 
 test("the eight configuration nodes carry one of two rules, and it is the right one for each", () => {

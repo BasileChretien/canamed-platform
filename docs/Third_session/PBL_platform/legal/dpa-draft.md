@@ -4495,8 +4495,10 @@ application itself was not changed.
    it replaces the password, and the session still has one. The rules do
    leave one way back in, which the application never takes: whoever holds the
    session's recovery code can, during a reset, remove the password marker
-   instead of replacing it, and the configuration is then open again — to the
-   session's creator alone (read from the rules; not run).
+   instead of replacing it, and the configuration is then open again — on a
+   session that has a creator, to that creator alone; on one that has none
+   (created before 2026-05-27), to whoever then claims it (read from the
+   rules; not run).
 5. **Seven other writes inside a session's rooms name no identity at all**: a
    room's team name, its roleplay round, a call for help, the revealing of a
    case item (two paths), the room's event log, and replies to answers. Run on
@@ -4511,19 +4513,33 @@ application itself was not changed.
    password reset in progress, which any signed-in visitor may do; and ten
    that are open for a browser identity nobody has claimed yet — the
    participant list and the poll, and the eight room writes Annex II §2 names.
-   **R3 records the ten as "a narrow window before identity bindings commit".
-   The rules allow more than that, and no decision has been recorded on the
-   difference:** an identity the writer invents is never claimed by anyone, so
-   the write stays open for as long as the session does, to anyone signed in
-   who has the code, in any room — an entry in the participant list (with a
-   consent record of its own making), a ballot that is counted, and a test or
-   a survey row. The research export reads all of those nodes and keeps what
-   belongs to an entry recording consent; whether such a row reaches an
-   exported file was not run. Read from the rules and the export's code.
-   Correcting the seven changes none of this. Until both are settled, R3's "a participant with developer tools"
-   understates who can do this: it is anyone with the code, in the session or
-   not. **[CONTROLLER TO DECIDE: accept the ten as they are, with R3 reworded
-   to say what they allow, or have them bound to a claimed identity.]**
+   **What is on record for the ten is less than the rules allow, and no
+   decision has been recorded on the difference.** R3 accepts "a narrow window
+   before identity bindings commit", and names one of the ten — the poll; the
+   repository's notes extend that by analogy to the participant list, presence
+   and the typing indicator. The ballots, the observer flag, the role choice,
+   the two tests and the survey are in neither record. And it is not a window:
+   an identity the writer invents is never claimed by anyone, so the write
+   stays open for as long as the session does, to anyone signed in who has the
+   code, in any room — an entry in the participant list (with a consent record
+   of its own making), a ballot that is counted, and a test or a survey row.
+   Read from the rules.
+   **The research export does not filter these out** (run on 2026-10-08 on the
+   export's own transform, with a made-up session; the export job itself was
+   not run). It removes only what is keyed by a participant-list entry that
+   does *not* record consent. A poll answer, a ballot, a test row and a survey
+   row under an identity with no entry at all were all kept; and one forged
+   entry recording consent was enough for a session in which no real
+   participant had consented to pass the export's consent gate. Two limits:
+   only closed sessions are exported, and all ten writes are refused once a
+   session is closed, so such a row has to be written while the session is
+   open.
+   Correcting the seven changes none of this. Until both are settled, R3's "a
+   participant with developer tools" understates who can do this: it is anyone
+   with the code, in the session or not. **[CONTROLLER TO DECIDE: accept the
+   ten as they are, with R3 reworded to say what they allow, or have them
+   bound to a claimed identity; and whether the export should keep a row that
+   belongs to no consenting entry.]**
 
 [CONTROLLER — DATE THE RULES WERE DEPLOYED: ____ ]
 
