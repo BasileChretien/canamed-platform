@@ -19,6 +19,18 @@
  * security review). Linkage table { sessionCode: { realName: pseudoCode } } is
  * written separately so researchers operate only on the pseudonymised export.
  *
+ * ACCOUNT IDENTIFIERS. The transform also removes Firebase auth uids: it drops
+ * the two mapping tables and rekeys `members` to the pseudonyms (since
+ * 2026-07-23), and it drops `creatorUid` and `scenarioRef.ownerUid` and rekeys
+ * `roomOf` (ONLY SINCE 2026-10-08). Every file this job wrote before that date
+ * carries the facilitator's uid, the scenario author's where a scenario
+ * reference was set, and each consenting participant's as a `roomOf` key
+ * (sessions from 2026-08-03 on).
+ * Fixing the transform does not rewrite those files; what is done about them
+ * is the controller's decision (legal/dpa-draft.md, Annex VI R10).
+ * `stableId` is NOT removed: it is the study's join key, and for a signed-in
+ * participant it is their auth uid. The `note` in the payload says so.
+ *
  * Closed sessions only (active sessions could still receive writes that
  * would not be pseudonymised). Use the in-memory copy; don't mutate the
  * live database — researchers consume the export, not the DB.
@@ -188,8 +200,15 @@ async function main() {
       "whose record predates the consent field — is excluded, and sessions where nobody " +
       "consented are omitted entirely. Participant names -> Student-A/B/... per session; " +
       "unknown names (facilitators) redacted; free-text LLM chat dropped; university " +
-      "bucketed to Univ-N; auth-uid mappings dropped and uid-keyed membership rekeyed to " +
-      "pseudonyms (no cross-session linkage). See scripts/lib/pseudonymise.js for " +
+      "bucketed to Univ-N. Firebase account identifiers removed: the clientMapping and " +
+      "stableIdMapping tables, creatorUid and scenarioRef.ownerUid are dropped, and the " +
+      "uid keys of members and roomOf are replaced by the pseudonyms. NOT FREE OF " +
+      "CROSS-SESSION IDENTIFIERS: stableId, the study's join key, is kept as written (in " +
+      "pool, poll, tests, survey, and as the key of each ballot); it is the same in every " +
+      "session joined from one browser, and for a participant who was signed in it is their " +
+      "Firebase account identifier. Free text other than the chat is exported verbatim. " +
+      "Exports written before 2026-10-08 also carried creatorUid, scenarioRef.ownerUid and " +
+      "account identifiers as the keys of roomOf. See scripts/lib/pseudonymise.js for " +
       "guarantees. Linkage table is in a separate artefact with shorter retention " +
       "(see workflow)."
   };

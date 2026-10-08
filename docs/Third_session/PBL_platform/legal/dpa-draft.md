@@ -1858,9 +1858,23 @@ that could not be confirmed from the code is marked.*
   - as a safety net, replaces any string that **exactly equals** a known
     participant name, including bare strings inside arrays;
   - uses null-prototype maps so a participant named `__proto__` cannot collide
-    with a built-in property.
+    with a built-in property;
+  - removes Firebase account identifiers (auth UIDs). Since 2026-07-23 it drops
+    the `clientMapping` and `stableIdMapping` tables and replaces the UID keys
+    of `members` with the participant's per-session pseudonym. **Only since
+    2026-10-08** does it also drop the session's `creatorUid` and
+    `scenarioRef.ownerUid` and rekey `roomOf` the same way: until then every
+    export carried the facilitator's UID, the scenario author's where a
+    scenario reference was set, and each consenting participant's. An entry
+    whose UID belongs to no consenting participant is removed. See Annex VI,
+    R10.
 - **What it does NOT do — stated plainly.** Everything else passes through
-  **verbatim**. That includes the wrap-up questionnaire's five free-text items
+  **verbatim** — **including `stableId`**, the study's join key, which is the
+  same in every session joined from one browser and, for a signed-in
+  participant, *is* their account UID (Annex VI, R8 and R10). The output is
+  therefore **not free of cross-session identifiers**, and no description of it
+  should say so. What passes also includes the wrap-up questionnaire's five
+  free-text items
   (up to 2,000 characters each), the room `answers` and `answerReplies`, the
   Module A `hypotheses`, and the `poll.hardest` field (280 characters). The
   module's own comment explains that chat is dropped because "a name embedded in
@@ -4476,6 +4490,21 @@ Controller must weigh this in its DPIA. Under APPI the export is neither
 treatment to the long free-text items as to chat, or hold the export to a
 reviewed-release process.
 
+> **The list above is shorter than what passes — measured 2026-10-08.** Every
+> field `database.rules.json` declares in a session was run through the
+> transform with a marker in it. Besides the items named above, these reach the
+> export as written: the facilitator's `controller` and `workshopLabel`; the
+> authored scenario (`scenarioCustomJson`, up to 262,144 characters, and each
+> `sectionBodies` entry, up to 131,072); a room's `teamName` and its
+> call-for-help message (200); the tag on a manual score (60); the payload of
+> a room event and of an admin audit entry (500 each); the text of a *deleted*
+> answer (1,000); and the three links (`teamsLink`, `questionnaireLink`,
+> `preQuestionnaireLink`). None of this was changed on that date — the
+> correction made then concerns account identifiers only (R10). The links
+> deserve a separate look by whoever reviews this item: a meeting or form link
+> can carry identifiers of the organiser's account inside the address, which
+> was not examined here.
+
 **R9 — No Art. 28 contract with GitHub, accepted by the Processor and put to
 the Controller (2026-09-02).** GitHub, Inc. processes personal data on the
 Processor's instructions — the scheduled retention, credential-expiry and
@@ -4609,6 +4638,117 @@ code comment — so researchers can **deduplicate participants across sessions**
 It serves a research purpose rather than service delivery, and appears nowhere in
 the notice. **[CONTROLLER / DPO TO DECIDE its lawful basis, and whether it should
 be set only for participants who ticked the research box.]**
+**It is also in the pseudonymised research export, as written** — the one
+identifier that export keeps on purpose. Where, and what that means for a
+signed-in participant, is R10 item 2.
+
+**R10 — (new, 2026-10-08). CORRECTED IN THE TRANSFORM; THE FILES ALREADY WRITTEN
+ARE NOT. The pseudonymised research export carried Firebase account
+identifiers.**
+
+*Measured on 2026-10-08 by running the transform (`scripts/lib/pseudonymise.js`)
+on sessions built from every field `database.rules.json` declares. No file in
+the archive was opened and the production database was not read.*
+
+Since 2026-07-23 the transform has dropped the two tables that bind a browser
+identity to an account (`clientMapping`, `stableIdMapping`) and replaced the
+account UIDs that key `members` with pseudonyms. Its stated reason: an account
+UID is the same in every session, so it re-links what per-session pseudonyms
+keep apart, and it is the key of the account record. Three other places in a
+session hold one. None was handled, and each reached the export as written:
+
+| Field | Whose account | In the rules since |
+|---|---|---|
+| `creatorUid` | The facilitator who created the session — not a research participant, and never asked for research consent | 2026-05-27 |
+| `scenarioRef.ownerUid` | Whoever authored the scenario the session ran; for a *shared* scenario, a person who was not in the session at all. Present only where a session was created from an authored scenario | 2026-05-29 |
+| the key of each `roomOf` entry | **Each participant in the export**, with their `clientId` inside the entry — the join the dropped `clientMapping` table held, the other way round | 2026-08-03 |
+
+A participant who had not consented to research was already removed from
+`roomOf`, as from everywhere else. The third row therefore concerns consenting
+participants, and any account holding a room claim without a pool row.
+
+**What that means.** An account UID is not a name. But it is identical in every
+session, so a participant's "Student-A" in one exported session and "Student-C"
+in another could be matched — which the export's own note said could not be
+done. Whoever can read the project's account list can go from a UID to the
+account and, for a signed-in account, to its e-mail address; today that is the
+operator. For the facilitator there is a shorter path: `creatorUid` and
+`created/by` (the facilitator's display name) are both readable by any signed-in
+visitor who knows the session's code, for as long as the session is in the
+database (read from the rules; not run — see Annex II §2). And the facilitator
+and the scenario author are data subjects of this export whom its Art. 30(1)
+record did not list (`record-of-processing.md`, §2A).
+
+**What changed.** `creatorUid` and `ownerUid` are dropped, and `roomOf` is
+rekeyed to the participant's pseudonym like `members`, an entry whose UID
+belongs to no consenting participant being removed. `creatorUid` is dropped
+rather than replaced by a pseudonym: a session has one creator, so a stand-in
+would be the same constant in every session, and the one thing it could convey
+— which participant, if any, the creator also was — singles the facilitator out
+among the participants. `scenarioRef` keeps `scenarioId` and `source`: which
+scenario a session ran is research content. The repository's tests now derive
+from the rules every position that holds an account UID and run the transform
+on each, so an identifier the rules gain later fails a test instead of reaching
+an export. Nothing downstream read either dropped field: the scripts that use
+`creatorUid` read the database or the identified backup, never this export.
+
+**What this does not do.**
+
+1. **It does not change a file that was already written.** The job's run list
+   shows 37 runs, all successful, from 2026-09-02 to 2026-10-07; the newest
+   wrote a file of 4 sessions and 5 participants. Each night's file holds every
+   closed, research-consented session then in the database, so one session
+   appears in many files. By the documented 90-day object lifecycle none of
+   those files has expired yet **[TO VERIFY: that the Scaleway bucket carries
+   that rule — the repository holds the rule file written for the earlier
+   Google bucket, and no record of it being applied to this one]**. Before
+   that the job wrote to the Google bucket: the run list shows 85 successful
+   runs from 2026-05-30 to 2026-08-26 **[TO VERIFY: whether that bucket and its
+   contents still exist now that billing is closed]**; the files from before
+   2026-07-23 also carry both mapping tables whole, and participants
+   regardless of research consent (G1). A copy taken
+   out of the archive for analysis is outside every lifecycle rule — the
+   research dataset's stated retention is five years after publication.
+   **[CONTROLLER OF THE EXPORT (the operator — clause 2.6) TO DECIDE: whether
+   the stored files are left to expire, deleted now, or rewritten without the
+   three fields; whether any copy was taken, and by whom; and whether any of
+   this needs recording or assessing under clause 9.]** No tool that rewrites a
+   stored export exists; none was written.
+2. **`stableId` is still exported, as written — and for a signed-in participant
+   it is their account UID.** It is the study's join key: the protocol joins
+   pre-test, post-test and questionnaire on it. Run on 2026-10-08, it came
+   through in `pool/<clientId>/stableId`, in each test and questionnaire
+   record, in `poll` where present, and as the key of each ballot. (Not in
+   answers: an answer carries the per-tab `clientId` and reaches a `stableId`
+   only through `pool`.) It is the same in every session joined from one
+   browser. So the export is **not free of cross-session identifiers**, and for
+   a participant who was signed in it still carries exactly the identifier this
+   item removes elsewhere. Replacing it with a per-session value would remove
+   the link and, with it, the join the protocol depends on; treating only the
+   signed-in case would handle two groups of participants differently. Neither
+   was done. **[CONTROLLER / DPO TO DECIDE, with R8.]**
+3. **The facilitator's own "pseudonymised" archive is a different transform and
+   removes no account identifier at all.** The dashboard's "Pseudonymise names
+   in export" tick-box calls `pseudonymiseTree()` in `lib.js`, which replaces
+   names. Run on 2026-10-08 on a sample session: `creatorUid`,
+   `scenarioRef.ownerUid`, the keys of `members` and `roomOf`, and both mapping
+   tables all came through. Its code comment says it matches the nightly
+   export's strategy; it has not since 2026-07-23. It does not apply research
+   consent either. It produces the Controller's own copy of its own session, in
+   the Controller's browser — but the code describes the file as "meant to be
+   shareable". Not changed here.
+4. **`scenarioId` still says which scenario ran.** For a *shared* scenario, the
+   library any signed-in user can read lists that scenario with its author's
+   display name — by the author's own choice to share it (read from the rules
+   and the client; not run).
+5. **The per-tab `clientId` still keys the pool.** It is random per browser
+   tab, but it lives in `sessionStorage` and is not cleared on leaving a
+   session, so a tab that joins a second session without being closed carries
+   the same value into both (read from the client; not run).
+6. **Free text and links pass as written.** R7, whose list was extended the
+   same day.
+
+[OPERATOR — DATE THE CORRECTED TRANSFORM FIRST RAN: ____ ]
 
 ---
 

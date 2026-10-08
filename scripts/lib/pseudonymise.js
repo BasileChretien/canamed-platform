@@ -48,6 +48,39 @@
  *     analyst re-link "Student-A" in one session to "Student-C" in another,
  *     defeating the per-session pseudonymisation. They are read for the
  *     stableId join first, then discarded.
+ *
+ * ACCOUNT IDENTIFIERS OUTSIDE THOSE TWO TABLES (2026-10-08):
+ *   Dropping the two mapping tables was not enough: three more places held an
+ *   auth uid, and until this date every export carried them verbatim. Found by
+ *   running this function on a session shaped like a real one.
+ *   - `creatorUid` — the facilitator's account. DROPPED, not replaced by a
+ *     pseudonym: a session has exactly one creator, so a stand-in would be the
+ *     same constant in every session and say nothing, and the one thing it
+ *     could say — which pool participant, if any, the creator also was — picks
+ *     the facilitator out among the participants. Uid-keyed maps likewise drop
+ *     a facilitator's entry rather than give it a stand-in.
+ *   - `ownerUid` (in `scenarioRef`) — the account that authored the scenario;
+ *     for a shared scenario, somebody who was never in the session. DROPPED,
+ *     whatever it holds: the rules validate it as a string, not as a uid.
+ *     `scenarioId` and `source` stay — which scenario ran is research content.
+ *   - `roomOf/<uid>` — EVERY participant's account, as a key, next to their
+ *     clientId: the join `clientMapping` was dropped to withhold, the other way
+ *     round. REKEYED like `members`, because who was in which room is research
+ *     content; an entry whose uid maps to no consenting participant is removed.
+ *     `roomOf` reached the rules on 2026-08-03, after the list below was
+ *     written, and nothing tied the two.
+ *   tests/pseudonymise-uid-coverage.test.js now derives these positions from
+ *   database.rules.json and runs this function on each, so that a uid the
+ *   rules gain later fails a test instead of reaching an export.
+ *
+ * WHAT IS STILL CARRIED, ON PURPOSE — `stableId`:
+ *   It is the study's join key (pre-test, post-test, questionnaire) and it is
+ *   left exactly as written: in `pool`, `poll`, `tests`, `survey`, and as the
+ *   key of each ballot. It is the same in every session joined from one
+ *   browser, and for a participant who is SIGNED IN it is their auth uid. So
+ *   this export is not free of cross-session identifiers, and must not be
+ *   described as if it were. Whether that should change is the controller's
+ *   decision (legal/dpa-draft.md, Annex VI R8), not this module's.
  */
 
 const REDACTED_NAME = "REDACTED-NAME";
@@ -59,13 +92,15 @@ const DROP_KEYS = new Set([
   "_superadminReset",  // facilitator name + recovery code (transient)
   "chat",              // free-text LLM turns: a name embedded in prose can't be exact-matched
   "clientMapping",     // clientId -> auth uid: a CROSS-SESSION identifier (see header)
-  "stableIdMapping"    // stableId -> auth uid: ditto
+  "stableIdMapping",   // stableId -> auth uid: ditto
+  "creatorUid",        // the facilitator's auth uid (see header: dropped, not pseudonymised)
+  "ownerUid"           // scenarioRef.ownerUid: the scenario author's auth uid
 ]);
 
 // Nodes whose CHILD KEYS are Firebase auth uids. Their keys are rewritten to
 // per-session pseudonyms so the map keeps its shape (and its research value)
 // without exporting an identifier that is stable across sessions.
-const UID_KEYED = new Set(["uidMembers", "members"]);
+const UID_KEYED = new Set(["uidMembers", "members", "roomOf"]);
 
 /**
  * Did this participant opt in to research use? Fail-closed: only an explicit
@@ -174,7 +209,8 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
 
   // Keys to delete wherever they appear: the excluded participants' clientIds,
   // plus the stableIds/uids that resolve to them. `votes/ballots` is keyed by
-  // stableId and `uidMembers`/`members` by uid, so clientId alone misses them.
+  // stableId and `members`/`roomOf`/`uidMembers` by uid, so clientId alone
+  // misses them.
   const clientMapping = sess.clientMapping || {};
   const stableIdMapping = sess.stableIdMapping || {};
   const excludedUids = new Set(

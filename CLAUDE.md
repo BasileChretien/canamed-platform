@@ -1788,6 +1788,72 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   the pure, unit-tested `scripts/lib/pseudonymise.js` (drops chat + facilitator
   transient fields, redacts unknown names, collision-safe, buckets university).
   Also `cleanup-stale-sessions.js` redacts `e.message` in `CLEANUP_QUIET` mode.
+  - ⚠️ **The export still carried ACCOUNT IDENTIFIERS — ✅ fixed in the
+    transform 2026-10-08; ⛔ the files already written are NOT changed, and one
+    identifier is still exported on purpose.** Found by RUNNING
+    `pseudonymiseSession()` on a session shaped like a real one, not by reading
+    it. #232 (2026-07-23) dropped `clientMapping` / `stableIdMapping` and
+    rekeyed `members`, because an auth uid is the same in every session. Three
+    other places held one and passed it verbatim:
+    `creatorUid` (the facilitator), `scenarioRef.ownerUid` (the scenario's
+    author — for a shared scenario, somebody who was never in the session) and
+    **the key of every `roomOf/<uid>` entry: each consenting participant's uid,
+    with their clientId inside** — the join `clientMapping` was dropped to
+    withhold, the other way round. `roomOf` entered the rules on 2026-08-03
+    (#268), after `UID_KEYED` was written; the erasure planner listed it
+    (`BY_UID`), the pseudonymiser did not, and nothing tied the two.
+    - **Fix:** `creatorUid` and `ownerUid` are DROPPED, `roomOf` is REKEYED
+      like `members`. Dropped, not pseudonymised: one creator per session is a
+      constant, and the only thing a stand-in could say — which participant
+      the creator also was — singles the facilitator out. `scenarioRef` keeps
+      `scenarioId` + `source`. Nothing downstream read either field: every
+      script that uses `creatorUid` reads the database or the identified
+      BACKUP (the backfill refuses a file with no `backupTakenAt`).
+    - **Why no test caught it.** `tests/pseudonymise.test.js` pinned the list
+      AS IT THEN WAS, which a list one short passes. The positions are now
+      DERIVED from `database.rules.json` — a `$uid` wildcard, a value the rule
+      compares with `auth.uid`, a field named `uid` / `…Uid` — and the real
+      function is run on each (`tests/pseudonymise-uid-coverage.test.js`, both
+      trees). What it cannot see: a field the client writes that no rule names,
+      and a uid under a name that says nothing (`ownerUid` is found by its name
+      alone — its rule asks only for a string).
+    - ⛔ **The stored exports are untouched, and that is not code.** The run
+      list shows 37 successful runs to Scaleway (2026-09-02 → 10-07; the newest
+      held 4 sessions, 5 participants) and 85 to the Google bucket (2026-05-30
+      → 08-26). Whether the Scaleway bucket really has the 90-day lifecycle
+      rule, and whether the Google bucket still exists, is NOT established from
+      the repo. Leaving them to expire, deleting them or rewriting them is the
+      operator's decision as controller of the export — DPA Annex VI **R10**,
+      item 1. No tool rewrites a stored export.
+    - ⚠️ **`stableId` is still exported, as written — do NOT describe this
+      export as free of cross-session identifiers.** It is the study's join key
+      (`Research_design/study_protocol_SAP.md` §9), so rewriting it breaks the
+      pre ↔ post ↔ questionnaire join. It sits in `pool`, `tests`, `survey`,
+      `poll` and as each ballot's key, and **for a signed-in participant it IS
+      the auth uid**. The export's own `note` used to say "no cross-session
+      linkage"; it now says the opposite. The test file lists every place it is
+      carried so the list cannot grow unnoticed — that list is NOT a decision
+      that carrying it is right (R8, R10 item 2: the controller's).
+    - ⚠️ **NOT fixed, and a separate change: the dashboard's "Pseudonymise
+      names in export" tick-box** (`pseudonymiseTree()` in `lib.js`) removes no
+      uid at all — run 2026-10-08, both mapping tables, `creatorUid`,
+      `ownerUid` and the `members` / `roomOf` keys came through. Its comment
+      says it matches the nightly export; it has not since 2026-07-23. `lib.js`
+      is a shell asset, so that fix carries a shell bump.
+    - **Also seen, not changed:** uid-keyed maps take the pseudonym of a
+      participant's LAST pool row while names keep the FIRST, so somebody with
+      two tabs and one name is `Student-A` in the pool and `Student-B` in
+      `members` / `roomOf` — a key no pool row carries (run, not read). And
+      the free text that passes is longer than DPA R7 listed; R7 now has the
+      measured list, including the three links.
+    - `Verify:` `node --test tests/pseudonymise.test.js
+      tests/pseudonymise-uid-coverage.test.js`. That tests the REPO. The job
+      checks out `main` when it runs, so the first scheduled run after the
+      merge uses the fix:
+      `gh run list --workflow pseudonymise-export.yml --limit 1 --json headSha,conclusion,createdAt`
+      — `headSha` must be the merge commit or later. A file written by the
+      fixed transform says so in its own `note` field ("creatorUid and
+      scenarioRef.ownerUid are dropped").
 - **Per-room write gating (P1)** — added the `uidMembers` gate to
   `score/auto`, `score/penalties`, `moduleA/hypotheses`, `moduleA/promptReplies`,
   `moduleB/exchangeReplies`, `votes/committed` (sessions + orgs) so a member of

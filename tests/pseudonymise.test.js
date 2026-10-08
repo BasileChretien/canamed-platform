@@ -321,3 +321,112 @@ test("sessionHasConsent detects whether a session may be exported at all", () =>
   assert.strictEqual(sessionHasConsent({ pool: {} }), false);
   assert.strictEqual(sessionHasConsent({}), false);
 });
+
+/* ============ ACCOUNT IDENTIFIERS outside the two mapping tables ============
+ * Found 2026-10-08 by running the function, not by reading it. The header says
+ * `clientMapping` / `stableIdMapping` are dropped because a Firebase auth uid
+ * is the same in every session, and `members` is rekeyed for the same reason.
+ * Three more places held one and none was handled:
+ *   - `creatorUid`            the facilitator's account
+ *   - `scenarioRef.ownerUid`  the account of whoever authored the scenario —
+ *                             for a shared scenario, somebody who was never in
+ *                             the session
+ *   - `roomOf/<uid>`          EVERY participant's account, as a key, with their
+ *                             clientId beside it: the join `clientMapping` was
+ *                             dropped to withhold, the other way round. Added
+ *                             to the rules on 2026-08-03, after this module's
+ *                             list of uid-keyed maps was written.
+ * tests/pseudonymise-uid-coverage.test.js derives that list from the rules so
+ * that it cannot be one short again; these pin the behaviour on a session
+ * shaped like a real one. */
+
+const FACILITATOR_UID = "FacilitatorAuthUid0000000001";
+const AUTHOR_UID = "ScenarioAuthorAuthUid0000002";
+const STUDENT_UID = "StudentAuthUid00000000000003";
+const DECLINER_UID = "DeclinerAuthUid0000000000004";
+
+function accountIdSession() {
+  return {
+    created: { by: "Dr Facilitator", at: 1 },
+    closed: { by: "Dr Facilitator", at: 1000 },
+    creatorUid: FACILITATOR_UID,
+    scenarioId: "chest-pain",
+    scenarioRef: { ownerUid: AUTHOR_UID, scenarioId: "chest-pain", source: "shared" },
+    members: {
+      [FACILITATOR_UID]: { at: 2 },
+      [STUDENT_UID]: { at: 10 },
+      [DECLINER_UID]: { at: 20 }
+    },
+    roomOf: {
+      [STUDENT_UID]: { room: "Room 1", cid: "c1" },
+      [DECLINER_UID]: { room: "Room 1", cid: "c2" }
+    },
+    clientMapping: { c1: STUDENT_UID, c2: DECLINER_UID },
+    pool: {
+      c1: { name: "Ann", university: "Caen", at: 10, room: "Room 1", consent: YES },
+      c2: { name: "Ben", university: "Caen", at: 20, room: "Room 1", consent: NO }
+    },
+    rooms: {
+      "Room 1": {
+        answers: { moduleA: { a1: { by: "Ann", cid: "c1", text: "differential is X", at: 30 } } }
+      }
+    }
+  };
+}
+
+test("no account identifier survives — the facilitator's, the scenario author's or a participant's", () => {
+  const sess = accountIdSession();
+  const before = JSON.stringify(sess);
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  for (const [who, uid] of [["the facilitator (creatorUid)", FACILITATOR_UID],
+                            ["the scenario author (scenarioRef.ownerUid)", AUTHOR_UID],
+                            ["a consenting participant (roomOf key)", STUDENT_UID],
+                            ["a participant who declined (roomOf key)", DECLINER_UID]]) {
+    // Anti-vacuity: a fixture that never held the uid would pass on its own.
+    assert.ok(before.includes(uid), "fixture is broken: it does not hold the uid of " + who);
+    assert.ok(!blob.includes(uid),
+      "the export still carries the Firebase auth uid of " + who + ". An auth uid is the " +
+      "same in every session, so it re-links what the per-session pseudonyms keep apart.");
+  }
+});
+
+test("the session's research content is still returned once the identifiers are gone", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.strictEqual(out.pool.c1.name, "Student-A");
+  assert.strictEqual(out.rooms["Room 1"].answers.moduleA.a1.text, "differential is X");
+  assert.strictEqual(out.rooms["Room 1"].answers.moduleA.a1.by, "Student-A");
+  assert.strictEqual(out.created.at, 1);
+  assert.strictEqual(out.closed.at, 1000);
+  assert.strictEqual(out.scenarioId, "chest-pain");
+});
+
+test("creatorUid is dropped, not replaced: one creator per session is not a variable", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.ok(!("creatorUid" in out));
+});
+
+test("a scenario reference keeps WHICH scenario ran and loses whose account holds it", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  assert.deepStrictEqual(out.scenarioRef, { scenarioId: "chest-pain", source: "shared" });
+});
+
+test("ownerUid is dropped whatever it holds — the rules ask only for a string", () => {
+  /* `scenarioRef.ownerUid` is validated as a string of at most 128 characters,
+     not as the writer's own uid, and until the rules bound `scenarioRef` to the
+     session's creator any signed-in visitor could write it. A replacement keyed
+     on "is this a uid we know" would pass anything else through. */
+  const sess = accountIdSession();
+  sess.scenarioRef.ownerUid = "someone@example.org";
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  assert.ok(!blob.includes("someone@example.org"));
+});
+
+test("roomOf is rekeyed by pseudonym like members: who was in which room, not which account", () => {
+  const out = pseudonymiseSession(accountIdSession(), "S1", {});
+  // Serialised form, as for uidMembers above: the rekeyed map is null-prototype.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(out.roomOf)),
+    { "Student-A": { room: "Room 1", cid: "c1" } },
+    "the consenting participant's claim is kept under their pseudonym; the decliner's, " +
+    "and any uid that maps to no consenting participant, is removed");
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(out.members)), { "Student-A": { at: 10 } });
+});
