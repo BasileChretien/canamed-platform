@@ -401,3 +401,48 @@ test("a close the server REFUSES says so, and does not send the facilitator to c
   expectServerDate((await dbReadAsOwner(base + "/closed")).at, step, "closed.at");
   await ctx.close();
 });
+
+test("a session ended from another tab: Close on the stale list says it is already closed", async ({ page, context }) => {
+  /* The same refusal as above — PERMISSION_DENIED — for a different reason:
+     `closed` is write-once, and the session has been ended elsewhere since
+     this list was drawn. Telling the facilitator to "open it with its
+     password and end it from the dashboard" would be wrong: it HAS ended.
+     Both tabs are the creator's (same context, same user), so nothing here is
+     refused for who is asking — only for the session already being closed. */
+  const { code, base } = await createSessionAs(page, "Clock Twice");
+  await page.reload();
+  await expect(page.locator("#splash-my-sessions-row")).toBeVisible({ timeout: 15_000 });
+  await page.locator("#splash-go-my-sessions").click();
+  const stale = page.locator(`.my-session-row[data-code='${code}']`);
+  await expect(stale.locator(".my-session-status"), "this tab has drawn the session as open")
+    .toContainText(/open/i, { timeout: 15_000 });
+
+  /* THE ALLOW LEG, first: the other tab closes it, through the same list and
+     the same rules. */
+  const other = await context.newPage();
+  await useEmulator(other);
+  await other.goto("/");
+  await expect(other.locator("#splash-my-sessions-row")).toBeVisible({ timeout: 15_000 });
+  await other.locator("#splash-go-my-sessions").click();
+  const theirs = other.locator(`.my-session-row[data-code='${code}']`);
+  await expect(theirs).toBeVisible();
+  await theirs.locator(".my-session-close").dispatchEvent("click");
+  await expect(other.locator("#canamed-modal")).toBeVisible({ timeout: 10_000 });
+  await other.locator("#canamed-modal-confirm").dispatchEvent("click");
+  await expect.poll(() => dbReadAsOwner(base + "/closed"),
+    { message: "the other tab's close must land", timeout: 15_000 }).not.toBeNull();
+  const first = await dbReadAsOwner(base + "/closed");
+
+  /* Now the stale tab. */
+  await expect(stale.locator(".my-session-close"), "the stale row still offers Close").toBeEnabled();
+  await stale.locator(".my-session-close").dispatchEvent("click");
+  await expect(page.locator("#canamed-modal")).toBeVisible({ timeout: 10_000 });
+  await page.locator("#canamed-modal-confirm").dispatchEvent("click");
+
+  await expect(stale.locator(".my-session-status"), "the page must say it is already closed")
+    .toContainText(/already closed/i, { timeout: 15_000 });
+  await expect(stale.locator(".my-session-status")).not.toContainText(/password|dashboard|server refused|connection/i);
+  await expect(stale, "and the row leaves the list").toHaveCount(0, { timeout: 10_000 });
+  expect(await dbReadAsOwner(base + "/closed"), "the first close stands: the second write was refused")
+    .toEqual(first);
+});

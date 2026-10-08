@@ -178,7 +178,9 @@ function downloadCertificatePdf() {
         sessionCode: sessionNum || "",
         sessionLabel: "",
         lang: (typeof getLang === "function") ? getLang() : "en",
-        dateStr: new Date().toLocaleDateString(),
+        // The day verify.html will show for this certificate: the record's
+        // `at` is the server's clock, so the PDF's date is taken from it too.
+        dateStr: new Date(serverNow()).toLocaleDateString(),
         partnership: "Université de Caen Normandie × Nagoya University",
         // Competencies omitted on purpose: the builder localizes its own
         // default set to data.lang. (A caller may still pass competencies to

@@ -2314,13 +2314,18 @@ observed — LOCAL mode models no rules — so these are static findings:**
     - **How.** `serverNow()` in `lib.js` is `Date.now()` plus the offset the
       SDK publishes at `.info/serverTimeOffset` (subscribed in `dbInit()`,
       shared mode only; the scenario editor is a separate page and keeps its
-      own). A NUMBER, deliberately not `ServerValue.TIMESTAMP`: the
+      own, subscribed by its first save and NOT at page load — touching the
+      database is what opens the realtime connection, and an editor tab left
+      open would hold one of the plan's simultaneous connections for
+      nothing). A NUMBER, deliberately not `ServerValue.TIMESTAMP`: the
       placeholder is an object until the server replaces it, LocalDB would
       store that object as the date, and some sixty sites read back, sort by
       or subtract what they wrote. The placeholder stays where it already was
       (`_superadminReset`, R3-D1). A stored date is also COMPARED on the
       server's clock now — minutes on a stage, the "facilitator may be
-      offline" banner, whether a chat reply is new.
+      offline" banner, whether a chat reply is new. And the certificate PDF
+      prints that clock's day, the one its published record carries and
+      `verify.html` shows.
     - **To fake a device clock in a test, replace `Date` itself**, not
       `Date.now()`: the SDK measures its offset with `new Date().getTime()`,
       so overriding `Date.now()` alone builds a device that cannot exist — the
@@ -2354,15 +2359,32 @@ observed — LOCAL mode models no rules — so these are static findings:**
     - **The two close messages** no longer blame the connection, or tell a
       facilitator to run `firebase deploy`, when the SERVER refused the write
       (`code === "PERMISSION_DENIED"`); they say it refused and what to do.
+      **A refusal has more than one cause, so the list checks before it
+      speaks:** a session ended from elsewhere since the list was drawn is
+      refused too (`closed` is write-once), and is reported as already
+      closed and pruned — the first version told its facilitator to open it
+      with the password and end it from the dashboard.
     - **Still open — proposed on the PR, not done:** a refused `created` still
       leaves a partial session, because the create batch issues its writes
       together. Awaiting `created` before the rest would stop that; it changes
-      the ordering every session creation passes through. And the dashboard
-      still downloads the archive again on every retry of a failed close.
+      the ordering every session creation passes through. The create form's
+      own message belongs with it: it still says "check your connection" for
+      any failure, a rules refusal included. And the dashboard still
+      downloads the archive again on every retry of a failed close.
     - `Verify:` `node --test tests/server-time.test.js` — the helper; an
-      INVENTORY of every device-clock read left in the client, so a new
-      `Date.now()` fails until someone says what it is for; and the dated
-      fields, derived from the rules. `tests-e2e/emulator/device-clock.spec.js`
+      INVENTORY of the device-clock reads left in the client, so a new one
+      fails until someone says what it is for; and the dated fields, derived
+      from the rules. **The inventory is a TEXT check, and sees what is
+      spelled:** `Date.now`, and any `new Date` with no argument that is not
+      formatted on the spot. Its first version listed the ways of turning a
+      Date into a number instead, and a review put `(new Date()).getTime()`,
+      `new Date() - 0` and `Date.parse(new Date())` into `createSession()`
+      with the suite still green. It flags the source now, not the
+      conversion. A clock reached through something that does not spell it —
+      an alias beyond the plainest, a helper in another file, a Date object
+      handed in — still gets past, and always will. For the fields it
+      exercises, the emulator spec is what holds: there the date is read
+      back from the database. `tests-e2e/emulator/device-clock.spec.js`
       — the real client with its clock ±1 h and ±13 h creates, joins,
       advances, writes and closes, every refusal paired with an allow. Those
       test the REPO. Live: set a device's clock an hour ahead, join a session

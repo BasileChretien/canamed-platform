@@ -141,16 +141,77 @@ test("that subscription feeds serverNow(): null is ignored, a number is adopted"
   assert.ok(lib.serverNow() <= before - 3600000 + 50, "the published offset must be applied");
 });
 
-test("the scenario editor is a page of its own and keeps its own offset", () => {
+test("the scenario editor keeps its own offset, and asks for it only when it saves", () => {
   /* scenario-author.html loads neither lib.js nor script.js, and `updatedAt`
-     has the same five-second lead as everything else. */
+     has the same five-second lead as everything else.
+     NOT AT PAGE LOAD: touching the database is what opens the realtime
+     connection. The first version subscribed as the page loaded, so every
+     editor tab left open held one of the plan's simultaneous connections; the
+     page used to connect only on a save or a listing. */
   const src = read("scenario-author-cloud.js");
-  assert.ok(src.includes('db.ref(".info/serverTimeOffset").on("value"'),
-    "scenario-author-cloud.js must subscribe to the server's clock offset");
-  assert.ok(/var now = Date\.now\(\) \+ serverOffset;/.test(src),
-    "and date a save with it");
+  const block = src.match(/  var serverOffset = 0;\n  var offsetWatched = false;\n  function watchServerOffset\(\) \{\n[\s\S]*?\n  \}\n/);
+  assert.ok(block, "could not lift watchServerOffset() out of scenario-author-cloud.js");
+  assert.strictEqual(src.split(".info/serverTimeOffset").length - 1, 1,
+    "one subscription to the offset in this file");
+  assert.ok(block[0].includes('db.ref(".info/serverTimeOffset").on("value"'),
+    "and it must be the one inside watchServerOffset(), not a statement run as the page loads");
+
+  /* The lifted block, run against a stand-in database. */
+  const calls = [];
+  const db = { ref: (p) => ({ on: (ev, cb) => { calls.push({ p, ev, cb }); } }) };
+  const api = new Function("db", block[0] +
+    "\nreturn { watch: watchServerOffset, offset: function () { return serverOffset; } };")(db);
+  assert.strictEqual(calls.length, 0, "defining it must not touch the database");
+  api.watch();
+  api.watch();
+  assert.strictEqual(calls.length, 1, "one subscription, however many saves");
+  assert.deepStrictEqual([calls[0].p, calls[0].ev], [".info/serverTimeOffset", "value"]);
+  calls[0].cb({ val: () => null });
+  assert.strictEqual(api.offset(), 0, "null (not connected yet) must leave the offset alone");
+  calls[0].cb({ val: () => -3600000 });
+  assert.strictEqual(api.offset(), -3600000, "the published offset must be adopted");
+
+  /* Called from exactly one place: the save, before the read whose answer is
+     dated. The read cannot resolve until the connection is up, and the offset
+     arrives with the connection. */
+  const callSites = codeLines("scenario-author-cloud.js")
+    .filter((l) => /\bwatchServerOffset\(\)/.test(l.text) && !/^function /.test(l.text));
+  assert.strictEqual(callSites.length, 1, "watchServerOffset() must be called from the save path and nowhere else");
+  const save = src.slice(src.indexOf("function saveScenarioToCloud("));
+  const watchAt = save.indexOf("watchServerOffset();");
+  const readAt = save.indexOf('"/meta/createdAt").once("value")');
+  const dateAt = save.indexOf("var now = Date.now() + serverOffset;");
+  assert.ok(watchAt >= 0 && readAt > watchAt && dateAt > readAt,
+    "in saveScenarioToCloud(): subscribe, then read, then take the date");
+
   assert.ok(!/<script[^>]+src="(?:\/)?lib\.js/.test(read("scenario-author.html")),
     "scenario-author.html now loads lib.js: use its serverNow() and drop the page's own offset");
+});
+
+test("saveScenario() takes its date after its read, as every flow that stores one does", () => {
+  /* "The offset is known before any dated write" rests on each flow reading
+     before it writes. This was the one flow that took its date first. */
+  const start = SCRIPT.indexOf("\nfunction saveScenario(");
+  assert.ok(start >= 0, "script.js no longer has saveScenario()");
+  const body = SCRIPT.slice(start, SCRIPT.indexOf("\n}\n", start));
+  const readAt = body.indexOf('.once("value")');
+  const dateAt = body.indexOf("serverNow()");
+  assert.ok(readAt >= 0 && dateAt > readAt,
+    "saveScenario() must call serverNow() inside the read's .then(), not before the read");
+  assert.strictEqual(body.split("serverNow()").length - 1, 1, "and take the date once");
+});
+
+test("the certificate prints the day its published record carries", () => {
+  /* credentials/<id>.at is the server's clock, and verify.html shows that day.
+     Printed from the device's clock, the PDF and the page that verifies it
+     disagree on a device whose date is wrong. */
+  const src = read("takehome.js");
+  const fn = src.slice(src.indexOf("\nfunction downloadCertificatePdf("), src.indexOf("\nfunction _verifyUrl("));
+  assert.ok(fn.length > 500, "could not find downloadCertificatePdf() in takehome.js");
+  assert.ok(/\bat: serverNow\(\),/.test(fn), "the published record must be dated from the server's clock");
+  assert.ok(/dateStr: new Date\(serverNow\(\)\)\.toLocaleDateString\(\)/.test(fn),
+    "and the PDF must print that same clock's day");
+  assert.ok(!/dateStr: new Date\(\s*\)/.test(fn), "not the device's");
 });
 
 /* ── 3. the inventory ──────────────────────────────────────────────────── */
@@ -160,10 +221,34 @@ const CLIENT_FILES = fs.readdirSync(PLATFORM)
   .filter((f) => f.endsWith(".js") && !VENDORED.has(f))
   .sort();
 
-/* A read of the device's clock as a NUMBER. `new Date().toISOString()` and
-   friends — a label on an exported file, a line in the local error log — are
-   not dates the rules see, and are deliberately not matched. */
-const DEVICE_CLOCK = /Date\.now\b|new Date\(\s*\)\s*\.\s*(?:getTime|valueOf)\b|(?:^|[=(,:?&|!~{[;]|return)\s*\+\s*new Date\b|Number\(\s*new Date\b/;
+/* The ways of reading the device's clock that a TEXT check can see.
+ *
+ * The first version of this listed the ways of turning a Date into a number —
+ * `.getTime()`, `.valueOf()`, a unary plus, `Number(…)` — and so missed every
+ * other one: `(new Date()).getTime()`, `new Date() - 0`, `Date.parse(new
+ * Date())`. A review put each of those into createSession() and the suite
+ * stayed green. So this does not list conversions any more. It flags the
+ * SOURCE: any `new Date` with no argument, whatever is done with it next,
+ * unless it is formatted on the spot (`.toISOString()`, `.toLocaleDateString()`
+ * … — a label, which no rule sees). A bare `const when = new Date();` is
+ * flagged too, and has to be listed in the inventory with what it is for.
+ *
+ * WHAT THIS CANNOT SEE, and no text check can: the clock reached through
+ * something that does not spell it — `window["Da" + "te"]`, a helper in another
+ * file, a Date object received from elsewhere and subtracted, a library. The
+ * plainest aliases (`const c = Date`, `f(Date)`, `window.Date` as a value) are
+ * caught below; a determined one is not. For the fields it exercises, the
+ * emulator spec is what holds: there the date is read back from the database.
+ */
+const DEVICE_CLOCK_SPELLINGS = [
+  /Date\s*\.\s*now\b/,                                       // Date.now(), Date.now as a value
+  /Date\s*\[/,                                               // Date["now"]()
+  /new\s+Date\b(?!\s*\(\s*[^\s)])(?!(?:\s*\(\s*\))?\s*\.\s*to[A-Z]\w*\s*\()/,
+  /(?:[=(,:?[]|\breturn)\s*Date\s*(?:[;,)\]}:]|$)/,          // `Date` handed on as a value
+  /\.\s*Date\s*(?:[;,)\]}]|$)/,                              // window.Date, as a value
+  /performance\s*\.\s*timeOrigin\b/                          // timeOrigin + performance.now()
+];
+const DEVICE_CLOCK = { test: (text) => DEVICE_CLOCK_SPELLINGS.some((re) => re.test(text)) };
 
 function codeLines(file) {
   const out = [];
@@ -224,7 +309,19 @@ const DEVICE_CLOCK_ALLOWED = {
     { has: "seen.lastSeenAt", n: 2,
       why: "how long ago THIS dashboard last saw a participant: both ends are this device's clock" },
     { has: "const now = Date.now();", n: 1,
-      why: "renderPrestart(): stamps lastSeenAt, the other end of the line above" }
+      why: "renderPrestart(): stamps lastSeenAt, the other end of the line above" },
+    { has: "const stamp = new Date();", n: 1,
+      why: "the archive download: its file name and its `exportedAt` line, both formatted from it" },
+    { has: "const when = new Date();", n: 1,
+      why: "the impact report's 'generated …' line (toLocaleString)" }
+  ],
+  "admin-tools.js": [
+    { has: "const when = new Date();", n: 5,
+      why: "the 'generated …' line and the date printed on five facilitator reports; only ever formatted" }
+  ],
+  "data-rights.js": [
+    { has: "const stamp = new Date();", n: 1,
+      why: "`exportedAt` in the file a participant downloads of their own data" }
   ],
   "modA-llm-init.js": [
     { has: "window.serverNow = function () { return Date.now(); };", n: 1,
@@ -294,13 +391,33 @@ test("the inventory can see a device-clock date — the patterns it must catch",
     "return +new Date;",
     "x = Number(new Date());",
     "const clock = Date.now;",
-    "at: new Date().valueOf()"
+    "at: new Date().valueOf()",
+    /* the six a review got past the first version of this test */
+    "const at = (new Date()).getTime();",
+    'db.ref(sPath("rooms/" + r + "/stageAt")).set((new Date()).getTime());',
+    "ref.set({ at: (new Date()).getTime() });",
+    "const entry = { by: myName, at: new Date() - 0 };",
+    "const entry = { by: myName, at: Date.parse(new Date()) };",
+    "const c = Date;",
+    "at: c['now']() + Date['now']()",
+    /* and their neighbours */
+    "const at = new Date( ).getTime();",
+    "const at = new Date / 1;",
+    "const D = window.Date;",
+    "const now = makeClock(Date);",
+    "at: performance.timeOrigin + performance.now()",
+    "const when = new Date();"
   ]) assert.ok(DEVICE_CLOCK.test(bad), "not recognised as a device-clock read: " + bad);
   for (const fine of [
     'lines.push("Generated: " + new Date().toISOString());',
-    "const when = new Date();",
+    "dateStr: new Date().toLocaleDateString(),",
+    "dateStr: new Date(serverNow()).toLocaleDateString(),",
     "const d = new Date(entry.at);",
-    "return serverNow() - at;"
+    "if (!isNaN(d.getTime())) when = d.toLocaleDateString();",
+    "return serverNow() - at;",
+    'title: "Date: " + label,',
+    "if (v instanceof Date) return v.toISOString();",
+    "const lastUpdateDate = entry.at;"
   ]) assert.ok(!DEVICE_CLOCK.test(fine), "wrongly flagged: " + fine);
 });
 

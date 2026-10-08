@@ -140,6 +140,50 @@ test.describe("a close that does not go through", () => {
     await expect(row, "and the row leaves the list").toHaveCount(0, { timeout: 5000 });
   });
 
+  test("Sessions you created: a session ended from elsewhere is reported as already closed, not as a refusal to act on", async ({ page }) => {
+    /* The list reads each session's state once, when it is drawn. A session
+       ended afterwards from another device still shows "Open" here, with a
+       live Close button. `closed` is write-once, so that click is refused —
+       and the first version of the refusal message then told the facilitator
+       to open the session with its password and end it from the dashboard. It
+       had already ended. The page checks before it says anything. */
+    const code = await createSession(page, "E2E Elsewhere Fac");
+    await page.evaluate(() => {
+      try {
+        localStorage.removeItem("canamed_session");
+        localStorage.removeItem("canamed_resume");
+        localStorage.removeItem("canamed_name");
+      } catch (e) {}
+    });
+    await page.reload();
+    await expect(page.locator("#splash-my-sessions-row")).toBeVisible({ timeout: 10_000 });
+    await page.locator("#splash-go-my-sessions").click();
+    const row = page.locator(`.my-session-row[data-code='${code}']`);
+    const status = row.locator(".my-session-status");
+    await expect(status, "the list has drawn the session as open").toContainText(/open/i, { timeout: 10_000 });
+
+    /* "Another device" ends it: the marker is written straight into the
+       database, behind the list's back. */
+    await page.evaluate(async (c) => {
+      await db.ref(oPath(sanitizeCode(c), "closed")).set({ by: "Another device", at: 1700000000000 });
+    }, code);
+    await expect(row.locator(".my-session-close"), "the stale row still offers Close").toBeEnabled();
+
+    /* The write-once rule refuses a second close. LOCAL mode has no rules, so
+       the refusal is supplied; the emulator suite has the real one. */
+    await failCloseWrites(page, "refused");
+    await row.locator(".my-session-close").dispatchEvent("click");
+    await confirmModal(page);
+
+    await expect(status, "the page must say it is already closed").toContainText(/already closed/i, { timeout: 10_000 });
+    await expect(status, "and must not send the facilitator to the dashboard").not.toContainText(/password|dashboard|server refused/i);
+    await expect(status).not.toContainText(/connection/i);
+    await expect(row, "and the row leaves the list").toHaveCount(0, { timeout: 5000 });
+    expect((await closedInDb(page, code)).by, "the first close stands, untouched").toBe("Another device");
+    expect(await page.evaluate(() => getMySessions().map((s) => s.code)),
+      "and it is gone from this browser's list").not.toContain(code);
+  });
+
   test("the dashboard: a refused close no longer tells the facilitator to deploy the database rules", async ({ page }) => {
     const alerts = [];
     page.on("dialog", (d) => { alerts.push(d.message()); d.accept().catch(() => {}); });

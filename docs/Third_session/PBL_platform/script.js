@@ -557,9 +557,9 @@ function saveScenario(scenarioId, body, share) {
     return Promise.reject(new Error("Scenario is too large (" + bodyJson.length +
       " bytes, max 262144). Split content across modules or trim long narrative."));
   }
-  const now = serverNow();
   const path = "scenarios/" + uid + "/" + scenarioId;
   return db.ref(path + "/meta/createdAt").once("value").then(snap => {
+    const now = serverNow();   // after the read
     const createdAt = snap.val() || now;
     const meta = {
       id: scenarioId,
@@ -10795,8 +10795,8 @@ function closeMySession(code, btn, statusEl) {
     }).catch(e => {
       console.warn("Could not close session", c, e);
       /* A refusal is the server's answer, not a bad connection: say which. A
-         session that is gone (ended long ago, or purged) is refused too and can
-         never be closed; that one leaves the list. */
+         session that is gone (purged) or was closed from elsewhere is refused
+         too and can never be closed here; that one leaves the list. */
       const refused = e && e.code === "PERMISSION_DENIED";
       const showRetry = () => {
         if (statusEl) statusEl.textContent = refused
@@ -10809,14 +10809,16 @@ function closeMySession(code, btn, statusEl) {
           btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
         }
       };
-      // Gone only when sessionStatus CONFIRMS it (reachable, no `created`):
-      // an unreachable read must not drop a session that is merely offline.
+      // Over only when sessionStatus CONFIRMS it (reachable, and closed or no
+      // `created`): an unreachable read must not drop a session merely offline.
       const probe = (typeof sessionStatus === "function")
         ? sessionStatus(c) : Promise.reject();
       probe.then(st => {
-        if (st && !st.unreachable && !st.exists) {
-          if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.ended-on-close",
-            "This session has already ended — removing it from your list.");
+        if (st && !st.unreachable && (st.closed || !st.exists)) {
+          if (statusEl) statusEl.textContent = st.closed
+            ? tFallback("splash.my-sessions.already-closed", "Already closed — will be removed")
+            : tFallback("splash.my-sessions.ended-on-close",
+                "This session has already ended — removing it from your list.");
           if (btn) { btn.disabled = true; btn.textContent = tFallback("splash.my-sessions.closed-btn", "Closed"); }
           removeMySession(c);
           setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 1200);
