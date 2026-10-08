@@ -317,9 +317,14 @@ test("the sweep reads the table once more when the read fails — a verified lef
   /* The sweep is the LAST look. observe() is asked again on the next poll, so
      one failed read during the run costs nothing; one failed read at the sweep
      used to leave this run's own emulator on the port, verdict and all,
-     because without the table it could not be re-identified. A process-table
-     read is PowerShell and WMI on Windows, and those do fail now and then on
-     a machine running several suites. */
+     because without the table it could not be re-identified.
+
+     This guards a failure that has NOT been seen. On Windows the read is
+     PowerShell over WMI: slow on a busy machine (2.3 s median, 11.2 s at
+     worst, beside the full unit suite) and, in 103 reads measured there, never
+     once failing. The retry is here because the sweep is the one place where
+     a failed read would cost a leftover on the port, and because a second
+     read cannot widen what is killed — not because one was observed to fail. */
   let rows = TWO_RUNS;
   let failNext = 0;
   let reads = 0;
