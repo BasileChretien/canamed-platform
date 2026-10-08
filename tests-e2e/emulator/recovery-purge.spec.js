@@ -20,7 +20,7 @@
  *      connection, and a session with no password hash is left behind.
  *   2. THE OLD CODE IS THE RECOVERY CODE OF WHATEVER IS CREATED THERE NEXT.
  *      `_superadminReset` is allowed when its `code` equals `recovery/…/code`,
- *      and the record at that path is still the old one. Since 2026-10-07 the
+ *      and the record at that path is still the old one. Since PR #447 the
  *      reset also needs the session to have a password
  *      (reset-needs-a-password.spec.js), so the old code no longer opens it on
  *      the passwordless session a collision leaves behind — it did when this
@@ -29,9 +29,11 @@
  *      old code down can reset it. No rule can tell a stale record from a
  *      fresh one; only deleting it does.
  *
- * Each denial below is paired with an ALLOW of the same payload, on the same
- * path, by the same user, on the other side of the purge. A denial alone could
- * not tell "the stale node is gone" from "nothing was ever writable here".
+ * Each denial below is paired with an ALLOW on the same path by the same user:
+ * of the same payload on the other side of the purge (or once the session has
+ * a password), or of the session's OWN code beside the old one. A denial alone
+ * could not tell "the stale node is gone" from "nothing was ever writable
+ * here".
  *
  * THE PURGE IS A STAND-IN, and only for the delete. The real script cannot be
  * pointed at this database without also purging every other spec's sessions
@@ -206,9 +208,10 @@ test("default tree: a recovery code left behind blocks its session code and stil
 
   /* ── AFTER the purge ──────────────────────────────────────────────── */
 
-  // 2'. Same user, same path, same payload: the old code is worth nothing.
-  expect(String(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid))),
-    "with the node gone the old code must not open a reset").toMatch(/permission_denied/i);
+  /* (No reset is tried HERE. With the session gone there is no password, so a
+     reset is refused whether the old record went or not — a denial that would
+     say nothing about the purge. What says it is the DB read above, and the
+     old-code / own-code pair on the session created next.) */
 
   // 1'. Same client, same code: creation now completes. The password hash and
   //     its marker are the LAST things createSession() writes, so they are the

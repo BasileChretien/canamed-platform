@@ -1426,8 +1426,11 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
 
 ## Known security follow-ups (code, tracked)
 - **A session's recovery code is purged with it (2026-10-07) — ⛔ the backlog
-  sweep has only been DRY-RUN (34 records to delete), and since 2026-10-07 a
-  password reset needs a password to reset.**
+  sweep has only been DRY-RUN (34 records to delete); #447 makes a password
+  reset need a password to reset, IN THE RULES (live only once a deploy has
+  released them); and ⛔ one takeover route through the reset is still OPEN —
+  the recovery code is readable by every session member while a reset is in
+  progress.**
   `createSession()` writes `recovery/sessions/<code>` (org:
   `recovery/orgs/<slug>/sessions/<id>` — the ROSTER's shape, not adminSecrets')
   and from 2026-05-25 until the fix of 2026-10-07 nothing deleted it: the purge
@@ -1485,9 +1488,12 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     prints `Mode:        LIVE — deletions WILL happen` and
     `Summary: <n> deleted, 0 left.` A dry run after it ends in
     `Summary: nothing to sweep.`
-  - **✅ CLOSED 2026-10-07 — a reset needs a password, and a recovery code is
-    its creator's to write. Two predicates, both trees; three things stay
-    open and are listed below.** Until then `_superadminReset` asked only for a
+  - **✅ CLOSED IN THE RULES BY #447 — a reset needs a password, and a
+    recovery code is its creator's to write. Two predicates, both trees.
+    ⛔ LIVE ONLY ONCE A DEPLOY HAS RELEASED THE RULES [released: ____ ] — they
+    ship in a `continue-on-error` step, see `Verify:`. FOUR things stay open,
+    the first of them a takeover route, and are listed below.** Before #447
+    `_superadminReset` asked only for a
     matching `recovery/…/code` and a session that was not closed, and the
     recovery node could be written by any signed-in user wherever there was no
     node and no password (plus the allowlist, while `facilitatorGate` is
@@ -1523,7 +1529,38 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     it (the writer's own). `tests/reset-needs-a-password.test.js` pins both,
     and the exact shape of the rules, and that the org rules are the default
     ones re-prefixed.
-    **⚠️ STILL OPEN — each is pinned as OPEN in the spec, not implied closed:**
+    **⚠️ STILL OPEN. The first is a takeover route and is in no committed test
+    yet; the other three are pinned as OPEN in the spec, not implied closed:**
+    - **⛔ THE RECOVERY CODE IS READABLE BY EVERY SESSION MEMBER WHILE A RESET
+      IS IN PROGRESS.** Found by the independent review of #447; older than
+      it, not touched by it, and it gets its own PR. A reset is opened by
+      writing the code IN CLEAR to `sessions/<code>/_superadminReset` — the
+      rule requires it there. That node has no `.read` of its own, so it
+      inherits the session's, which any member has, and membership is
+      self-claimed (`members/<own uid>`). So anyone signed in who knows the
+      session code joins, listens on that node, and is handed the code the
+      next time a facilitator uses "forgot password"; from then on, while
+      the session is open, they can open a reset themselves, overwrite the
+      hash and write their own proof — which is all the creator-or-proof
+      predicates ask for. The record is write-once, so a code that has leaked
+      cannot be replaced.
+      **Measured on the emulator (2026-10-08) with #447's rules in place** — a
+      throwaway probe, not yet a committed test: before joining, the watcher
+      was refused the node; after writing its own `members` entry it could
+      read it; its listener then received the facilitator's reset with the
+      session's recovery code in it; and with that code it opened a reset,
+      overwrote the hash, wrote its proof and wrote an admin-gated node —
+      every write ALLOWED. A user who had not even joined deleted the
+      facilitator's flag, and the facilitator's hash write was then refused.
+      Two more things on the same node: ANY signed-in user may delete the
+      flag (the rule allows a null write to anyone), which makes the
+      facilitator's own reset fail; and a flag left behind by a failed
+      removal goes into the nightly archive with its code, because the
+      backup strips only `adminPasswordHash`.
+      **No predicate fixes this.** A read that cascades cannot be revoked at
+      a deeper path, so nothing under `sessions/` will do: the flag has to
+      move to a tree no client can read. That needs a client change and a
+      shell bump.
     - **No `creatorUid`** (a hand-made node, or a session older than the
       field): the hash rule opens its first password to anyone, so (b) adds
       nothing there.
@@ -1549,7 +1586,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
       soon as it has a password.)
     `Verify:` `node --test tests/reset-needs-a-password.test.js`; and on the
     emulator, the three cases of `reset-needs-a-password.spec.js`
-    (`PORT=8771 npm run test:e2e:rules -- reset-needs-a-password`).
+    (`PORT=8771 npm run test:e2e:rules -- reset-needs-a-password`). Those test
+    the REPO. For the live system, on the first Deploy run after the merge:
+    `gh run view <deploy run> --log | grep -F 'released successfully'` — the
+    only string that means the rules shipped (the step is `continue-on-error`,
+    and `Database rules deployed` is echoed by every run, success or not).
+    Until that has been seen, production still has the old rules and all of
+    the BEFORE column.
     ⚠️ #443 had already removed one accidental mitigation of all this: a
     session purged BY MISTAKE and then restored used to come back beside its
     old recovery record, which blocked the stranger's write. (b) now blocks it
@@ -1573,7 +1616,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
   they act on already-established sessions (whose recovery code was written by
   their allowlisted creator) and must keep working under enforcement.
-  (Until 2026-10-07 "already-established" was the INTENT and not what the rules
+  (Until #447 "already-established" was the INTENT and not what the rules
   enforced: the reset also ran on a session with no password and on a code with
   no session. It now requires the session to have a password — see the
   recovery bullet above.) **Default

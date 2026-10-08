@@ -71,14 +71,23 @@ for (const t of TREES) {
       "an OR appeared inside the reset branch. Every condition there has to hold " +
       "together; an alternative is a way round all of them: " + t.reset);
 
-    /* Everything it asked before is still asked. */
-    for (const kept of [
-      "auth != null", "!" + t.base + ".child('closed').exists()",
-      "newData.child('requestedAt').val() >= now - 5000", "newData.child('requestedAt').val() <= now + 5000",
-      t.rec + ".child('code').exists()",
-      "newData.child('code').val() == " + t.rec + ".child('code').val()",
-      "newData.child('uid').val() == auth.uid"
-    ]) assert.ok(t.reset.includes(kept), "the reset rule lost `" + kept + "`");
+    /* THE WHOLE RULE, EXACTLY. The checks above only look at what FOLLOWS
+       `(newData.val() == null || (`, and say why a failure matters; an
+       alternative ORed in BEFORE that branch — identically in both trees, so
+       the re-prefix test below is no help — passed all of them (found in
+       review). Nothing short of the full text closes that. */
+    assert.strictEqual(t.reset,
+      "auth != null && !" + t.base + ".child('closed').exists() && " +
+      "(newData.val() == null || (" + need + " && " +
+      "newData.child('requestedAt').isNumber() && " +
+      "newData.child('requestedAt').val() >= now - 5000 && " +
+      "newData.child('requestedAt').val() <= now + 5000 && " +
+      t.rec + ".child('code').exists() && " +
+      "newData.child('code').val() == " + t.rec + ".child('code').val() && " +
+      "newData.child('uid').val() == auth.uid))",
+      "the reset rule is not, word for word, the rule this test knows: signed in, not " +
+      "closed, and then EITHER a delete OR all of — a password exists, a fresh " +
+      "timestamp, the recovery code, the writer's own uid");
   });
 
   test(`${t.name} tree: (b) a recovery code is written by the session's creator, or where there is none yet`, () => {
@@ -124,7 +133,13 @@ test("the org tree's two rules are the default tree's, re-prefixed — and never
 
 test("client: both reset call sites issue a reset ONLY when a password marker exists", () => {
   /* Why (a) breaks nothing. Each site reads the readable marker first and, when
-     it is absent, takes the first-write branch (no reset, no recovery code). */
+     it is absent, takes the first-write branch (no reset, no recovery code).
+
+     ⚠️ WHAT THIS DOES NOT SEE. It reads the text of the two functions. Nothing
+     in the repository DRIVES joinSuperAdmin() against real rules: the LOCAL
+     e2e suite runs it on LocalDB, which has no rules, and the emulator specs
+     issue the reset as raw writes. So this pins the shape that keeps a
+     passwordless session away from the reset, and no more than the shape. */
   for (const [file, resetRef] of [
     ["script.js", 'db.ref(sPath("_superadminReset"))'],
     ["script-admin.js", 'db.ref(oPath(targetSession, "_superadminReset"))']
@@ -134,15 +149,32 @@ test("client: both reset call sites issue a reset ONLY when a password marker ex
     assert.notStrictEqual(at, -1, file + " no longer builds the reset the way this test expects");
     assert.strictEqual(src.split("_superadminReset\")").length - 1, 1,
       file + " now builds a reset in more than one place — check each against the rule");
-    const before = src.slice(Math.max(0, at - 2600), at);
-    const guard = before.lastIndexOf("if (snap.val() == null) {");
-    assert.notStrictEqual(guard, -1,
+    assert.match(src.slice(Math.max(0, at - 2600), at), /refMarker\.once\("value"\)/,
+      file + ": the branch must be decided on the marker");
+
+    /* The first-write branch itself, brace to brace (it has none inside). */
+    const guard = src.lastIndexOf("if (snap.val() == null) {", at);
+    assert.ok(guard !== -1 && at - guard < 2600,
       file + ": the reset is no longer preceded by the `marker is absent -> first write` " +
       "branch. A reset attempted on a session with no password is refused by the rule.");
-    assert.match(before.slice(guard), /refMarker\.set\(randomAdminMarker\(\)\)/,
+    const open = guard + "if (snap.val() == null) ".length;
+    const close = src.indexOf("}", open);
+    assert.ok(close > open && close < at, file + ": the first-write branch does not end before the reset");
+    const branch = src.slice(open + 1, close).replace(/^\s*\/\/.*$/gm, "").trim();
+
+    /* ONE statement, and it is a `return`. With the guard text intact but the
+       `return` gone, the branch falls through: a session with no password is
+       given its first hash AND then sent a reset, which the rule refuses —
+       after the hash has landed. That mutant passed the first version of this
+       check, which only looked for the guard somewhere above the reset. */
+    assert.ok(/^return\s/.test(branch) && branch.endsWith(";") && branch.indexOf(";") === branch.length - 1,
+      file + ": the first-write branch must be a single `return …;` — anything else can " +
+      "fall through into the reset. It is:\n" + branch);
+    assert.match(branch, /refMarker\.set\(randomAdminMarker\(\)\)/,
       file + ": the first-write branch must also write the marker, or the session has a " +
       "hash and still no `adminPasswordHash` — and can then never be reset");
-    assert.match(before, /refMarker\.once\("value"\)/, file + ": the branch must be decided on the marker");
+    assert.ok(!branch.includes("_superadminReset") && !branch.includes("recoveryCode"),
+      file + ": the first-write branch must not touch the reset or the recovery code");
   }
 });
 

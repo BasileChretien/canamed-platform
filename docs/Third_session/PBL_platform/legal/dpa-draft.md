@@ -1939,7 +1939,8 @@ that could not be confirmed from the code is marked.*
   in-creation session.
 
   > ⚠️ **"Can only be set initially by the session creator" was not what the
-  > rules enforced until 2026-10-07, and is still not true of every state.**
+  > rules enforced before the rule change of 2026-10 (PR #447), and is still
+  > not true of every state.** [OPERATOR — DATE THOSE RULES WERE DEPLOYED: ____ ]
   > A reset is opened by presenting the session's recovery code; until that
   > date it could be opened on a session that had no password at all, and the
   > hash it then wrote was the session's FIRST — by whoever held the code, or,
@@ -1950,12 +1951,26 @@ that could not be confirmed from the code is marked.*
   > | State of the session | Who can set its first password hash | Who can reset it |
   > |---|---|---|
   > | Being created by the client | Its creator | Nobody until it has a password |
-  > | Has a password | (already set) | Whoever presents the session's recovery code, unless the session is closed |
+  > | Has a password | (already set) | Whoever presents the session's recovery code, unless the session is closed — and see the first limit below for who can come to hold it |
   > | No password, has a creator on record (a session restored from the archive; a creation that stopped half-way) | Its creator only | Nobody until its creator has set a password |
   > | No password, **no creator on record** (written by hand, or older than that field) | **Any signed-in user** (any allowlisted one while the session-creation gate is enforced) — unchanged, and by the hash rule itself | Nobody until it has a password |
   > | Closed, with a creator on record | Its creator, if it has no password | Nobody |
   >
-  > Two limits a Controller should know. A recovery record that outlived an
+  > Three limits a Controller should know. **The first is open and is a way
+  > to take over a session.** While a facilitator is using the
+  > forgotten-password path, the recovery code is written, for the moment the
+  > reset takes, to a part of the session that every participant of that
+  > session can read — and anyone signed in who knows the session code can
+  > make themselves a participant. Someone watching at that moment obtains
+  > the code. It cannot be replaced afterwards, and it lets them reset the
+  > password themselves for as long as the session stays open. Found by the
+  > independent review of PR #447 and then measured against the rules; it
+  > predates the changes described here and is not closed by them. Closing it means moving that write to a place
+  > no participant can read, which is a separate change. [OPERATOR — DATE
+  > CLOSED: ____ ] Until then: a facilitator who uses the forgotten-password
+  > path on a live session should treat that session's recovery code as
+  > known to its participants.
+  > Second: a recovery record that outlived an
   > earlier session at the same session code is still a valid recovery code for
   > whatever session is created there once that session has a password; the
   > rules cannot tell it from a fresh one, and removing such records is the
@@ -3091,7 +3106,8 @@ same day.)*
 > the confirmed run, those 34 records remain.
 > [CONTROLLER — DATE OF THE LIVE RUN AND THE COUNT IT REPORTED: ____ ]
 >
-> **Found in the same pass, and closed 2026-10-07 by two rule changes:** the
+> **Found in the same pass, and closed in the rules by two changes (PR #447)
+> [OPERATOR — DATE THOSE RULES WERE DEPLOYED: ____ ]:** the
 > reset rule did not require the session to HAVE a password. So a recovery
 > code — a stale one, or one written for a session that had no password and no
 > code yet, which any signed-in visitor could do while the session-creation
@@ -3118,6 +3134,10 @@ same day.)*
 > of this note said it "does not work after a restore in any case"; that is
 > true only once the record has been deleted.) (3) A session with no creator
 > on record can still be given its first password by any signed-in user.
+> (4) **Open, and the one that matters most:** while a reset is in progress the
+> recovery code can be read by the participants of that session, and kept —
+> Annex II §3, first limit. It predates these changes and is not closed by
+> them.
 
 > ⚠️ **Narrowed again 2026-10-07, for a SIGNED-IN account that deletes ITSELF —
 > the item stays open.** Until then the client's own `accountDelete()` removed

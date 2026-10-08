@@ -5,7 +5,7 @@
  *
  * `_superadminReset` is the "forgotten admin password" path: write it with the
  * session's recovery code and, for 30 seconds, you may overwrite the admin
- * hash. Until 2026-10-07 its rule asked for a matching `recovery/…/code` and a
+ * hash. Until PR #447 its rule asked for a matching `recovery/…/code` and a
  * session that was not closed, and NOTHING ELSE about the session; and the
  * recovery node itself could be written by any signed-in user (any allowlisted
  * one, while the creation gate is enforced) as long as the node and the
@@ -33,10 +33,16 @@
  * not (b), the cells marked ‡ come out ALLOWED.
  *
  * HOW TO READ THE TABLES. Every step is one write, by one user, and its verdict
- * under the rules as they are now. Each DENIED has an ALLOWED beside it: the
- * same payload, on the same path, by a user who should be able to (or by the
- * same user once the state is one the reset is for). A denial alone could not
- * tell "the gate held" from "nothing was ever writable here".
+ * under the rules as they are now. Each DENIED has an ALLOWED for the same
+ * payload ON THE SAME PATH: by a user who should be able to, or by the same
+ * user in the state the write is for — once the session has a password, or
+ * before it was closed. A denial alone could not tell "the gate held" from
+ * "nothing was ever writable here". ONE cell cannot have that and says so: a
+ * session closed from the start is never resettable, so its pair is the same
+ * payload on the session beside it, before that one was closed.
+ * The BEFORE and "(a) only" comments are the runs of 2026-10-07 against main's
+ * rules and against rules carrying (a) alone; a cell with no comment was the
+ * same in all three, or was added afterwards and run against the final rules.
  *
  * WHAT IS STILL OPEN, and pinned as such rather than implied closed:
  *   - A session with NO `creatorUid` (hand-made, or older than the field) can
@@ -154,6 +160,11 @@ for (const tree of ["default", "org"]) {
     await step("restored, now keyed: the SAME reset by the same user is the recovery path", stranger,
       r.path + "/_superadminReset", reset(PLANT, stranger.uid));
     await step("restored, now keyed: and overwrites the hash", stranger, r.adminSecretPath + "/hash", HASH_2);
+    /* …and once the session is closed, the very same write is refused. (Closed
+       by the owner token: closing is not what is under test.) */
+    await ownerPut(r.path + "/closed", { by: "Original Facilitator", at: Date.now() });
+    await step("restored, keyed, then CLOSED: the same reset by the same user is refused", stranger,
+      r.path + "/_superadminReset", reset(PLANT, stranger.uid));
 
     /* ── ROW 2: half-created — what the client leaves when it draws a code
        whose recovery record outlived an earlier session: `created`, a
@@ -178,7 +189,10 @@ for (const tree of ["default", "org"]) {
     await step("closed: a stranger sets the first hash", stranger, c.adminSecretPath + "/hash", HASH_1);
     await step("closed: THE CREATOR sets the first hash", creator, c.adminSecretPath + "/hash", HASH_1);
     await step("closed: the creator writes the password marker", creator, c.path + "/adminPasswordHash", MARKER);
-    await step("closed: nobody resets a closed session, password or not", creator,
+    /* The one cell with no allow on its own path: this session was never open.
+       Its pair is "restored, now keyed" above — the same payload shape, allowed
+       there until that session was closed. */
+    await step("closed from the start: not resettable even by its creator, password or not", creator,
       c.path + "/_superadminReset", reset(PLANT, creator.uid));
 
     /* ── ROW 4: NO creatorUid — hand-made, or older than the field. The hash
@@ -191,6 +205,9 @@ for (const tree of ["default", "org"]) {
       n.path + "/_superadminReset", reset(PLANT, stranger.uid));
     await step("no creator: a stranger sets the first hash directly (OPEN BY DESIGN)", stranger,
       n.adminSecretPath + "/hash", HASH_1);
+    await step("no creator: …and the password marker (OPEN BY DESIGN)", stranger, n.path + "/adminPasswordHash", MARKER);
+    await step("no creator, now keyed: the SAME reset by the same user goes through", stranger,
+      n.path + "/_superadminReset", reset(PLANT, stranger.uid));
 
     /* ── CREATING A SESSION, in both orders the first batch can arrive in.
        createSession() issues `created`, the recovery code and `creatorUid`
@@ -214,6 +231,7 @@ for (const tree of ["default", "org"]) {
       "restored: the creator writes the password marker":            "ALLOWED", // ALLOWED  ALLOWED
       "restored, now keyed: the SAME reset by the same user is the recovery path": "ALLOWED", // ALLOWED ALLOWED ‡
       "restored, now keyed: and overwrites the hash":                "ALLOWED", // ALLOWED  ALLOWED ‡
+      "restored, keyed, then CLOSED: the same reset by the same user is refused": "DENIED",
 
       "half-created: the holder of the OLD code opens a reset":      "DENIED",  // ALLOWED  DENIED
       "half-created: and sets the first hash":                       "DENIED",  // ALLOWED  DENIED
@@ -226,11 +244,13 @@ for (const tree of ["default", "org"]) {
       "closed: a stranger sets the first hash":                      "DENIED",
       "closed: THE CREATOR sets the first hash":                     "ALLOWED",
       "closed: the creator writes the password marker":              "ALLOWED",
-      "closed: nobody resets a closed session, password or not":     "DENIED",
+      "closed from the start: not resettable even by its creator, password or not": "DENIED",
 
       "no creator: a stranger writes a recovery code (OPEN BY DESIGN)": "ALLOWED",
       "no creator: but cannot reset before a password exists":       "DENIED",  // ALLOWED  DENIED
       "no creator: a stranger sets the first hash directly (OPEN BY DESIGN)": "ALLOWED",
+      "no creator: …and the password marker (OPEN BY DESIGN)":       "ALLOWED",
+      "no creator, now keyed: the SAME reset by the same user goes through": "ALLOWED",
 
       "create, recovery first: created":                             "ALLOWED",
       "create, recovery first: recovery code (no creatorUid yet)":   "ALLOWED",
@@ -269,6 +289,19 @@ test("under an enforced creation gate: an old recovery code opens nothing at a c
       await step(`${tree}: an outsider with the OLD code opens a reset where there is no session`, outsider,
         o.path + "/_superadminReset", reset(OLD, outsider.uid));
       await step(`${tree}: and sets a hash there`, outsider, o.adminSecretPath + "/hash", HASH_1);
+      /* The same three paths, once the ALLOWLISTED user has put a session with
+         a password there. The first is the pair of the gate's refusal. The
+         other two are the pair of the reset's — and they are also the item
+         this file pins as STILL OPEN: the old record is that session's recovery
+         record now, so its code resets it, for an outsider as for anyone. */
+      await step(`${tree}: the allowlisted user begins a session at that code (same payload)`, allowed,
+        o.path + "/created", { by: "O", at: Date.now() });
+      await step(`${tree}: …its creatorUid`, allowed, o.path + "/creatorUid", allowed.uid);
+      await step(`${tree}: …its first hash`, allowed, o.adminSecretPath + "/hash", HASH_2);
+      await step(`${tree}: …its password marker`, allowed, o.path + "/adminPasswordHash", MARKER);
+      await step(`${tree}: with a password there, the outsider's SAME reset goes through (STILL OPEN)`, outsider,
+        o.path + "/_superadminReset", reset(OLD, outsider.uid));
+      await step(`${tree}: and the SAME hash write`, outsider, o.adminSecretPath + "/hash", HASH_1);
 
       /* A session established by the allowlisted user, in the client's order. */
       const e = locFor(tree);
@@ -294,6 +327,12 @@ test("under an enforced creation gate: an old recovery code opens nothing at a c
       [`${tree}: an outsider cannot begin a session (the gate)`]: "DENIED",
       [`${tree}: an outsider with the OLD code opens a reset where there is no session`]: "DENIED", // BEFORE: ALLOWED
       [`${tree}: and sets a hash there`]: "DENIED",                                                 // BEFORE: ALLOWED
+      [`${tree}: the allowlisted user begins a session at that code (same payload)`]: "ALLOWED",
+      [`${tree}: …its creatorUid`]: "ALLOWED",
+      [`${tree}: …its first hash`]: "ALLOWED",
+      [`${tree}: …its password marker`]: "ALLOWED",
+      [`${tree}: with a password there, the outsider's SAME reset goes through (STILL OPEN)`]: "ALLOWED",
+      [`${tree}: and the SAME hash write`]: "ALLOWED",
       [`${tree}: the allowlisted user creates: created`]: "ALLOWED",
       [`${tree}: …recovery code`]: "ALLOWED",
       [`${tree}: …creatorUid`]: "ALLOWED",
