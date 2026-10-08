@@ -2829,15 +2829,12 @@ function dbInit() {
             // anon link clashed with an existing account — sign in with that
             // Google credential directly (anon-uid history is forfeited, same
             // as the popup path's credential-already-in-use fallback).
-            auth.signInWithCredential(e.credential).catch(err => {
-              const hint = el("splash-account-hint");
-              if (hint) splashHintErr(hint, authErrorMessage(err));
-            });
+            auth.signInWithCredential(e.credential)
+              .catch(err => showAuthError(el("splash-account-hint"), err));
             return;
           }
           if (e && e.code && e.code !== "auth/no-auth-event") {
-            const hint = el("splash-account-hint");
-            if (hint) splashHintErr(hint, authErrorMessage(e));
+            showAuthError(el("splash-account-hint"), e);
           }
         });
       }
@@ -11941,279 +11938,6 @@ function splashHintOk(node, msg) {
   if (!node) return; node.textContent = msg || ""; node.className = "splash-hint" + (msg ? " ok" : "");
 }
 
-/* turn the Firebase auth error code into a sentence a human can act on */
-function authErrorMessage(err) {
-  const code = err && err.code || "";
-  const map = {
-    "auth/popup-blocked": "Your browser blocked the sign-in popup — allow popups on this site and try again.",
-    "auth/popup-closed-by-user": "Sign-in was cancelled.",
-    "auth/cancelled-popup-request": "Sign-in was cancelled.",
-    "auth/operation-not-allowed": "This sign-in provider is not enabled for this Firebase project (turn it on in Firebase Console → Authentication → Sign-in method).",
-    "auth/configuration-not-found": "This sign-in provider is not configured for this Firebase project. Enable it in Firebase Console → Authentication → Sign-in method.",
-    "auth/unauthorized-domain": "This domain is not authorised for sign-in — add it in Firebase Console → Authentication → Settings → Authorized domains.",
-    "auth/account-exists-with-different-credential": "An account already exists with this email under a different sign-in method.",
-    "auth/network-request-failed": "Could not reach the sign-in server — check your connection.",
-    "auth/too-many-requests": "Too many attempts — try again in a few minutes.",
-    "auth/requires-recent-login": "For this action, please sign out and sign back in, then try again.",
-    "auth/invalid-email": "That email address does not look valid.",
-    "auth/missing-password": "Enter your password.",
-    "auth/wrong-password": "Wrong password — try again, or use Create account if this is your first sign-in.",
-    "auth/user-not-found": "No account with that email — use Create account to make one.",
-    "auth/invalid-credential": "Email or password is incorrect.",
-    "auth/weak-password": "Pick a stronger password: at least 8 characters mixing letters, numbers, and symbols.",
-    "auth/email-already-in-use": "An account with that email already exists — use Sign in instead."
-  };
-  if (map[code]) return map[code];
-  // Don't surface raw SDK messages to the UI — they can leak internal request
-  // URLs or quota strings. Log the code for debugging, show a generic line.
-  if (code) { try { console.warn("[auth] unmapped error code:", code); } catch (_) { /* noop */ } }
-  return "Sign-in failed — please try again.";
-}
-
-/* Sign in through a provider's popup: google / microsoft / apple. The first
-   sign-in creates the account, so there is no separate sign-up. */
-function signInWithProvider(name) {
-  const hint = el("splash-account-hint");
-  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
-  let provider;
-  let pretty;
-  if (name === "google") {
-    pretty = "Google";
-    provider = new firebase.auth.GoogleAuthProvider();
-    // Ask which account every time: never silently another tab's session.
-    provider.setCustomParameters({ prompt: "select_account" });
-  } else if (name === "microsoft") {
-    pretty = "Microsoft";
-    provider = new firebase.auth.OAuthProvider("microsoft.com");
-    provider.setCustomParameters({ prompt: "select_account" });
-  } else if (name === "apple") {
-    pretty = "Apple";
-    provider = new firebase.auth.OAuthProvider("apple.com");
-    provider.addScope("email");
-    provider.addScope("name");
-  } else {
-    return;
-  }
-  splashHintOk(hint, "Opening " + pretty + " sign-in…");
-  /* An anonymous visitor is LINKED: the uid, and what is stored under it, are
-     kept. If the provider account already exists as a user of its own, sign in
-     AS it with the credential the error carries (no second popup to block);
-     what was under the throwaway anonymous uid is then left behind. */
-  const cur = auth.currentUser;
-  const popupSignIn = () => auth.signInWithPopup(provider);
-  const salvageSignIn = e =>
-    (e && e.credential) ? auth.signInWithCredential(e.credential) : popupSignIn();
-  /* A blocked popup falls back to a full-page redirect: no blocker stops it,
-     and it is reliable only because auth is first-party (authDomain = web.app).
-     getRedirectResult() in dbInit() finishes the sign-in on return. */
-  const popupBlocked = e => e && (
-    e.code === "auth/popup-blocked" ||
-    e.code === "auth/cancelled-popup-request" ||
-    e.code === "auth/operation-not-supported-in-this-environment" ||
-    e.code === "auth/web-storage-unsupported");
-  const redirectSignIn = () => {
-    splashHintOk(hint, "Redirecting to " + pretty + "…");
-    const c = auth.currentUser;
-    return (c && c.isAnonymous)
-      ? c.linkWithRedirect(provider)
-      : auth.signInWithRedirect(provider);
-  };
-  const link = (cur && cur.isAnonymous)
-    ? cur.linkWithPopup(provider).catch(e => {
-        if (e && (e.code === "auth/credential-already-in-use" ||
-                  e.code === "auth/email-already-in-use")) {
-          return salvageSignIn(e);
-        }
-        if (e && e.code === "auth/provider-already-linked") {
-          return popupSignIn();
-        }
-        throw e;
-      })
-    : popupSignIn();
-  link.then(() => signInDone(hint)).catch(e => {
-    if (popupBlocked(e)) {
-      redirectSignIn().catch(err => splashHintErr(hint, authErrorMessage(err)));
-      return;
-    }
-    splashHintErr(hint, authErrorMessage(e));
-  });
-}
-
-/* Cheap password-strength scorer — no zxcvbn dependency. Returns
-   { score: 0-4, label: i18n-key, ok: boolean }. ok=true means the
-   password is acceptable for account creation (≥8 chars + at least 3 of
-   {lowercase, uppercase, digit, symbol}). The score 0-4 drives the
-   colored meter; the threshold for ok is score >= 3. */
-function scorePassword(pw) {
-  pw = String(pw || "");
-  if (!pw) return { score: 0, key: "splash.account.pwd-strength-empty", ok: false };
-  let score = 0;
-  if (pw.length >= 8)  score++;
-  if (pw.length >= 12) score++;
-  let classes = 0;
-  if (/[a-z]/.test(pw)) classes++;
-  if (/[A-Z]/.test(pw)) classes++;
-  if (/[0-9]/.test(pw)) classes++;
-  if (/[^A-Za-z0-9]/.test(pw)) classes++;
-  if (classes >= 2) score++;
-  if (classes >= 3) score++;
-  // Soft penalty for trivially weak strings (single char class regardless of
-  // length, or sequences like 12345/abcdef). Doesn't try to be a full check.
-  if (classes <= 1 || /(?:0123|1234|2345|3456|4567|5678|6789|abcd|qwer|asdf)/i.test(pw)) {
-    score = Math.min(score, 1);
-  }
-  score = Math.max(0, Math.min(4, score));
-  const labels = [
-    "splash.account.pwd-strength-veryweak",
-    "splash.account.pwd-strength-weak",
-    "splash.account.pwd-strength-fair",
-    "splash.account.pwd-strength-good",
-    "splash.account.pwd-strength-strong"
-  ];
-  return {
-    score: score,
-    key: labels[score],
-    ok: score >= 3 && pw.length >= 8 && classes >= 3
-  };
-}
-
-/* Wire the sign-in / sign-up email form: tab toggle, password-strength
-   meter, single submit handler that dispatches on data-mode. Idempotent
-   — calling it again rebinds without duplicating listeners (we only
-   look up by id and use simple guard flags). */
-function wireEmailAuthForm() {
-  const form    = el("splash-email-form");
-  const tabIn   = el("splash-email-mode-signin");
-  const tabUp   = el("splash-email-mode-signup");
-  const pwIn    = el("splash-password-input");
-  const submit  = el("splash-email-submit");
-  if (!form || form.dataset.wired === "1") return;
-  form.dataset.wired = "1";
-
-  function applyMode(mode) {
-    const isSignup = (mode === "signup");
-    form.dataset.mode = isSignup ? "signup" : "signin";
-    if (tabIn) {
-      tabIn.classList.toggle("is-active", !isSignup);
-      tabIn.setAttribute("aria-selected", String(!isSignup));
-    }
-    if (tabUp) {
-      tabUp.classList.toggle("is-active", isSignup);
-      tabUp.setAttribute("aria-selected", String(isSignup));
-    }
-    // Show / hide the sign-up-only rows (confirm field + strength meter).
-    Array.from(document.querySelectorAll(".splash-signup-only"))
-      .forEach(n => { n.hidden = !isSignup; });
-    if (pwIn) {
-      pwIn.setAttribute("autocomplete", isSignup ? "new-password" : "current-password");
-      pwIn.setAttribute("minlength", isSignup ? "8" : "6");
-    }
-    if (submit) {
-      const key = isSignup ? "splash.account.signup-email" : "splash.account.signin-email";
-      submit.setAttribute("data-i18n", key);
-      submit.textContent = (window.t ? window.t(key) :
-        (isSignup ? "Create account" : "Sign in"));
-    }
-    // Clear any stale hint from the other mode.
-    splashHintOk(el("splash-account-hint"), "");
-    if (isSignup) updateStrengthMeter();
-  }
-
-  function updateStrengthMeter() {
-    const fill  = el("splash-pwd-strength-fill");
-    const label = el("splash-pwd-strength-label");
-    if (!fill || !label) return;
-    const s = scorePassword(pwIn ? pwIn.value : "");
-    // 0..4 → width 0..100%; data attribute drives colour via CSS.
-    fill.style.width = (s.score * 25) + "%";
-    fill.dataset.score = String(s.score);
-    label.textContent = (window.t ? window.t(s.key) : s.key);
-  }
-
-  if (tabIn) tabIn.addEventListener("click", () => applyMode("signin"));
-  if (tabUp) tabUp.addEventListener("click", () => applyMode("signup"));
-  if (pwIn)  pwIn.addEventListener("input", () => {
-    if (form.dataset.mode === "signup") updateStrengthMeter();
-  });
-
-  form.addEventListener("submit", e => {
-    e.preventDefault();
-    const em = (el("splash-email-input") || {}).value.trim();
-    const pw = (el("splash-password-input") || {}).value || "";
-    if (form.dataset.mode === "signup") {
-      const pw2 = (el("splash-password-confirm") || {}).value || "";
-      const hint = el("splash-account-hint");
-      if (pw !== pw2) {
-        splashHintErr(hint, (window.t && window.t("splash.account.pwd-mismatch")) ||
-          "The two passwords don't match — retype them.");
-        return;
-      }
-      const s = scorePassword(pw);
-      if (!s.ok) {
-        splashHintErr(hint, (window.t && window.t("splash.account.pwd-too-weak")) ||
-          "Pick a stronger password: at least 8 characters with a mix of upper-case, lower-case, digits, and symbols.");
-        return;
-      }
-      signUpWithEmail(em, pw);
-    } else {
-      signInWithEmail(em, pw);
-    }
-  });
-
-  applyMode("signin");
-}
-
-/* Sign in to an EXISTING e-mail account. Nothing is linked: the account
-   pre-dates this tab, and the throwaway anonymous uid is left behind. */
-function signInWithEmail(email, password) {
-  const hint = el("splash-account-hint");
-  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
-  if (!email || !password) {
-    splashHintErr(hint, "Enter your email and password.");
-    return;
-  }
-  splashHintOk(hint, "Signing you in…");
-  auth.signInWithEmailAndPassword(email, password)
-    .then(() => signInDone(hint))
-    .catch(e => splashHintErr(hint, authErrorMessage(e)));
-}
-
-/* Create an e-mail account. An anonymous visitor is LINKED, as in
-   signInWithProvider(); an address already in use signs in to that account. */
-function signUpWithEmail(email, password) {
-  const hint = el("splash-account-hint");
-  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
-  if (!email || !password) {
-    splashHintErr(hint, "Enter your email and password.");
-    return;
-  }
-  // The form's strength rule, for ANY caller: this must never be the weaker gate.
-  if (!scorePassword(password).ok) {
-    splashHintErr(hint, authErrorMessage({ code: "auth/weak-password" }));
-    return;
-  }
-  splashHintOk(hint, "Creating your account…");
-  const cur = auth.currentUser;
-  const cred = firebase.auth.EmailAuthProvider.credential(email, password);
-  const link = (cur && cur.isAnonymous)
-    ? cur.linkWithCredential(cred).catch(e => {
-        if (e && (e.code === "auth/credential-already-in-use" ||
-                  e.code === "auth/email-already-in-use")) {
-          return auth.signInWithCredential(cred);
-        }
-        throw e;
-      })
-    : auth.createUserWithEmailAndPassword(email, password)
-        .catch(e => {
-          if (e && e.code === "auth/email-already-in-use") {
-            return auth.signInWithEmailAndPassword(email, password);
-          }
-          throw e;
-        });
-  link.then(() => signInDone(hint))
-      .catch(e => splashHintErr(hint, authErrorMessage(e)));
-}
-
 /* Resolves once somebody is signed in, signing in anonymously if nobody is
    (first load, or after a sign-out). Concurrent callers share one promise. In
    local mode (no Firebase) it resolves at once: a caller can always `.then()`. */
@@ -12350,15 +12074,6 @@ function clearSignInForm() {
    another tab, which alters the live user object under this page. */
 let _anonShown = null;
 
-/* A sign-in or sign-up succeeded: an account the page still shows as a visitor
-   is handled here. (A tab nobody signs in on shows the visitor until reloaded.) */
-function signInDone(hint) {
-  clearSignInForm();
-  splashHintOk(hint, "");
-  const u = auth.currentUser;
-  if (u && !u.isAnonymous && u.uid === _anonShown) handleAuthStateChange(u);
-}
-
 function loadProfile() {
   if (!currentUser || !db) return Promise.resolve(null);
   return db.ref("users/" + currentUser.uid + "/profile").once("value")
@@ -12482,38 +12197,6 @@ function applyProfileRoleVisibility(radioName, studentFieldsId) {
   const fields = el(studentFieldsId);
   if (fields) fields.hidden = (selectedRole(radioName) === "facilitator");
 }
-/* Build the saveProfile payload for the given role. Facilitators null out
-   the student-only fields so a student→facilitator switch doesn't leave
-   stale year/English behind. */
-function profileUpdatesForRole(role, name, uni, yearEl, englishEl) {
-  if (role === "facilitator") {
-    return { name: name, university: uni, role: "facilitator", year: null, english: null };
-  }
-  return {
-    name: name, university: uni, role: "student",
-    year: parseInt(el(yearEl).value, 10) || 1,
-    english: (el(englishEl).value || "B2").trim()
-  };
-}
-
-/* Profile-setup submit (right after sign-up) */
-function profileSetupSubmit() {
-  const hint = el("splash-profile-setup-hint");
-  const role = selectedRole("splash-prof-role");
-  const name = (el("splash-prof-name").value || "").trim();
-  const uni = (el("splash-prof-uni").value || "").trim();
-  if (!name) { splashHintErr(hint, "Enter your name."); return; }
-  if (!uni) { splashHintErr(hint, "Pick your university."); return; }
-  splashHintOk(hint, "Saving your profile…");
-  const updates = profileUpdatesForRole(role, name, uni, "splash-prof-year", "splash-prof-english");
-  saveProfile(updates).then(p => {
-    if (!p) return;
-    splashHintOk(hint, "");
-    paintUserChip();
-    splashShowView("enter");
-    applyProfileToJoinForm();
-  }).catch(e => splashHintErr(hint, "Could not save: " + (e.message || "")));
-}
 
 /* What the account put in the lobby's join form: id -> [value before, value put]. */
 const _joinFill = {};
@@ -12533,36 +12216,11 @@ function applyProfileToJoinForm() {
   if (el("english-input") && p.english) put("english-input", p.english);
 }
 
-/* The account dialog's live subscription to users/<uid>/history.
-
-   Declared HERE, beside its only users, on purpose. It used to sit under a
-   comment block several hundred lines up and was deleted along with that block
-   in #264 (2026-07-31). Reading an undeclared name throws, so from then on
-   openAccountDialog() died in loadHistoryForDialog() BEFORE reaching
-   dialogShow(): the dialog — profile, sign-out, delete account, and the
-   per-session withdrawal row — could not be opened at all, with every check
-   green, because nothing ever executed it. */
+/* The account dialog's live subscription to users/<uid>/history. Declared in
+   THIS file: closeAccountDialog() reads it on every change of account, whether
+   or not the lazy account-ui.js, whose loadHistoryForDialog() sets it, is in. */
 let _historyListenerRef = null;
 
-/* The account dialog (opened by the header chip, or the splash's "Account") */
-function openAccountDialog() {
-  const dlg = el("account-dialog");
-  if (!dlg || !currentUser) return;
-  el("account-email").textContent = currentUser.email || "";
-  // Every field, on every open: never what a previous account left here.
-  const p = currentProfile || {};
-  el("account-uni").value = "";
-  populateProfileSelects("account-uni");
-  el("account-name").value = p.name || "";
-  if (p.university) el("account-uni").value = p.university;
-  el("account-year").value = String(p.year || 1);
-  el("account-english").value = p.english || "B2";
-  setRoleRadio("account-role", p.role || "student");
-  applyProfileRoleVisibility("account-role", "account-student-fields");
-  splashHintOk(el("account-action-hint"), "");
-  loadHistoryForDialog();
-  dialogShow(dlg);
-}
 function closeAccountDialog() {
   const dlg = el("account-dialog");
   if (!dlg) return;
@@ -12570,75 +12228,6 @@ function closeAccountDialog() {
   if (_historyListenerRef) { _historyListenerRef.off(); _historyListenerRef = null; }
   const list = el("account-history");
   if (list) list.innerHTML = "";
-}
-
-function loadHistoryForDialog() {
-  const list = el("account-history");
-  if (!list || !currentUser || !db) return;
-  if (_historyListenerRef) _historyListenerRef.off();
-  list.innerHTML = "";   // the answer comes later: never a previous account's rows meanwhile
-  _historyListenerRef = db.ref("users/" + currentUser.uid + "/history");
-  _historyListenerRef.on("value", snap => {
-    const v = snap.val() || {};
-    const items = Object.keys(v).map(k => v[k])
-      .sort((a, b) => (b.joinedAt || 0) - (a.joinedAt || 0));
-    list.innerHTML = "";
-    if (!items.length) {
-      const li = document.createElement("li");
-      li.className = "hint";
-      li.textContent = "No sessions yet — your history will appear here once you join one.";
-      list.appendChild(li);
-      return;
-    }
-    items.forEach(it => {
-      const li = document.createElement("li");
-      li.className = "account-history-row";
-      const code = document.createElement("strong");
-      code.className = "account-history-code";
-      code.textContent = (it.code || "").toUpperCase();
-      const meta = document.createElement("span");
-      meta.className = "account-history-meta";
-      const when = it.joinedAt ? new Date(it.joinedAt).toLocaleDateString() : "";
-      const sc = it.scenarioName ? " · " + it.scenarioName : "";
-      meta.textContent = when + sc;
-      li.appendChild(code); li.appendChild(meta);
-      /* The waiting-screen button only exists while someone is IN a session.
-         A signed-in participant who wants to withdraw a month later needs a
-         route too, and their history is the only place that lists the sessions
-         they were in. Anonymous participants have no history by design, so for
-         them the waiting-screen control is the only in-product route — stated
-         in Annex VI G12 rather than glossed. */
-      const wd = document.createElement("button");
-      wd.type = "button";
-      wd.className = "splash-link account-history-withdraw";
-      wd.textContent = t("data-rights.withdraw-btn-short");
-      wd.addEventListener("click", () => {
-        runWithdrawalFlow(it.code, el("account-action-hint"));
-      });
-      li.appendChild(wd);
-      list.appendChild(li);
-    });
-  });
-}
-
-function accountSaveBtn() {
-  const hint = el("account-action-hint");
-  const role = selectedRole("account-role");
-  const name = (el("account-name").value || "").trim();
-  const uni = (el("account-uni").value || "").trim();
-  if (!name) { splashHintErr(hint, "Enter your name."); return; }
-  const updates = profileUpdatesForRole(role, name, uni, "account-year", "account-english");
-  saveProfile(updates).then(p => {
-    if (!p) return;
-    splashHintOk(hint, "Profile saved.");
-    paintUserChip();
-    applyProfileToJoinForm();
-    const ok = el("account-save-ok");
-    if (ok) {
-      ok.classList.remove("hidden");
-      setTimeout(() => ok.classList.add("hidden"), 1800);
-    }
-  }).catch(e => splashHintErr(hint, "Could not save: " + (e.message || "")));
 }
 
 function accountSignOut() {
@@ -12649,87 +12238,95 @@ function accountSignOut() {
     resetStableId();
     closeAccountDialog();
     splashHintOk(el("account-action-hint"), "");
-  }).catch(e => splashHintErr(el("account-action-hint"), authErrorMessage(e)));
+  }).catch(e => showAuthError(el("account-action-hint"), e));
 }
 
-/* "Delete account". The work lives in the LAZY data-rights.js, beside the other
-   data-rights code (deleteMyAccount, 2026-10-07) - it is reachable from one
-   click in the account dialog and has no business on the splash's critical
-   path. This is the on-click shim, the same shape as _wireDataRightsExport():
-   a loader without the method (an older cached shell) and a chunk that 404'd
-   or is offline both end in a message saying nothing was deleted, never in a
-   ReferenceError out of the click. */
-function accountDelete() {
-  if (!currentUser || !auth) return;
-  const fail = (e) => {
-    console.warn("Could not load the account-deletion code:", e);
-    splashHintErr(el("account-action-hint"), "Could not load this action, so " +
-      "nothing was deleted. Check your connection and try again.");
+/* The sign-in view, the account dialog and the profile save are the lazy
+   account-ui.js, and this is every way into it. `run` is called once the chunk
+   is in, at once if it already is; `fail` if it cannot be loaded. While it
+   loads, a repeat of the same `key` REPLACES what waits (the latest click acts,
+   once), and what waits is dropped if its `still()` no longer holds: the
+   account, or the view, changed meanwhile. */
+const _accountWaiting = {};
+function accountUI(key, run, fail, still) {
+  if (typeof wireAccountChunk === "function") { run(); return; }
+  const asked = key && _accountWaiting[key];
+  if (key) _accountWaiting[key] = { run, fail, still };
+  if (asked) return;
+  const settle = ok => e => {
+    const w = key ? _accountWaiting[key] : { run, fail, still };
+    delete _accountWaiting[key];   // before still(): a dropped click must not go on counting as waiting
+    if (!w || (w.still && !w.still())) return;
+    if (ok) w.run(); else { console.warn("Could not load the account code:", e); w.fail(e); }
   };
-  const run = () => {
-    const fn = window.deleteMyAccount;
-    if (typeof fn !== "function") { fail(new Error("deleteMyAccount missing")); return; }
-    fn();
-  };
-  if (typeof window.deleteMyAccount === "function") { run(); return; }
-  const loader = window.CanamedLoader;
-  (loader && loader.ensureDataRights ? loader.ensureDataRights()
-    : Promise.reject(new Error("loader has no ensureDataRights")))
-    .then(run, fail);
+  const L = window.CanamedLoader;
+  (L && L.ensureAccountUI ? L.ensureAccountUI()
+    : Promise.reject(new Error("loader has no ensureAccountUI"))).then(settle(true), settle(false));
+}
+const accountLoadFailed = what => toast("Couldn't open " + what +
+  " — check your connection and try again.", "", "loss");
+
+/* The front page's "Sign in…" link. Dropped if its own view is no longer the
+   one showing: the page has moved on (to profile setup, or into a session)
+   since the click. */
+function showAccountView() {
+  accountUI("view", () => {
+    populateProfileSelects("splash-prof-uni");
+    const hint = el("splash-account-hint");
+    if (hint) { hint.textContent = ""; hint.className = "splash-hint"; }
+    splashShowView("account");
+  }, () => accountLoadFailed("the sign-in screen"),
+  () => {
+    const s = el("splash"), v = el("splash-view-enter");
+    return !!s && !s.classList.contains("hidden") && !!v && !v.hidden;
+  });
+}
+/* Both openers of the account dialog. The account that clicked is the only one
+   it may open for: opened for another before ITS profile is read, the dialog
+   would show the defaults and Save would write them over that profile. */
+function openAccount() {
+  const user = currentUser;
+  accountUI("dialog", () => openAccountDialog(),
+    () => accountLoadFailed("your account"), () => currentUser === user);
+}
+function submitProfileSetup(e) {
+  e.preventDefault();
+  const user = currentUser;
+  accountUI("setup", () => profileSetupSubmit(),
+    () => splashHintErr(el("splash-profile-setup-hint"), "Could not load this step, so " +
+      "nothing was saved. Check your connection and try again."),
+    () => currentUser === user);
+}
+/* An auth error in words: authErrorMessage() is in the chunk. */
+function showAuthError(hint, e) {
+  accountUI(null, () => splashHintErr(hint, authErrorMessage(e)),
+    () => splashHintErr(hint, "Sign-in failed — please try again."));
 }
 
-/* wire the splash-view-account / splash-view-profile-setup / account-dialog
-   handlers. Idempotent: called at start-up and again by wireSplash(). */
+/* Wires what can be clicked BEFORE account-ui.js is in: the front page's link
+   and signed-in row, the header chip, profile setup. The chunk wires the rest
+   (wireAccountChunk). Idempotent: called at start-up and again by wireSplash(). */
 let _accountWired = false;
 function wireAccountUI() {
   if (_accountWired) return;
   _accountWired = true;
 
-  // splash → "Sign in with Google" view
-  if (el("splash-go-account")) el("splash-go-account").addEventListener("click", () => {
-    populateProfileSelects("splash-prof-uni");
-    const hint = el("splash-account-hint");
-    if (hint) { hint.textContent = ""; hint.className = "splash-hint"; }
-    splashShowView("account");
-  });
+  if (el("splash-go-account")) el("splash-go-account").addEventListener("click", showAccountView);
   if (el("splash-signed-in-out")) el("splash-signed-in-out").addEventListener("click", accountSignOut);
-  if (el("splash-back-from-account")) el("splash-back-from-account")
-    .addEventListener("click", () => { clearSignInForm(); splashShowView("enter"); });
-  if (el("splash-google-signin")) el("splash-google-signin")
-    .addEventListener("click", () => signInWithProvider("google"));
-  if (el("splash-microsoft-signin")) el("splash-microsoft-signin")
-    .addEventListener("click", () => signInWithProvider("microsoft"));
-  if (el("splash-apple-signin")) el("splash-apple-signin")
-    .addEventListener("click", () => signInWithProvider("apple"));
-  wireEmailAuthForm();
 
   // profile-setup (runs once, right after the first Google sign-in)
   if (el("splash-profile-setup-form")) el("splash-profile-setup-form")
-    .addEventListener("submit", e => { e.preventDefault(); profileSetupSubmit(); });
-
+    .addEventListener("submit", submitProfileSetup);
   // role toggle: hide the student-only fields (year / English) for facilitators
   document.querySelectorAll('input[name="splash-prof-role"]').forEach(r =>
     r.addEventListener("change", () =>
       applyProfileRoleVisibility("splash-prof-role", "splash-prof-student-fields")));
-  document.querySelectorAll('input[name="account-role"]').forEach(r =>
-    r.addEventListener("change", () =>
-      applyProfileRoleVisibility("account-role", "account-student-fields")));
 
-  // header chip + account dialog. body.locked hides the header, so the
-  // splash's signed-in row carries the opener for someone not in a session.
-  if (el("user-chip")) el("user-chip").addEventListener("click", openAccountDialog);
+  // body.locked hides the header and its chip, so the splash's signed-in row
+  // carries the opener for someone not in a session.
+  if (el("user-chip")) el("user-chip").addEventListener("click", openAccount);
   if (el("splash-signed-in-account")) el("splash-signed-in-account")
-    .addEventListener("click", openAccountDialog);
-  if (el("account-dialog-close")) el("account-dialog-close")
-    .addEventListener("click", closeAccountDialog);
-  if (el("account-save-btn")) el("account-save-btn").addEventListener("click", accountSaveBtn);
-  if (el("account-signout-btn")) el("account-signout-btn").addEventListener("click", accountSignOut);
-  if (el("account-delete-btn")) el("account-delete-btn").addEventListener("click", accountDelete);
-  // close dialog when clicking the backdrop
-  const dlg = el("account-dialog");
-  if (dlg) dlg.addEventListener("click", e => {
-    if (e.target === dlg) closeAccountDialog();
-  });
+    .addEventListener("click", openAccount);
 }
 
 /* ===================== Observer SPIKES checklist (Module B) =====================
