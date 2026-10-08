@@ -2404,8 +2404,11 @@ observed — LOCAL mode models no rules — so these are static findings:**
       (`_superadminReset`, R3-D1). A stored date is also COMPARED on the
       server's clock now — minutes on a stage, the "facilitator may be
       offline" banner, whether a chat reply is new. And the certificate PDF
-      prints that clock's day, the one its published record carries and
-      `verify.html` shows.
+      prints that clock's day. On the FIRST download that is the day its
+      published record carries and `verify.html` shows; the record is
+      write-once, so a later download prints its own day and the record
+      keeps the first — as before this change, which fixed the clock and
+      not which day.
     - **To fake a device clock in a test, replace `Date` itself**, not
       `Date.now()`: the SDK measures its offset with `new Date().getTime()`,
       so overriding `Date.now()` alone builds a device that cannot exist — the
