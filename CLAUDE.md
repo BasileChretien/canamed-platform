@@ -1491,9 +1491,11 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   - **✅ CLOSED IN THE RULES BY #447 — a reset needs a password, and a
     recovery code is its creator's to write. Two predicates, both trees.
     ⛔ LIVE ONLY ONCE A DEPLOY HAS RELEASED THE RULES [released: ____ ] — they
-    ship in a `continue-on-error` step, see `Verify:`. FOUR things stay open,
-    the first of them a takeover route, and are listed below.** Before #447
-    `_superadminReset` asked only for a
+    ship in a `continue-on-error` step, see `Verify:`. #447 left four things
+    open. The first, a takeover route, has its own fix and its own entry
+    directly below this one; THREE stay open and are listed here.** Before
+    #447 the reset flag (then `sessions/<code>/_superadminReset`) asked only
+    for a
     matching `recovery/…/code` and a session that was not closed, and the
     recovery node could be written by any signed-in user wherever there was no
     node and no password (plus the allowlist, while `facilitatorGate` is
@@ -1514,8 +1516,9 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     - *a recovery record with no session at all, under an enforced
       `facilitatorGate`*: a user off the allowlist opened the reset and set a
       hash there (`created` stayed gated).
-    **(a)** `_superadminReset`'s write requires the session's
-    `adminPasswordHash` to exist — a reset needs something to reset.
+    **(a)** the reset flag's write requires the session's
+    `adminPasswordHash` to exist — a reset needs something to reset. (The flag
+    has since moved — next entry — and the requirement moved with it.)
     **(b)** the recovery write requires `!creatorUid.exists() || creatorUid ==
     auth.uid`, the binding the hash rules' first write already had.
     **(a) ALONE IS NOT ENOUGH — measured, not argued.** With the rules carrying
@@ -1529,38 +1532,9 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     it (the writer's own). `tests/reset-needs-a-password.test.js` pins both,
     and the exact shape of the rules, and that the org rules are the default
     ones re-prefixed.
-    **⚠️ STILL OPEN. The first is a takeover route and is in no committed test
-    yet; the other three are pinned as OPEN in the spec, not implied closed:**
-    - **⛔ THE RECOVERY CODE IS READABLE BY EVERY SESSION MEMBER WHILE A RESET
-      IS IN PROGRESS.** Found by the independent review of #447; older than
-      it, not touched by it, and it gets its own PR. A reset is opened by
-      writing the code IN CLEAR to `sessions/<code>/_superadminReset` — the
-      rule requires it there. That node has no `.read` of its own, so it
-      inherits the session's, which any member has, and membership is
-      self-claimed (`members/<own uid>`). So anyone signed in who knows the
-      session code joins, listens on that node, and is handed the code the
-      next time a facilitator uses "forgot password"; from then on, while
-      the session is open, they can open a reset themselves, overwrite the
-      hash and write their own proof — which is all the creator-or-proof
-      predicates ask for. The record is write-once, so a code that has leaked
-      cannot be replaced.
-      **Measured on the emulator (2026-10-08) with #447's rules in place** — a
-      throwaway probe, not yet a committed test: before joining, the watcher
-      was refused the node; after writing its own `members` entry it could
-      read it; its listener then received the facilitator's reset with the
-      session's recovery code in it; and with that code it opened a reset,
-      overwrote the hash, wrote its proof and wrote an admin-gated node —
-      every write ALLOWED. A user who had not even joined deleted the
-      facilitator's flag, and the facilitator's hash write was then refused.
-      Two more things on the same node: ANY signed-in user may delete the
-      flag (the rule allows a null write to anyone), which makes the
-      facilitator's own reset fail; and a flag left behind by a failed
-      removal goes into the nightly archive with its code, because the
-      backup strips only `adminPasswordHash`.
-      **No predicate fixes this.** A read that cascades cannot be revoked at
-      a deeper path, so nothing under `sessions/` will do: the flag has to
-      move to a tree no client can read. That needs a client change and a
-      shell bump.
+    **⚠️ STILL OPEN — three, each pinned as OPEN in the spec, not implied
+    closed.** (The fourth — the recovery code being readable by every member
+    while a reset was in progress — is the next entry.)
     - **No `creatorUid`** (a hand-made node, or a session older than the
       field): the hash rule opens its first password to anyone, so (b) adds
       nothing there.
@@ -1597,6 +1571,88 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     session purged BY MISTAKE and then restored used to come back beside its
     old recovery record, which blocked the stranger's write. (b) now blocks it
     on purpose.
+  - **✅ CLOSED IN CODE — THE RECOVERY CODE WAS READABLE BY EVERY SESSION
+    MEMBER WHILE A RESET WAS IN PROGRESS (found by the independent review of
+    #447). ⛔ LIVE ONLY ONCE BOTH HALVES HAVE SHIPPED — the rules AND the
+    shell [rules released: ____ · shell: v___ ]. ⚠️ ONE RESIDUAL, DELIBERATE:
+    a code that leaked before then stays valid while its session is open.**
+    A reset is opened by writing a flag that carries the session's recovery
+    code IN CLEAR — the rule compares it. The flag used to be
+    `sessions/<code>/_superadminReset`. That node had no `.read` of its own,
+    so it inherited the session's, which any member has, and membership is
+    self-claimed (`members/<own uid>`). So anyone signed in who knew a session
+    code joined, listened on that node, and was handed the code the next time
+    a facilitator used "forgot password"; from then on, while the session was
+    open, they could open a reset themselves, overwrite the hash and write
+    their own proof — which is all the creator-or-proof predicates ask for.
+    The record is write-once, so a code that has leaked cannot be replaced.
+    **Measured on the emulator before the change, identically in both trees**
+    (`tests-e2e/emulator/reset-flag-unreadable.spec.js`; its table carries the
+    BEFORE column, from a run of the then-current client against #447's
+    rules): the watcher's listener received the real recovery code from the
+    REAL client's reset panel, and a flag in the old node naming a user
+    opened the hash for that user. One more thing was measured by the
+    throwaway probe that preceded the spec, the same day and under the same
+    rules, and is not in that column: a user who had not even joined deleted
+    the facilitator's flag, and the facilitator's hash write was then refused.
+    (The spec now shows the reverse on the new node: a stranger can neither
+    delete nor overwrite another user's flag.)
+    **No predicate could fix it** — a read that cascades cannot be revoked at
+    a deeper path, so nothing under `sessions/` would do. What changed:
+    - **Rules.** The flag is `adminSecrets/<code>/reset/<uid>` (org:
+      `adminSecrets/orgs/<slug>/<id>/reset/<uid>`) — a tree with no `.read`
+      anywhere — and holds `{ requestedAt, code }` only: the facilitator's
+      display name and the `uid` field are gone, the uid is the KEY. Every
+      write to it, a delete included, must be by that uid, so nobody can
+      remove or replace another user's flag. The four hash rules read
+      `reset/<auth.uid>`: only the user who opened a reset can use it (the R3
+      recovery-race binding, now structural rather than a field to compare).
+      The old node accepts a delete and nothing else, and no rule reads it.
+    - **Client.** Both call sites: `joinSuperAdmin()` in script.js and the
+      change-password handler in the lazy script-admin.js. No UI change.
+    - **Ops, for a flag that a failed removal left in the OLD node** (it holds
+      a code): the backup strips it, the restore withholds it (an archive
+      taken earlier may hold one for its 90 days), and the purge writes a null
+      there for every session it keeps. BLIND, in an update of its own after
+      the purge: the scheduled jobs may read, per session, the identifiers and
+      the two dates and nothing else (`tests/ops-transfer-notice.test.js`), so
+      the purge does not look first — `tests/reset-flag-unreadable.test.js`
+      RECORDS its reads and fails on a third. Its log line counts paths
+      written, not leftovers found. A dry run writes nothing; a run the backup
+      gate refuses clears nothing. The node's name is spelled once, in
+      `scripts/lib/reset-flag.js`.
+    **⚠️ NOT CLOSED, by decision and not by oversight (user, 2026-10-08): no
+    rotation.** A code somebody obtained before both halves were live resets
+    that session for as long as it is open — a reset does not issue a new
+    code, and the record is still write-once. Closing the session ends it (a
+    reset on a closed session is refused; measured). The exposure empties on
+    the retention clock: it is over once every session that existed before the
+    deploy has been purged — a state, not a date.
+    **⚠️ TWO HALVES, AND EITHER ONE ALONE REFUSES RESETS RATHER THAN LEAKING**
+    (both measured as raw writes — cells 3 and 4 of the spec's table):
+    - *new rules, a browser still on the old shell* — it writes the code to
+      the old node, is DENIED, and nothing is stored or delivered to a
+      listener. The panel then says "That recovery code doesn't match this
+      session", which is false and is the only message it has. **If a
+      facilitator reports that a correct recovery code is refused just after
+      this ships, have them reload twice before anything else** (runbook §10,
+      rewritten in the same change — it still said a super-admin key was
+      required and described an audit trail that never existed).
+    - *new shell, old rules* (the gap between Hosting and the rules release,
+      or a rules step that failed — it is `continue-on-error`): the old rules
+      declare nothing at `adminSecrets/<code>/reset`, so the write is denied.
+    `Verify:` `node --test tests/reset-flag-unreadable.test.js`; on the
+    emulator `PORT=8771 npm run test:e2e:rules -- reset-flag-unreadable` (four
+    cases: both trees, the real client's reset panel, and the purge's update
+    sent by the real Admin SDK). Those test the REPO. For the LIVE system,
+    three separate things: **rules** —
+    `gh run view <deploy run> --log | grep -F 'released successfully'`;
+    **client** — `curl -s https://canamed-69785.web.app/script.js | grep -c
+    _superadminReset` prints **0** (the shipped client no longer names the old
+    node; on 2026-10-08, before this shipped, it printed 4 — judge it by the
+    number, `grep -c` exits 1 on a zero); **purge** — the first nightly run
+    after the merge logs `Leftover reset flags: cleared <n> path(s)`
+    (`gh run view <cleanup run> --log | grep -F 'Leftover reset flags'`).
 - **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
   default).** A top-level admin-only node (`.read:false`, `.write:false` — set
   only via the Console/admin-SDK) that can restrict who may create sessions.
@@ -1612,8 +1668,9 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `recovery/…/<sessionId>` code write** — in **both** the `sessions/$id` and
   `orgs/$slug/sessions/$id` trees (**10 rules**). The recovery-code write is
   itself a bootstrap field (written once at creation, before any hash), so gating
-  it closes the recovery-bootstrap bypass. The `_superadminReset` write and the
-  hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
+  it closes the recovery-bootstrap bypass. The reset flag's write (now
+  `adminSecrets/…/reset/<uid>`; it was `_superadminReset` under the session)
+  and the hash rules' **recovery branch** stay deliberately ungated —
   they act on already-established sessions (whose recovery code was written by
   their allowlisted creator) and must keep working under enforcement.
   (Until #447 "already-established" was the INTENT and not what the rules
@@ -1633,7 +1690,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `tests-e2e/emulator/rules-smoke.spec.js` (functional: open by default,
   allowlisted uid creates, non-allowlisted uid denied on `created`/`creatorUid`/
   `adminPasswordHash`/`adminSecrets` hash/**recovery code** in **both** trees, and
-  an established session's `_superadminReset`→hash-overwrite recovery chain still
+  an established session's reset-flag→hash-overwrite recovery chain still
   succeeds under enforcement).
 - **Shared-library moderation primitive (Phase 4d, rules — client wiring PENDING).**
   Three top-level nodes support reporting + takedown of `sharedScenarios` without
@@ -1765,7 +1822,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   - **Stale-proof hardening (PR #223 review):** all admin predicates check
     `adminSecrets/<code>/proof/<uid>.val() == …/hash.val()` (proof equals the
     CURRENT hash), not `.exists()` — so a proof written against an old password
-    auto-invalidates when `_superadminReset` rotates the hash. Fixed on the
+    auto-invalidates when a password reset rotates the hash. Fixed on the
     `closed` rule too (it previously used `.exists()`).
 - Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
   points, requires uidMembers membership). A teammate with dev tools can
@@ -2369,7 +2426,7 @@ observed — LOCAL mode models no rules — so these are static findings:**
     clock more than 12 h wrong. **If a facilitator reports "can't create a
     session" or "can't close", check their clock first.** The real fix is
     `ServerValue.TIMESTAMP` for these two writes (the R3-D1 pattern already
-    used for `_superadminReset`) — a client change, shell bump, LOCAL mode must
+    used for the password-reset flag) — a client change, shell bump, LOCAL mode must
     not be handed the sentinel object, and it does not help a browser still on
     a cached shell, which is why the window was widened first.
   - **Purge (the half that closes it — a rule cannot reach a session already in

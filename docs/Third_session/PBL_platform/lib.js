@@ -646,7 +646,7 @@
   // time and never again (it is stored under the unreadable top-level
   // /recovery subtree, so no client can read it back). Possession of
   // this code is the ONLY way to overwrite a forgotten admin password:
-  // the database rules require the value written to _superadminReset.code
+  // the database rules require the code written with the reset flag
   // to equal /recovery/.../code before adminPasswordHash may be replaced.
   //
   // Same construction as generateSessionCode (crypto.getRandomValues +

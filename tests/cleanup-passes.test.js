@@ -445,10 +445,14 @@ test("REAL SCRIPT, fresh backup: the expired session IS purged, then the metrics
       "adminSecrets/EXPIRED1", "certIds/EXPIRED1", "purgedSessions/EXPIRED1",
       "recovery/sessions/EXPIRED1", "roomChat/EXPIRED1", "roomChatAuthors/EXPIRED1",
       "rosters/sessions/EXPIRED1", "sessions/EXPIRED1"
-    ] }
+    ] },
+    { op: "update", path: "", keys: ["sessions/LIVE0001/_superadminReset"] }
   ].concat(METRICS_WRITES),
     "one atomic root update for the expired session and its out-of-cascade " +
-    "siblings — the live session untouched — then the metrics. Three things changed " +
+    "siblings; then ONE more, a null at the old reset-flag node of the session that " +
+    "was KEPT (a leftover there holds a recovery code in clear — written blind, in " +
+    "its own update, after the purge; tests/reset-flag-unreadable.test.js); then " +
+    "the metrics. Nothing else of the live session is touched. Three things changed " +
     "on 2026-10-07 and all are deliberate: the update WRITES the purge marker " +
     "(purgedSessions/<code>); it no longer deletes withdrawals/<code> whole — " +
     "each record is decided on its own, and this session has none " +

@@ -289,17 +289,19 @@ test("R3-C3: bestRoomFor falls back gracefully when every room is over cap", () 
 // R3-D1 — ServerValue.TIMESTAMP in super-admin reset
 // ============================================================
 
-test("R3-D1: joinSuperAdmin uses ServerValue.TIMESTAMP for _superadminReset", () => {
+test("R3-D1: joinSuperAdmin uses ServerValue.TIMESTAMP for its reset flag", () => {
   // Source-level pin — the previous Date.now() call would be rejected by
   // the rule's ±5s freshness window on a drifted client clock.
   assert.match(SCRIPT_JS, /firebase\.database\.ServerValue\.TIMESTAMP/,
     "joinSuperAdmin must use firebase.database.ServerValue.TIMESTAMP for requestedAt");
-  // The token should appear inside the _superadminReset.set call site —
-  // pick out the substring and confirm the TS variable feeds the .set:
-  const block = SCRIPT_JS.match(/_superadminReset[\s\S]{0,2500}refReset\.set\([\s\S]{0,300}/);
-  assert.ok(block, "could not locate _superadminReset set block");
-  assert.ok(block[0].includes("ServerValue.TIMESTAMP") || block[0].includes("TS"),
-    "the _superadminReset.set call must use the server timestamp token, not Date.now()");
+  // The token must feed the reset flag's own .set — the flag is the ref built
+  // from adminSecretPath(…, "reset/…"), and its payload is on the line that
+  // sets it:
+  const block = SCRIPT_JS.match(/const refReset = db\.ref\(adminSecretPath\([\s\S]{0,600}?refReset\.set\(\{[^}]*\}\)/);
+  assert.ok(block, "could not locate the reset flag's set block");
+  assert.match(block[0], /ServerValue\.TIMESTAMP/, "the TS token must be the server timestamp");
+  assert.match(block[0], /refReset\.set\(\{ requestedAt: TS, code: recoveryCode \}\)/,
+    "the reset flag must carry the server timestamp token and the code, and nothing else");
 });
 
 // ============================================================

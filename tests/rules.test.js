@@ -390,49 +390,60 @@ test("orgs: session prefix preserves legacy path for default, namespaces others"
 //
 // The original adminPasswordHash rule was strict !data.exists(), which
 // blocked the super-admin recovery path when a hash already existed.
-// The fix gates an overwrite on a fresh _superadminReset flag (±30s of
-// server `now`). Tests below pin the rule shape so a future edit can't
-// silently drop the gate or widen the window.
+// The fix gates an overwrite on a fresh reset flag (±30s of server `now`).
+// Tests below pin the rule shape so a future edit can't silently drop the
+// gate or widen the window.
+//
+// WHERE THE FLAG IS. Until 2026-10 it was sessions/<code>/_superadminReset,
+// and it carried the recovery code — on a node every member of the session
+// could read. It is now adminSecrets/<code>/reset/<uid>: a tree with no read
+// rule, keyed by its writer. tests/reset-flag-unreadable.test.js pins the
+// move; the tests here keep what they always checked, against the new node.
 
-test("rules: adminPasswordHash allows overwrite only via fresh _superadminReset", () => {
+test("rules: adminPasswordHash allows overwrite only via a fresh reset flag", () => {
   const rule = rules.rules.sessions["$sessionId"].adminPasswordHash[".write"];
   // initial set must still work
   assert.ok(rule.includes("!data.exists()"),
     "adminPasswordHash must still allow first write when no hash exists: " + rule);
-  // overwrite is gated by the reset-flag sibling
-  assert.ok(rule.includes("_superadminReset"),
-    "adminPasswordHash overwrite must require _superadminReset flag: " + rule);
+  // overwrite is gated by the WRITER'S OWN reset flag, in the unreadable tree
+  assert.ok(rule.includes("root.child('adminSecrets').child($sessionId).child('reset').child(auth.uid).child('requestedAt')"),
+    "adminPasswordHash overwrite must require the writer's own reset flag: " + rule);
+  assert.ok(!rule.includes("_superadminReset"),
+    "adminPasswordHash must not read the old, member-readable node: " + rule);
   // 30-second freshness window keeps the door from staying open
   assert.ok(rule.includes("now - 30000"),
     "adminPasswordHash overwrite window must be 30s: " + rule);
 });
 
-test("rules: _superadminReset itself is freshness-bounded and closed-aware", () => {
-  const reset = rules.rules.sessions["$sessionId"]._superadminReset;
-  assert.ok(reset, "/sessions/$sessionId/_superadminReset must be defined");
+test("rules: the reset flag itself is freshness-bounded, closed-aware and its writer's own", () => {
+  const reset = rules.rules.adminSecrets["$code"].reset["$uid"];
+  assert.ok(reset, "/adminSecrets/$code/reset/$uid must be defined");
   const w = reset[".write"];
   assert.ok(w.includes("auth != null"),
-    "_superadminReset write must require authentication: " + w);
+    "the reset flag's write must require authentication: " + w);
+  assert.ok(w.includes("$uid == auth.uid"),
+    "a reset flag must be writable only under the writer's own uid: " + w);
   assert.ok(w.includes("'closed'"),
-    "_superadminReset must be refused once the session is closed: " + w);
+    "a reset must be refused once the session is closed: " + w);
   // requestedAt must be near server `now` so a stale flag can't reopen the door
   assert.ok(w.includes("now - 5000"),
-    "_superadminReset requestedAt freshness lower bound (now - 5000): " + w);
+    "reset flag requestedAt freshness lower bound (now - 5000): " + w);
   const v = reset[".validate"];
-  assert.ok(v.includes("requestedAt") && v.includes("'by'"),
-    "_superadminReset must validate {requestedAt, by} envelope: " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','code'])"),
+    "the reset flag must validate its {requestedAt, code} envelope: " + v);
+  assert.strictEqual(reset.$other[".validate"], false, "and carry nothing else");
 });
 
-test("rules: /orgs adminPasswordHash overwrite goes through _superadminReset too", () => {
+test("rules: /orgs adminPasswordHash overwrite goes through the reset flag too", () => {
   const orgSession = rules.rules.orgs["$orgSlug"].sessions["$sessionId"];
   const rule = orgSession.adminPasswordHash[".write"];
   assert.ok(rule.includes("!data.exists()"),
     "/orgs adminPasswordHash must still allow first write: " + rule);
-  assert.ok(rule.includes("_superadminReset"),
-    "/orgs adminPasswordHash overwrite must require _superadminReset: " + rule);
-  // org-scoped path - must not accidentally check the legacy /sessions/ subtree
-  assert.ok(rule.includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId)"),
-    "/orgs adminPasswordHash overwrite must reference org-scoped reset flag: " + rule);
+  // org-scoped flag - must not accidentally check the default tree's
+  assert.ok(rule.includes("root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('reset').child(auth.uid).child('requestedAt')"),
+    "/orgs adminPasswordHash overwrite must reference the org-scoped reset flag: " + rule);
+  assert.ok(!rule.includes("_superadminReset") && !rule.includes("child('adminSecrets').child($sessionId)"),
+    "/orgs adminPasswordHash must read neither the old node nor the default tree's flag: " + rule);
 });
 
 // =============================================================
@@ -798,7 +809,7 @@ test("rules: /orgs votes/ballots ownership guard is org-scoped", () => {
 // (spoken-aloud) session code could hijack the admin password. The fix adds
 // an UNREADABLE top-level /recovery subtree holding a per-session secret,
 // written ONCE at creation (before any adminPasswordHash exists), and makes
-// both _superadminReset.write require the written `code` to equal
+// the reset flag's write require the written `code` to equal
 // /recovery/.../code. These tests pin that contract so a future edit can't
 // silently drop the recovery binding and re-open the hijack path.
 
@@ -857,46 +868,45 @@ test("rules: /recovery/orgs/$orgSlug/sessions/$sessionId mirrors the session-sco
   assert.match(v, /length <= 60/);
 });
 
-test("rules: /sessions _superadminReset.write requires the recovery code to match", () => {
-  const w = rules.rules.sessions["$sessionId"]._superadminReset[".write"];
+test("rules: /sessions reset flag write requires the recovery code to match", () => {
+  const w = rules.rules.adminSecrets["$code"].reset["$uid"][".write"];
   // the write must consult the unreadable recovery subtree
-  assert.ok(w.includes("root.child('recovery').child('sessions').child($sessionId).child('code')"),
-    "_superadminReset write must reference /recovery/sessions/$sessionId/code: " + w);
+  assert.ok(w.includes("root.child('recovery').child('sessions').child($code).child('code')"),
+    "the reset flag's write must reference /recovery/sessions/$code/code: " + w);
   // and require the written code to EQUAL the stored recovery code
-  assert.ok(w.includes("newData.child('code').val() == root.child('recovery').child('sessions').child($sessionId).child('code').val()"),
-    "_superadminReset write must require the submitted code to equal the stored recovery code: " + w);
+  assert.ok(w.includes("newData.child('code').val() == root.child('recovery').child('sessions').child($code).child('code').val()"),
+    "the reset flag's write must require the submitted code to equal the stored recovery code: " + w);
 });
 
-test("rules: /sessions _superadminReset.validate requires a code field (8..60)", () => {
-  const v = rules.rules.sessions["$sessionId"]._superadminReset[".validate"];
-  assert.ok(v.includes("'code'"), "_superadminReset validate must require a `code` field: " + v);
-  assert.ok(v.includes("child('uid').isString()"),
-    "_superadminReset validate must require a `uid` field (R3 recovery-race fix): " + v);
-  assert.ok(v.includes("hasChildren(['requestedAt','by','code','uid'])"),
-    "_superadminReset validate must require {requestedAt, by, code}: " + v);
-  assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/,
-    "_superadminReset code must be >= 8 chars: " + v);
-  assert.match(v, /child\('code'\)\.val\(\)\.length <= 60/,
-    "_superadminReset code must be <= 60 chars: " + v);
+test("rules: /sessions reset flag requires a code field (8..60), and is keyed by its writer", () => {
+  const flag = rules.rules.adminSecrets["$code"].reset["$uid"];
+  assert.ok(flag[".validate"].includes("hasChildren(['requestedAt','code'])"),
+    "the reset flag must require {requestedAt, code}: " + flag[".validate"]);
+  /* The R3 recovery-race binding used to be a `uid` FIELD the rule compared
+     with auth.uid. It is the KEY now — nothing to forge, nothing to validate. */
+  assert.ok(flag[".write"].includes("$uid == auth.uid"),
+    "the reset flag must be bound to its writer by its key: " + flag[".write"]);
+  const v = flag.code[".validate"];
+  assert.match(v, /newData\.val\(\)\.length >= 8/, "reset flag code must be >= 8 chars: " + v);
+  assert.match(v, /newData\.val\(\)\.length <= 60/, "reset flag code must be <= 60 chars: " + v);
 });
 
-test("rules: /orgs _superadminReset.write requires the org-scoped recovery code to match", () => {
-  const w = rules.rules.orgs["$orgSlug"].sessions["$sessionId"]._superadminReset[".write"];
+test("rules: /orgs reset flag write requires the org-scoped recovery code to match", () => {
+  const w = rules.rules.adminSecrets.orgs["$orgSlug"]["$sessionId"].reset["$uid"][".write"];
   assert.ok(w.includes("root.child('recovery').child('orgs').child($orgSlug).child('sessions').child($sessionId).child('code')"),
-    "/orgs _superadminReset write must reference /recovery/orgs/$orgSlug/sessions/$sessionId/code: " + w);
+    "/orgs reset flag write must reference /recovery/orgs/$orgSlug/sessions/$sessionId/code: " + w);
   assert.ok(w.includes("newData.child('code').val() == root.child('recovery').child('orgs').child($orgSlug).child('sessions').child($sessionId).child('code').val()"),
-    "/orgs _superadminReset write must require the submitted code to equal the org-scoped recovery code: " + w);
+    "/orgs reset flag write must require the submitted code to equal the org-scoped recovery code: " + w);
 });
 
-test("rules: /orgs _superadminReset.validate requires a code field (8..60)", () => {
-  const v = rules.rules.orgs["$orgSlug"].sessions["$sessionId"]._superadminReset[".validate"];
-  assert.ok(v.includes("'code'"), "/orgs _superadminReset validate must require a `code` field: " + v);
-  assert.ok(v.includes("child('uid').isString()"),
-    "_superadminReset validate must require a `uid` field (R3 recovery-race fix): " + v);
-  assert.ok(v.includes("hasChildren(['requestedAt','by','code','uid'])"),
-    "/orgs _superadminReset validate must require {requestedAt, by, code}: " + v);
-  assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/);
-  assert.match(v, /child\('code'\)\.val\(\)\.length <= 60/);
+test("rules: /orgs reset flag requires a code field (8..60), and is keyed by its writer", () => {
+  const flag = rules.rules.adminSecrets.orgs["$orgSlug"]["$sessionId"].reset["$uid"];
+  assert.ok(flag[".validate"].includes("hasChildren(['requestedAt','code'])"),
+    "/orgs reset flag must require {requestedAt, code}: " + flag[".validate"]);
+  assert.ok(flag[".write"].includes("$uid == auth.uid"),
+    "/orgs reset flag must be bound to its writer by its key: " + flag[".write"]);
+  assert.match(flag.code[".validate"], /newData\.val\(\)\.length >= 8/);
+  assert.match(flag.code[".validate"], /newData\.val\(\)\.length <= 60/);
 });
 
 test("rules: /recovery is NOT under the readable session subtree (no cascade leak)", () => {
@@ -937,12 +947,12 @@ test("rules: adminSecrets subtree grants NO read to any client (oracle closed)",
     "/adminSecrets/$code/proof/$uid must not grant .read");
 });
 
-test("rules: adminSecrets/$code/hash is write-once + _superadminReset-gated + format-validated", () => {
+test("rules: adminSecrets/$code/hash is write-once + reset-flag-gated + format-validated", () => {
   const h = rules.rules.adminSecrets.$code.hash;
   assert.ok(h[".write"].includes("auth != null"), "hash write must require auth: " + h[".write"]);
   assert.ok(h[".write"].includes("!data.exists()"), "hash must be write-once: " + h[".write"]);
-  assert.ok(h[".write"].includes("_superadminReset") && h[".write"].includes("now - 30000"),
-    "hash overwrite must be gated by a fresh _superadminReset (30s window): " + h[".write"]);
+  assert.ok(h[".write"].includes("child('reset').child(auth.uid)") && h[".write"].includes("now - 30000"),
+    "hash overwrite must be gated by the writer's own fresh reset flag (30s window): " + h[".write"]);
   // same format guard as the legacy field (PBKDF2 v2$ envelope OR SHA-256 hex)
   assert.match(h[".validate"], /v2\[\$\]\[0-9\]\+\[\$\]\[0-9a-f\]\+/);
   assert.match(h[".validate"], /\[0-9a-f\]\{64\}/);
@@ -1155,19 +1165,19 @@ test("rules: facilitatorGate — admin-only node; every session-establishment wr
                    r.orgs.$orgSlug.sessions.$sessionId.adminPasswordHash[".write"],
                    r.adminSecrets.$code.hash[".write"],
                    r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"]]) {
-    assert.match(w, /_superadminReset/, "hash recovery branch must survive the gate: " + w);
+    assert.match(w, /child\('reset'\)\.child\(auth\.uid\)/, "hash recovery branch must survive the gate: " + w);
   }
 
-  // …and the _superadminReset write itself must stay UNGATED — it is how an
+  // …and the reset flag's write itself must stay UNGATED — it is how an
   // existing session's admin (or a co-facilitator, who need not be allowlisted)
   // initiates a password reset. Gating it would break recovery under enforcement.
   // The recovery-code write that unlocks it IS gated (in establishmentWrites
   // above), which is what blocks a fresh-session recovery bootstrap without
   // touching resets of already-established sessions.
-  for (const w of [r.sessions.$sessionId._superadminReset[".write"],
-                   r.orgs.$orgSlug.sessions.$sessionId._superadminReset[".write"]]) {
+  for (const w of [r.adminSecrets.$code.reset.$uid[".write"],
+                   r.adminSecrets.orgs.$orgSlug.$sessionId.reset.$uid[".write"]]) {
     assert.doesNotMatch(w, /facilitatorGate/,
-      "_superadminReset must stay ungated so existing-session recovery works: " + w);
+      "the reset flag must stay ungated so existing-session recovery works: " + w);
   }
 });
 

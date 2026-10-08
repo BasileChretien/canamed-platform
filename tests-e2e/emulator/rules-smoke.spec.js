@@ -258,7 +258,7 @@ test("rules: FINDING-07 — admin hash is unreadable; login verifies by proof-wr
   expect(wrong).not.toBe("ALLOWED");
   expect(String(wrong)).toMatch(/permission_denied|denied/i);
 
-  // Hash is write-once: overwrite without a fresh _superadminReset is denied.
+  // Hash is write-once: overwrite without a fresh reset flag is denied.
   const overwrite = await tryWrite(page, `adminSecrets/${code}/hash`, wrongHash);
   expect(overwrite).not.toBe("ALLOWED");
 });
@@ -432,7 +432,7 @@ test("rules: org-scoped adminSecrets — real hash unreadable; proof-write verif
   expect(wrong).not.toBe("ALLOWED");
   expect(String(wrong)).toMatch(/permission_denied|denied/i);
 
-  // Hash is write-once: overwrite without a fresh _superadminReset is denied.
+  // Hash is write-once: overwrite without a fresh reset flag is denied.
   const overwrite = await tryWrite(page, hashPath, wrongHash);
   expect(overwrite).not.toBe("ALLOWED");
 });
@@ -1072,7 +1072,7 @@ test("rules: facilitatorGate — every session-establishment write is gated when
       [`orgs/${org}/sessions/fgOBc-${ts}/creatorUid`, uidB],
       [`orgs/${org}/sessions/fgOBh-${ts}/adminPasswordHash`, HEX],
       [`adminSecrets/orgs/${org}/fgOBs-${ts}/hash`, HEX2],
-      // …including the recovery-code bootstrap (the _superadminReset entry point):
+      // …including the recovery-code bootstrap (the reset flag's entry point):
       // seeding it on a fresh, hashless session was the recovery bypass.
       [`recovery/sessions/fgBr-${ts}`, { code: "attacker-code-01" }],
       [`recovery/orgs/${org}/sessions/fgOBr-${ts}`, { code: "attacker-code-02" }],
@@ -1083,11 +1083,13 @@ test("rules: facilitatorGate — every session-establishment write is gated when
     // 4) The recovery BRANCHES stay open for an ALREADY-established session, so
     //    gating the recovery-code bootstrap does not break legitimate password
     //    recovery under enforcement. uidA resets `est` (established in step 2):
-    //    _superadminReset with the known code, then overwrite the hash via the
+    //    the reset flag with the known code, then overwrite the hash via the
     //    (ungated) recovery branch — both must succeed.
     const now = Date.now();
-    expect(await tryWrite(page, `sessions/${est}/_superadminReset`,
-      { requestedAt: now, by: "A", code: estRC, uid: uidA })).toBe("ALLOWED");
+    /* The flag lives where no client can read it, under the writer's own uid
+       (reset-flag-unreadable.spec.js); it used to be sessions/<est>/_superadminReset. */
+    expect(await tryWrite(page, `adminSecrets/${est}/reset/${uidA}`,
+      { requestedAt: now, code: estRC })).toBe("ALLOWED");
     expect(await tryWrite(page, `sessions/${est}/adminPasswordHash`, HEX2)).toBe("ALLOWED");
   } finally {
     // ALWAYS clear the gate so later tests' session creation isn't blocked.
