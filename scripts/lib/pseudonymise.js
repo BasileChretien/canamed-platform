@@ -41,8 +41,14 @@
  *   - A record attributable to a person is kept only when it can be shown to
  *     be an included participant's — by the key of its container, by its
  *     `cid`, by a clientId in its `by`, or (failing closed on namesakes) by a
- *     display name nobody else in the session holds. The rest is removed and
- *     counted (`stats`). An account uid `clientMapping` ties to a row that is
+ *     display name held by nobody else whose pool row is bound to an account,
+ *     nor by the facilitator. The rest is removed and counted (`stats`).
+ *     Exception: the name-only records (events, reveals, triage choices,
+ *     calls for help) of a participant who is not included and is bound to no
+ *     account are kept as an included namesake's, if one exists — the price
+ *     of not letting an unbound row, which anyone holding the session code
+ *     can write, remove an included participant's records.
+ *     An account uid `clientMapping` ties to a row that is
  *     not included is still removed wherever it appears as a key — except
  *     under `members` / `uidMembers`, where an account that ALSO stands
  *     behind an included row (two tabs of one browser) keeps its entry, under
@@ -166,6 +172,12 @@ const REDACTED_NAME = "REDACTED-NAME";
  *                 included pool row, a name-only record whose name is shared
  *                 with somebody not included, and a room's team name. A row
  *                 counts only when bound to an account by clientMapping.
+ *                 Exception: the name-only records (events, reveals, triage
+ *                 choices, calls for help) of a participant who is not
+ *                 included and is bound to no account are kept as an included
+ *                 namesake's, if one exists — the price of not letting an
+ *                 unbound row, which anyone holding the session code can
+ *                 write, remove an included participant's records.
  * Raise it with every change to what this module lets through. */
 const TRANSFORM_VERSION = 3;
 

@@ -388,6 +388,31 @@ test("a BOUND row carrying her name does remove them — the cost that is left, 
   assert.strictEqual(stats.nameShared, 9);
 });
 
+test("an UNBOUND decliner's name-only records go out as an included namesake's — recorded, not endorsed", () => {
+  /* The other side of the rule above, pinned so that nobody reads the removal
+     rule as having no exception. A participant whose clientMapping claim
+     failed is not included and, since only BOUND rows count against a name,
+     does not make the name "shared". So if an included participant has the
+     same display name, a name-only record (event, reveal, triage choice, call
+     for help) of theirs is judged as hers and exported under her pseudonym.
+     That is the price of not letting an unbound row — which anyone holding
+     the code can write — remove an included participant's records. Which
+     price to pay is the controller's choice (DPA Annex VI G1 (a)). If this
+     test goes red because the record is gone, that choice was made: update
+     G1, Annex II §1, the export's note, both module headers and CLAUDE.md. */
+  const sess = consentScopeSession();
+  sess.pool["cid-UNBOUND-DECLINER"] = { name: "Ann Dupont", university: "Caen", year: 3, english: "B2",
+                                        at: 6, consent: { research: false } };
+  sess.rooms["Room 1"].events["ev-UNBOUND"] = { kind: "answer.moduleA", by: "Ann Dupont", at: 7,
+    payload: JSON.stringify({ by: "Ann Dupont", university: "Caen", len: 9, note: "event by the UNBOUND decliner" }) };
+  const out = pseudonymiseSession(applyWithdrawals(sess, consentScopeWithdrawals()), "S1", {});
+  const ev = out.rooms["Room 1"].events["ev-UNBOUND"];
+  assert.ok(ev, "the unbound decliner's event is in the export");
+  assert.strictEqual(JSON.parse(ev.payload).note, "event by the UNBOUND decliner");
+  assert.strictEqual(ev.by, "Student-A", "under the included namesake's pseudonym");
+  assert.ok(!("cid-UNBOUND-DECLINER" in out.pool), "their pool row is not");
+});
+
 test("the file says it was written by a transform that removes this", () => {
   assert.ok(Number.isInteger(TRANSFORM_VERSION) && TRANSFORM_VERSION >= 3);
 });

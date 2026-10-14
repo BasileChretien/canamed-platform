@@ -2380,16 +2380,24 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       and a record naming a person is kept only when it can be SHOWN to be an
       included one's — by its container's key, its `cid`, the clientId in
       roleAssign's `by` (assignRolesRandomly writes `by: clientId`, not a
-      name), or a display name no one else in the session holds (events,
-      reveals, triage, call for help). The rest is removed and counted in the
-      job's log. **Costs, each pinned by a test and put to the controller in
+      name), or a display name held by nobody else whose pool row is bound to
+      an account, nor by the facilitator (events, reveals, triage, call for
+      help). The rest is removed and counted in the job's log. **Exception:**
+      the name-only records (events, reveals, triage choices, calls for help)
+      of a participant who is not included and is bound to no account are kept
+      as an included namesake's, if one exists — the price of not letting an
+      unbound row, which anyone holding the session code can write, remove an
+      included participant's records (pinned as present behaviour by "an
+      UNBOUND decliner's name-only records go out as an included namesake's").
+      **Costs, each pinned by a test and put to the controller in
       G1:** a namesake who declined costs an included participant her
       name-only records — and that is a LEVER: any signed-in visitor holding
       the code who binds a pool row of their own under her display name
       removes them. Only BOUND rows count as namesakes; the first version
       counted every pool row, so one unbound `pool/x = {name: <hers>}` (the
       tolerant first-write branch — anyone with the code) did it for free
-      (found in review); the facilitator's events/replies/reveals go (cannot be
+      (found in review) — and not counting them is what makes the exception
+      above; G1 (a) puts the two prices side by side for the controller; the facilitator's events/replies/reveals go (cannot be
       told from forgeries) while `audit`/`score/manual`/`created`/`closed`
       stay; `teamName` goes (free text, no author); a reveal by someone not
       included disappears from the room's revealed set. **NOT closed:** a

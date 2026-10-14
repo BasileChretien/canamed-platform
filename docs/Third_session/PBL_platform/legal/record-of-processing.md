@@ -125,11 +125,15 @@ follow, and they are different.
   version 3** (not yet in any stored file: [OPERATOR — DATE OF THE FIRST FILE
   CARRYING `transformVersion: 3`: ____ ]) keeps a record that names a person
   only when it can be shown to be an included participant's, and removes the
-  rest (DPA Annex VI G1 lists what, as run). Two things keep them from being
+  rest (DPA Annex VI G1 lists what, as run). Three things keep them from being
   absent from a version-3 file in every case: a record written in an included
   participant's name or `clientId` by somebody else is not detected, because
-  the database binds neither to the writer; and an included participant's
-  reply to a removed entry stays. What is done about the version-1 and
+  the database binds neither to the writer; an included participant's
+  reply to a removed entry stays; and the name-only records (events, reveals,
+  triage choices, calls for help) of a participant who is not included and is
+  bound to no account are kept as an included namesake's, if one exists — the
+  price of not letting an unbound row, which anyone holding the session code
+  can write, remove an included participant's records. What is done about the version-1 and
   version-2 files is R10 item 1 — the operator's decision.
 - **So is the facilitator**, through the text they authored and their own
   records (audit log, manual scores), in every version. Version 3 removes their

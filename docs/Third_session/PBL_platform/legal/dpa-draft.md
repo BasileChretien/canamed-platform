@@ -1885,9 +1885,15 @@ that could not be confirmed from the code is marked.*
     withdrawn. A record that names a person is kept only when it can be shown
     to be an included participant's: by the clientId keying it, by its `cid`,
     by the clientId in its `by` (a role assignment), or by a display name that
-    an included participant holds and nobody else in the session does
-    (events, reveals, triage choices, a call for help). Everything else
-    attributable to a person is removed and counted in the job's log (run).
+    an included participant holds and nobody else whose pool row is bound to
+    an account holds, nor the facilitator (events, reveals, triage choices, a
+    call for help). Everything else attributable to a person is removed and
+    counted in the job's log (run). Exception: the name-only records (events,
+    reveals, triage choices, calls for help) of a participant who is not
+    included and is bound to no account are kept as an included namesake's,
+    if one exists — the price of not letting an unbound row, which anyone
+    holding the session code can write, remove an included participant's
+    records (run; G1 (a)).
     An account UID the `clientMapping` table ties to a row that is not
     included is removed wherever it appears as a key — with one exception,
     the membership list: an account that also stands behind an included row
@@ -3048,7 +3054,7 @@ a different lawful basis. The original finding follows.
 >   questionnaire, presence, role choice, role assignment); their ballots; every
 >   answer, edit, deleted answer, hypothesis and reply whose `cid` is theirs;
 >   a role assignment they made; and every event, reveal, triage choice or call
->   for help in their name;
+>   for help in their name — except as stated in the exception below;
 > - the same for an identity with no pool row at all;
 > - an included participant's event, reveal or triage choice when her display
 >   name is also held by somebody who is not included and whose pool row is
@@ -3061,6 +3067,15 @@ a different lawful basis. The original finding follows.
 >   redacted;
 > - a room's team name (free text, no author recorded).
 >
+> **Exception:** the name-only records (events, reveals, triage choices, calls
+> for help) of a participant who is not included and is bound to no account
+> are kept as an included namesake's, if one exists — the price of not letting
+> an unbound row, which anyone holding the session code can write, remove an
+> included participant's records. Run: a declining row with no `clientMapping`
+> row, named like an included participant, wrote an event in that name; the
+> event is in the output, under her pseudonym. Whether to pay this price or
+> the other one is (a) below.
+>
 > What it does **not** do: it does not detect a record written under somebody
 > else's name or `clientId` (the rules bind neither to the writer); a reply an
 > included participant wrote to a removed entry stays; and it changes no file
@@ -3071,14 +3086,17 @@ a different lawful basis. The original finding follows.
 > **[CONTROLLER TO DECIDE: (a) whether failing closed on a shared display name
 > is right — an included participant loses her events, reveals and triage
 > choices (and her reveals drop out of the room's revealed set) to a namesake
-> who declined; and it is a lever, not only a coincidence: **any signed-in
-> visitor holding the session code who binds a pool row of their own under her
-> display name removes her name-only records from the export.** Counting only
-> rows bound to an account removed the free version of that lever (an unbound
-> row, which anyone can write) and not this one; its price is that an unbound
-> namesake's name-only records, if any, are judged as hers. The alternative
-> keeps the record and strips the name, which keeps a decliner's action in the
-> file; (b) whether a
+> who declined and whose row is bound to an account; and it is a lever, not
+> only a coincidence: **any signed-in visitor holding the session code who
+> binds a pool row of their own under her display name removes her name-only
+> records from the export.** Within that rule there are two prices, and which
+> to pay is the controller's choice: **counting unbound rows** as namesakes
+> lets any visitor holding the session code remove an included participant's
+> name-only records for free, by writing one unbound row under her name;
+> **not counting them** (version 3 as it stands) keeps an unbound decliner's
+> name-only records in the export under an included namesake's pseudonym (the
+> exception above). The alternative to the whole rule keeps the record and
+> strips the name, which keeps a decliner's action in the file; (b) whether a
 > participant whose consenting row is bound to no account (a failed claim) is
 > rightly left out; (c) whether an included participant's reply to a removed
 > entry stays; (d) whether the facilitator's own records belong in the research
@@ -5061,7 +5079,12 @@ reviewed-release process.
 > answer, edit, deleted answer, hypothesis, reply, poll answer or
 > questionnaire answer of a participant who declined, withdrew, or has no
 > account-bound participant-list entry is removed, and so is a call for help
-> in such a person's name. A room's `teamName` is removed outright — free text
+> in such a person's name — with the exception stated in G1: the name-only
+> records (events, reveals, triage choices, calls for help) of a participant
+> who is not included and is bound to no account are kept as an included
+> namesake's, if one exists — the price of not letting an unbound row, which
+> anyone holding the session code can write, remove an included participant's
+> records. A room's `teamName` is removed outright — free text
 > with no author recorded. What an included participant wrote still passes
 > as written, and so does the facilitator's text (scenario, labels, score
 > tags, links). The legacy per-prompt reply lists are now filtered the same

@@ -166,6 +166,9 @@ test("the note does not promise what the file does not deliver", () => {
     "the note must say what failing closed on a shared name costs");
   assert.ok(/any signed-in visitor holding the session code who binds a row of their own under her display name removes them/.test(note),
     "the note must say that the shared-name rule is a lever any visitor can pull, not only a coincidence");
+  assert.ok(/EXCEPTION: the name-only records \(events, reveals, triage choices, calls for help\) of a participant who is not included and is bound to no account are kept as an included namesake's, if one exists/.test(note),
+    "the note must state the exception to the removal rule: an unbound decliner's name-only records " +
+    "are exported as an included namesake's (tests/pseudonymise-consent-scope.test.js pins it)");
   assert.ok(/is not detected/.test(note),
     "the note must say that a record written in somebody else's name is not caught");
   assert.ok(/version 2 or earlier is NOT erased of participants who declined/.test(note),

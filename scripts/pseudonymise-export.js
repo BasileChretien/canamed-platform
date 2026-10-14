@@ -35,7 +35,12 @@
  * declined wrote into the room's shared lists (answers, edits, replies,
  * hypotheses, deleted answers, events, reveals, triage choices), and rows and
  * records under identities with no pool entry. Version 3 keeps only what can
- * be shown to be an included participant's (scripts/lib/research-inclusion.js).
+ * be shown to be an included participant's (scripts/lib/research-inclusion.js),
+ * with one exception: the name-only records (events, reveals, triage choices,
+ * calls for help) of a participant who is not included and is bound to no
+ * account are kept as an included namesake's, if one exists — the price of not
+ * letting an unbound row, which anyone holding the session code can write,
+ * remove an included participant's records.
  * Do not date this by the calendar: the job runs once a night on whatever
  * `main` holds, so the first file written by a version is the first one that
  * says so. A fix to the transform does not rewrite a stored file; what is done
@@ -246,14 +251,20 @@ async function main() {
       "hypothesis or reply whose cid is theirs and in which no name belongs to nobody " +
       "included; a role assignment whose assigner clientId is theirs; an event, reveal, " +
       "triage choice or call for help whose every name is held by an included participant " +
-      "and by nobody else the session records. Everything else attributable to a person " +
+      "and by nobody else whose pool row is bound to an account, nor by the facilitator. " +
+      "Everything else attributable to a person " +
       "is removed: what a participant who declined, withdrew or is bound to no account " +
-      "wrote; what an identity with no included pool row wrote; and a name-only record " +
+      "wrote, with one exception (below); what an identity with no included pool row " +
+      "wrote; and a name-only record " +
       "whose name an included participant shares with somebody who is not included but " +
       "whose pool row is bound to an account (so an included participant can lose such " +
       "records to a namesake — and any signed-in visitor holding the session code who " +
       "binds a row of their own under her display name removes them; a row bound to no " +
-      "account does not count). A room's team name " +
+      "account does not count). EXCEPTION: the name-only records (events, reveals, " +
+      "triage choices, calls for help) of a participant who is not included and is bound " +
+      "to no account are kept as an included namesake's, if one exists — the price of " +
+      "not letting an unbound row, which anyone holding the session code can write, " +
+      "remove an included participant's records. A room's team name " +
       "is removed (free text, no author recorded); its stage, scores and committed votes " +
       "stay. The facilitator's own records (created, closed, audit, manual scores, " +
       "configuration) stay, name redacted; their entries in shared lists do not. A record " +

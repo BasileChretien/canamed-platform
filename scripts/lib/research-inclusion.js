@@ -44,6 +44,11 @@
  *      participant AND by nobody else the session records — the pool rows not
  *      included that a `clientMapping` row binds to an account, and the
  *      facilitator's name as the admin-only records give it.
+ *      Exception: the name-only records (events, reveals, triage choices,
+ *      calls for help) of a participant who is not included and is bound to
+ *      no account are kept as an included namesake's, if one exists — the
+ *      price of not letting an unbound row, which anyone holding the session
+ *      code can write, remove an included participant's records.
  *
  * DECISIONS, EACH WITH ITS COST.
  *   - Name-only attribution fails closed. Display names are not unique: when
@@ -53,8 +58,12 @@
  *     signed-in visitor holding the code who binds a pool row of their own
  *     under her display name removes her name-only records from the export.
  *     Unbound rows do not count (anyone can write one, so counting them made
- *     the lever free); the price is that an unbound namesake's name-only
- *     records, if any, are judged as hers. Two included participants sharing
+ *     the lever free); the price is the exception stated under 4 above — a
+ *     participant who is not included and is bound to no account (e.g. a
+ *     decliner whose clientMapping claim failed) keeps their
+ *     name-only records in the export under an included namesake's pseudonym
+ *     (pinned by tests/pseudonymise-consent-scope.test.js). Which of the two
+ *     prices to pay is the controller's (DPA Annex VI G1 (a)). Two included participants sharing
  *     a name are both kept, and both become the first one's pseudonym — a
  *     misattribution between two people who both consented.
  *   - The gate counts only a row bound to an account. Every stock client
