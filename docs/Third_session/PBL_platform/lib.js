@@ -646,7 +646,7 @@
   // time and never again (it is stored under the unreadable top-level
   // /recovery subtree, so no client can read it back). Possession of
   // this code is the ONLY way to overwrite a forgotten admin password:
-  // the database rules require the value written to _superadminReset.code
+  // the database rules require the code written with the reset flag
   // to equal /recovery/.../code before adminPasswordHash may be replaced.
   //
   // Same construction as generateSessionCode (crypto.getRandomValues +
@@ -733,6 +733,17 @@
   }
 
   // ---------------------------------------------------------------
+  // serverNow
+  // ---------------------------------------------------------------
+  // The device clock plus the offset the database publishes (0 in LOCAL mode).
+  // Every date stored in the database, or compared with one, comes from here.
+  let serverOffset = 0;
+  function setServerOffset(ms) {
+    if (typeof ms === "number" && isFinite(ms)) serverOffset = ms;
+  }
+  function serverNow() { return Date.now() + serverOffset; }
+
+  // ---------------------------------------------------------------
   // exports
   // ---------------------------------------------------------------
   return {
@@ -751,6 +762,8 @@
     verifyPassword: verifyPassword,
     generateSessionCode: generateSessionCode,
     generateRecoveryCode: generateRecoveryCode,
+    serverNow: serverNow,
+    setServerOffset: setServerOffset,
     computeCohortCounts: computeCohortCounts,
     localCountryName: localCountryName,
     buildCohortPair: buildCohortPair,

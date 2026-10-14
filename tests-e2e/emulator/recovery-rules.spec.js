@@ -14,12 +14,17 @@
  *   NEGATIVE — a SECOND, independently-authenticated client (a "participant"
  *              who only knows the session code, not the recovery code):
  *                a) cannot READ the recovery code back (/recovery is .read:false)
- *                b) cannot write _superadminReset with NO code            → denied
- *                c) cannot write _superadminReset with a WRONG code        → denied
+ *                b) cannot open a reset with NO code                      → denied
+ *                c) cannot open a reset with a WRONG code                 → denied
  *                d) cannot overwrite adminPasswordHash directly            → denied
  *
  *   POSITIVE — the same client, presenting the CORRECT recovery code, CAN
- *              write _superadminReset and then overwrite adminPasswordHash.
+ *              open a reset and then overwrite adminPasswordHash.
+ *
+ * "Opening a reset" is writing a flag at adminSecrets/<code>/reset/<own uid> —
+ * a tree no client can read. Until 2026-10 the flag was written to
+ * sessions/<code>/_superadminReset, where every member of the session could
+ * read the code off it: tests-e2e/emulator/reset-flag-unreadable.spec.js.
  *
  * The negative writes failing with PERMISSION_DENIED is the whole point: it
  * means a participant who knows the (spoken-aloud) session code still cannot
@@ -112,18 +117,19 @@ test("rules: a non-creator cannot reset the password without the recovery code, 
   }, { path, value });
 
   const now = Date.now();
+  const attackerUid = await attacker.evaluate(() => firebase.auth().currentUser.uid);
+  /* The reset flag: keyed by the writer's own uid, in the unreadable tree. */
+  const flagOf = (uid) => "adminSecrets/" + code.toLowerCase() + "/reset/" + uid;
 
-  // b) _superadminReset with NO code → denied (validate requires code).
-  const noCode = await tryWrite(sPath + "/_superadminReset",
-    { requestedAt: now, by: "Mallory" });
-  expect(noCode, "_superadminReset without a code must be denied").not.toBe("ALLOWED");
+  // b) a reset flag with NO code → denied (validate requires code).
+  const noCode = await tryWrite(flagOf(attackerUid), { requestedAt: now });
+  expect(noCode, "a reset flag without a code must be denied").not.toBe("ALLOWED");
   expect(String(noCode)).toMatch(/PERMISSION_DENIED|denied/i);
 
-  // c) _superadminReset with a WRONG code → denied (write predicate compares
+  // c) a reset flag with a WRONG code → denied (write predicate compares
   //    the code to the unreadable /recovery/.../code).
-  const wrongCode = await tryWrite(sPath + "/_superadminReset",
-    { requestedAt: now, by: "Mallory", code: "wrong-wrong-wrong" });
-  expect(wrongCode, "_superadminReset with a wrong code must be denied").not.toBe("ALLOWED");
+  const wrongCode = await tryWrite(flagOf(attackerUid), { requestedAt: now, code: "wrong-wrong-wrong" });
+  expect(wrongCode, "a reset flag with a wrong code must be denied").not.toBe("ALLOWED");
   expect(String(wrongCode)).toMatch(/PERMISSION_DENIED|denied/i);
 
   // d) Direct adminPasswordHash overwrite (no fresh reset flag) → denied.
@@ -133,20 +139,19 @@ test("rules: a non-creator cannot reset the password without the recovery code, 
   expect(String(directHash)).toMatch(/PERMISSION_DENIED|denied/i);
 
   // ---- POSITIVE: with the CORRECT recovery code, the chain succeeds ----
-  // The reset flag is now bound to its initiator's uid (R3 recovery-race fix).
-  const attackerUid = await attacker.evaluate(() => firebase.auth().currentUser.uid);
+  // The reset flag is bound to its initiator's uid (R3 recovery-race fix) —
+  // structurally now: it is keyed by that uid.
 
-  // e) CORRECT code but a FORGED uid (!= the writer's own auth.uid) → denied.
-  //    The reset write binds uid to its initiator (R3); you can't open a reset
-  //    on someone else's behalf even if you know the code.
-  const forgedUid = await tryWrite(sPath + "/_superadminReset",
-    { requestedAt: Date.now(), by: "Mallory", code: recovery, uid: attackerUid + "-forged" });
-  expect(forgedUid, "_superadminReset with a forged uid must be denied").not.toBe("ALLOWED");
+  // e) CORRECT code but under SOMEBODY ELSE'S uid → denied. A flag is its
+  //    writer's own (R3): you can't open a reset on someone else's behalf
+  //    even if you know the code.
+  const forgedUid = await tryWrite(flagOf(attackerUid + "-forged"),
+    { requestedAt: Date.now(), code: recovery });
+  expect(forgedUid, "a reset flag under another uid must be denied").not.toBe("ALLOWED");
   expect(String(forgedUid)).toMatch(/permission_denied|denied/i);
 
-  const goodReset = await tryWrite(sPath + "/_superadminReset",
-    { requestedAt: Date.now(), by: "Recovery Emu Fac", code: recovery, uid: attackerUid });
-  expect(goodReset, "_superadminReset with the correct code must be ALLOWED: " + goodReset).toBe("ALLOWED");
+  const goodReset = await tryWrite(flagOf(attackerUid), { requestedAt: Date.now(), code: recovery });
+  expect(goodReset, "a reset flag with the correct code must be ALLOWED: " + goodReset).toBe("ALLOWED");
 
   // RACE GUARD (R3): while that reset is fresh, a DIFFERENT uid must NOT be able
   // to overwrite the hash — the write is bound to the reset initiator's uid,

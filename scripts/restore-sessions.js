@@ -38,6 +38,7 @@ const { getDatabase } = require("firebase-admin/database");
 
 const { applySuppression } = require("./lib/suppression");
 const { locationForKey } = require("./lib/session-trees");
+const { withoutLegacyResetFlag } = require("./lib/reset-flag");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -136,8 +137,24 @@ async function main() {
     process.exit(0);
   }
 
+  /* A leftover reset flag is withheld, like an erased participant. A snapshot
+     taken before the backup learned to strip it (lib/reset-flag.js) may hold
+     the session's RECOVERY CODE in clear, at a node every member of the
+     restored session could read. Nothing can use a flag there any more — the
+     rules read the new one — so withholding it loses nothing. */
+  const bodies = {};
+  let flagsWithheld = 0;
+  for (const k of keys) {
+    const flagless = withoutLegacyResetFlag(clean.sessions[k]);
+    if (flagless.stripped) flagsWithheld++;
+    bodies[k] = flagless.session;
+  }
+
   console.log(`Would restore ${keys.length} session(s):`);
   for (const k of keys) console.log(`  ${k}`);
+  if (flagsWithheld) {
+    console.log(`A leftover password-reset flag is withheld from ${flagsWithheld} of them.`);
+  }
   console.log("");
 
   if (!CONFIRM) {
@@ -153,7 +170,7 @@ async function main() {
      which nothing reads. Nothing had ever restored one. */
   const updates = {};
   for (const k of keys) {
-    updates[locationForKey(k).path] = clean.sessions[k];
+    updates[locationForKey(k).path] = bodies[k];
   }
   await db.ref().update(updates);
   console.log(`RESTORED ${keys.length} session(s), with ${removed} erased path(s) withheld.`);

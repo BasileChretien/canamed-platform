@@ -77,6 +77,17 @@
  * that slice source text between two function anchors depend on that order).
  */
 
+/* A shell cached before serverNow() existed can still load this chunk: there,
+   dates come from the device clock, as they did before. */
+if (typeof serverNow !== "function") window.serverNow = function () { return Date.now(); };
+
+/* Whole minutes since a STORED date, counted on the server's clock: the date
+   was written by another device. (minsSince() in pure-utils.js counts from
+   this device's clock, and is shared with the verify page.) */
+function minsSinceStored(ts) {
+  return ts ? Math.floor((serverNow() - ts) / 60000) : null;
+}
+
 function enterAdminApp() {
   try { CanamedLoader.ensureAdminStyles().catch(function(){}); } catch (e) {}
   el("lobby").classList.add("hidden");
@@ -308,8 +319,8 @@ function enterAdminApp() {
     // D21 recovery: pre-provisioning a NEW session number (no hash yet) needs
     // no code — the rule's !data.exists() branch allows it. OVERWRITING an
     // existing session's password requires that session's recovery code: the
-    // rule gates _superadminReset on the code matching the unreadable
-    // /recovery/.../code, and the hash overwrite on a fresh _superadminReset.
+    // rule gates the reset flag on the code matching the unreadable
+    // /recovery/.../code, and the hash overwrite on a fresh reset flag.
     hashPassword(np, targetSession)
       .then(h => {
         // FINDING-07: legacy path stores the real hash in unreadable
@@ -328,21 +339,24 @@ function enterAdminApp() {
               : refSecret.set(h);
           }
           // OVERWRITE an existing session's password — requires that session's
-          // recovery code (the rule gates _superadminReset on it). Validate it
+          // recovery code (the rule gates the reset flag on it). Validate it
           // is non-empty client-side for a clear message vs a bare denial.
           if (!recoveryCode) {
             const err = new Error("recovery-code-required");
             err._canamedRecovery = true;
             throw err;
           }
-          const refReset = db.ref(oPath(targetSession, "_superadminReset"));
+          // The flag carries the recovery code, so it goes where NO client
+          // can read: adminSecrets/…/reset/<own uid>. Under the session it
+          // was readable by every member, who could keep the code.
+          const refReset = db.ref(adminSecretPath(targetSession, "reset/" + (currentUser && currentUser.uid)));
           // ServerValue.TIMESTAMP (R3-D1) so a skewed client clock still
           // passes the rule's ±5s freshness window; Date.now() fallback for
           // non-Firebase test contexts.
           const TS = (typeof firebase !== "undefined" &&
             firebase.database && firebase.database.ServerValue &&
             firebase.database.ServerValue.TIMESTAMP) || Date.now();
-          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode, uid: (currentUser && currentUser.uid) })
+          return refReset.set({ requestedAt: TS, code: recoveryCode })
             .then(() => refSecret.set(h))
             .then(() => refReset.remove())
             .catch(err => {
@@ -541,7 +555,7 @@ function startAdmin() {
   try {
     const refAdminPresence = db.ref(sPath("_adminPresence"));
     const writePresence = () => {
-      try { refAdminPresence.set({ by: myName || "facilitator", at: Date.now() }); }
+      try { refAdminPresence.set({ by: myName || "facilitator", at: serverNow() }); }
       catch (e) { /* offline / closed — non-fatal */ }
     };
     try { refAdminPresence.onDisconnect().remove(); } catch (e) {}
@@ -889,7 +903,7 @@ function logAdminAction(kind, payload) {
     const envelope = {
       kind: String(kind || "").slice(0, 30),
       by: (typeof myName === "string" ? myName : "Admin").slice(0, 40),
-      at: Date.now()
+      at: serverNow()
     };
     if (payload && typeof payload === "object") {
       try {
@@ -1002,7 +1016,7 @@ function setRoomStage(r, from, to) {
     if (from != null && c !== from) return null;   // conflict — another admin moved it
     if (c === to) return null;                      // no-op, nothing to write
     return stageRef.set(to).then(() => {
-      db.ref(sPath("rooms/" + r + "/stageAt")).set(Date.now());
+      db.ref(sPath("rooms/" + r + "/stageAt")).set(serverNow());
       logAdminAction("room.stage", { room: r, from: from, to: to });
       logEvent(r, "stage", { room: r, from: from, to: to });
     });
@@ -1312,7 +1326,7 @@ function sessionSignal() {
     const d = allRooms[r] || {};
     const st = typeof d.stage === "number" ? d.stage : 0;
     if (d.callForHelp && !d.callForHelp.ack) calling.push(r);
-    const mins = minsSince(d.stageAt);
+    const mins = minsSinceStored(d.stageAt);
     if (mins == null) return;            // room hasn't started a stage yet
     active++;
     minStage = Math.min(minStage, st);
@@ -1433,7 +1447,7 @@ function renderDashboard() {
     if (calling) {
       const badge = document.createElement("span");
       badge.className = "call-badge";
-      const age = minsSince(data.callForHelp.at);
+      const age = minsSinceStored(data.callForHelp.at);
       badge.textContent = " calling for a facilitator" +
         (age != null && age > 0 ? " · " + age + " min" : "");
       badge.prepend(icNode("bell"));
@@ -1448,7 +1462,7 @@ function renderDashboard() {
       " · " + stageLabel(st);
     // time-in-stage + work-progress, so the lead prof can pace without opening rooms
     const timer = document.createElement("div");
-    const mins = minsSince(data.stageAt);
+    const mins = minsSinceStored(data.stageAt);
     if (mins != null) {
       const over = mins > stageMinutes(st);
       timer.className = "dash-timer" + (over ? " over" : "");
@@ -1617,7 +1631,7 @@ function buildPointsPanel(room, manualRaw) {
 }
 function awardManual(room, tag, points) {
   db.ref(sPath("rooms/" + room + "/score/manual")).push({
-    points: points, tag: tag, by: myName, at: Date.now()
+    points: points, tag: tag, by: myName, at: serverNow()
   }).catch(e => console.error("Award failed", e));
   logEvent(room, "score.manual", { tag: tag, points: points, by: myName });
 }
@@ -1898,7 +1912,7 @@ function _debriefTimeSection() {
   // We only have the CURRENT stage's stageAt (no history). Show minutes spent
   // on the current stage per room as a single coloured segment — this is the
   // best signal available without adding schema.
-  const now = Date.now();
+  const now = serverNow();
   rooms.forEach(r => {
     const data = allRooms[r] || {};
     const st = typeof data.stage === "number" ? data.stage : 0;
@@ -2120,6 +2134,8 @@ function closeSession() {
       const tree = result.tree;
       // strip the password hash from the archive
       if (tree.adminPasswordHash) delete tree.adminPasswordHash;
+      // …and a leftover of the old reset flag: it held the recovery code.
+      delete tree._superadminReset;
       downloadFullArchive(tree, sessionNum);
       if (result.alreadyClosed) {
         resetBtn("Session closed ✓ — re-download archive");
@@ -2130,7 +2146,7 @@ function closeSession() {
       if (btn) btn.textContent = "Closing session…";
       return db.ref(sPath("closed")).set({
         by: myName || "Admin",
-        at: Date.now()
+        at: serverNow()
       }).then(() => "written");
     })
     .then(result => {
@@ -2153,19 +2169,21 @@ function closeSession() {
     .catch(e => {
       console.error("Close session failed", e);
       // The archive was downloaded but the close-write failed - tell the user
-      // exactly that, with the actual error so they can act on it. The most
-      // common cause is stale database rules in production (the `closed`
-      // field validation was added later) - solved by:
-      //   firebase deploy --only database
+      // exactly that, with the actual error. A refusal is the server's answer:
+      // it is not the connection, and not something a facilitator deploys
+      // (this alert used to tell them to run `firebase deploy`). Signing in
+      // again renews the password proof the close rule checks, and a reload
+      // re-reads the server's clock.
       const reason = (e && e.code) ? (e.code + ": " + (e.message || ""))
                                    : (e && e.message) || String(e);
       alert(
         "The archive downloaded, but the session could NOT be marked as " +
         "closed.\n\n" +
         "Reason: " + reason + "\n\n" +
-        "If this says PERMISSION_DENIED, your database rules need to be " +
-        "deployed (run `firebase deploy --only database` from the platform " +
-        "folder). Otherwise check your connection and try again."
+        ((e && e.code === "PERMISSION_DENIED")
+          ? "The server refused the close. Reload this page, open the session " +
+            "again with its facilitator password, and end it again."
+          : "Check your connection and try again.")
       );
       resetBtn();
     });
@@ -2256,7 +2274,7 @@ function _sessionSummaryObj() {
   const m = (typeof _impactMetrics === "function") ? _impactMetrics() : {};
   return {
     code: (typeof sessionNum !== "undefined" && sessionNum) ? sessionNum : "",
-    at: Date.now(),
+    at: serverNow(),
     participants: m.present || 0,
     rooms: m.roomCount || 0,
     contribPct: (m.contribPct != null) ? m.contribPct : null,
