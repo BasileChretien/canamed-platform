@@ -211,7 +211,10 @@ async function main() {
       " (the transformVersion field; scripts/lib/pseudonymise.js). " +
       "WHO IS IN IT: sessions where nobody consented to research are omitted. In the " +
       "others, only a participant with pool/<clientId>/consent.research === true has a " +
-      "pool row, a linkage entry, or any node keyed by their identifiers. A participant " +
+      "pool row or a linkage entry. A node keyed by a declining participant's identifier is " +
+      "removed where the session records that identifier as theirs: their clientId, the " +
+      "stableId in their own pool row, and an account uid or stableId the mapping tables " +
+      "tie to them; one keyed by an identifier the session ties to nobody is not. A participant " +
       "who declined, or whose record predates the consent field, is NOT erased from " +
       "the file: what they wrote into the room's shared lists (answers, replies, " +
       "hypotheses, deleted answers) is still here, with the name redacted. " +

@@ -1880,7 +1880,11 @@ that could not be confirmed from the code is marked.*
   the boundary. See Annex VI, R10.
 - **What it does NOT do — stated plainly.**
   - **It does not erase a participant who declined research use.** Their pool
-    row and every node keyed by their identifiers are removed; what they wrote
+    row is removed, and so is every node keyed by an identifier the session
+    records as theirs: their clientId, the stableId in their own row, and an
+    account UID or stableId the mapping tables tie to them. A node keyed by an
+    identifier the session ties to nobody — a ballot under a stableId that no
+    row and no table records — stays (run). What they wrote
     into a room's shared lists — answers, replies, hypotheses, deleted answers
     — stays, with the name redacted. See Annex VI, G1 (corrected) and R10.
   - **It does not remove `stableId`**, the study's join key. For a signed-in
@@ -4976,9 +4980,14 @@ data subjects of this export whom its Art. 30(1) record did not list
 **What changed — transform version 2.**
 
 - A `payload` is parsed, scrubbed by the same rules as the rest of the tree,
-  and written back. One that cannot be read as a JSON object is **removed**
-  (the application cuts a payload at 500 characters, and the rule accepts any
-  string): what cannot be opened cannot be scrubbed. Only `payload` is opened —
+  and written back. One that is not what the application writes is
+  **removed**: longer than the 500 characters the application cuts a payload
+  at, not readable as JSON, or JSON that is not an object (a list is not
+  one). What cannot be opened cannot be scrubbed — and a payload nested
+  thousands of levels deep, which a visitor holding the session code could
+  write under a key the rules do not check, stopped the first version of this
+  correction, and with it the whole export (found in review, run, corrected
+  before it shipped). Only `payload` is opened —
   an authored scenario is JSON in a string too, and its `name` keys are the
   case's characters.
 - `creatorUid`, `ownerUid`, `roomOf` and the session's `mail` are **dropped**.

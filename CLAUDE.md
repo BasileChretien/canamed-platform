@@ -1965,8 +1965,16 @@ successfully'` — and do not take a green Deploy as proof.
       `{to, subject, text}`, the queue of the mail function removed
       2026-09-24. A rule being deleted does not delete what it guarded.
     - **Fix (`TRANSFORM_VERSION = 2`):** a `payload` is parsed, scrubbed by the
-      same walk, re-serialised — and REMOVED if it does not parse as a JSON
-      object (the client cuts it at 500 chars; the rule takes any string).
+      same walk, re-serialised — and REMOVED if it is not what a client
+      writes: over 500 chars (the client's own cut), not JSON, or JSON that is
+      not an object (an array is not one). ⚠️ The first version parsed any
+      length and let `walk()` throw: `events/$pushId` validates its own
+      `payload` to 500 chars and nothing else, so a visitor with the code
+      could write `z: { payload: "[[[[…" }` nested thousands deep, and the
+      RangeError stopped the export of EVERY session, nightly (found in
+      review 2026-10-14, run, fixed before it shipped). **Opening a string
+      gives a walker depth the database never could (RTDB stops at 32
+      levels): bound it, and never let it throw past the session.**
       ONLY `payload` is opened: `scenarioCustomJson` / `sectionBodies` are JSON
       strings too and their `name` keys are the case's characters.
       `creatorUid`, `ownerUid`, `roomOf` dropped; `mail` dropped at the ROOT

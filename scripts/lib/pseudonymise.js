@@ -63,9 +63,10 @@
  *     name and university of everyone who contributed — participants who had
  *     DECLINED research use included — went out in every export since the
  *     first. A `payload` is now parsed, scrubbed by the same walk as the rest
- *     of the tree, and written back; one that does not parse as a JSON object
- *     (the client cuts it at 500 characters; the rule accepts any string) is
- *     removed, because what cannot be opened cannot be scrubbed. ONLY keys
+ *     of the tree, and written back; one that is not what a client writes —
+ *     longer than the 500 characters the client cuts it at, not JSON, or JSON
+ *     that is not an object (an array is not one) — is removed, because what
+ *     cannot be opened cannot be scrubbed. ONLY keys
  *     named `payload` are opened: an authored scenario is JSON in a string
  *     too, and its `name` keys are the case's characters.
  *
@@ -158,6 +159,11 @@ const DROP_KEYS = new Set([
 // Dropped ONLY at the session's root. Legacy nodes the rules no longer declare;
 // the name is too ordinary to remove at every depth (see header).
 const ROOT_DROP_KEYS = ["mail"];
+
+// The longest `payload` a client writes: logEvent() cuts the serialised object
+// at this length, and the rule on an event's own `payload` caps it there. A
+// longer one sits under a key the rules do not validate, and is not opened.
+const PAYLOAD_MAX_CHARS = 500;
 
 // Nodes whose CHILD KEYS are Firebase auth uids. Their keys are rewritten to
 // per-session pseudonyms so the map keeps its shape (and its research value)
@@ -282,6 +288,18 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   Object.keys(stableIdMapping).forEach(sid => {
     if (excludedUids.has(stableIdMapping[sid])) excludedKeys.add(sid);
   });
+  // The stableId an excluded participant's OWN row records. The mapping row
+  // above is written once, by the join chain, and can be missing; without this
+  // their ballot stayed in the file, keyed by that stableId. A row is its
+  // writer's word, so where the table ties the same stableId to somebody
+  // ELSE's account the table is believed: a declining row must not be able to
+  // remove a consenting participant's nodes by naming their stableId.
+  excludedCids.forEach(cid => {
+    const sid = pool[cid] && pool[cid].stableId;
+    if (typeof sid !== "string" || sid.length === 0) return;
+    const tied = hasOwn(stableIdMapping, sid);
+    if (!tied || excludedUids.has(stableIdMapping[sid])) excludedKeys.add(sid);
+  });
 
   // uid -> pseudonym, so uid-keyed membership maps keep their shape (and their
   // research value: who was in which room) without carrying a cross-session
@@ -355,14 +373,24 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   for (const k of ROOT_DROP_KEYS) delete out[k];
 
   // A `payload` is a JSON object in a string (logEvent / logAdminAction in the
-  // client). Returns it scrubbed and re-serialised, or null when it cannot be
-  // read as one — the caller then removes it rather than pass it through.
+  // client). Returns it scrubbed and re-serialised, or null when it is not
+  // what a client writes — the caller then removes it rather than pass it
+  // through. Not what a client writes: longer than the client's own cut; not
+  // JSON; JSON that is not an object (an array is not one — its strings are
+  // only replaced when one IS a known name); or anything the walk cannot get
+  // through. The database stops a tree at 32 levels; a parsed string stops
+  // nowhere, and one nested a few thousand deep overflowed the walk and took
+  // the whole export down with it (found in review, 2026-10-14).
   function scrubPayload(s) {
-    let parsed;
-    try { parsed = JSON.parse(s); } catch (e) { return null; }
-    if (!parsed || typeof parsed !== "object") return null;
-    walk(parsed);
-    return JSON.stringify(parsed);
+    if (s.length > PAYLOAD_MAX_CHARS) return null;
+    try {
+      const parsed = JSON.parse(s);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      walk(parsed);
+      return JSON.stringify(parsed);
+    } catch (e) {
+      return null;
+    }
   }
 
   function walk(node) {

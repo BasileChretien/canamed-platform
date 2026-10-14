@@ -117,7 +117,9 @@ follow, and they are different.
 **What row (c) now admits, and is true of every file, old and new:**
 
 - **Participants who declined research use are data subjects of this export.**
-  Their pool row and everything keyed by their identifiers are removed; what
+  Their pool row is removed, and so is everything keyed by an identifier the
+  session records as theirs (their clientId, the stableId in their own row, an
+  account UID or stableId the mapping tables tie to them); what
   they wrote into shared lists is exported with the name redacted. The lawful
   basis stated below — consent — does not cover them. That is an open question
   for the controller (G1), not a drafting point.
