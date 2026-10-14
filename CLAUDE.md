@@ -2193,13 +2193,17 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
      clause has a fifth way through, the facilitator's (the Phase 4a
      predicate) writing `ack == true` onto the call that stands with `at` and
      `by` unchanged and `msg` unchanged or gone; the validator takes an older
-     date on exactly that record. Both edits only ADD a way through, and the
+     date on any ACKNOWLEDGED record that keeps `at` and `by` — that shape,
+     not that writer (it checks neither the writer nor `msg`). Both edits
+     only ADD a way through, and the
      rule accepts the payload the deployed client already sends, so no
      browser needs a new shell for it. **New to students:** the acknowledged
      state, and "tap to call again" from it. Still open, pinned as such: a
      participant can make a call read as acknowledged by re-dating it after
      thirty seconds — and, under the any-room claim, so can one of another
-     room, who can also cancel it.
+     room, who can also cancel it. Also open, NEW with the fix and not
+     pinned: once a call older than a minute is acknowledged, a claim holder
+     can rewrite its `msg` and keep the date (before, only by re-dating it).
   2. **"Reset this room's case" deleted nothing** — since the first commit. A
      facilitator-only `remove()` of the whole `revealed` list, which no rule
      grants; silent. **REMOVED, by decision (2026-10-14), not repaired:** a

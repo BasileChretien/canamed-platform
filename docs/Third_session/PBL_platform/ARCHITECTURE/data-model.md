@@ -438,6 +438,13 @@ OR null (not set yet)
   for a claim on any room, so can a participant of another room — who can
   also simply cancel it. Pinned as open in
   `tests-e2e/emulator/call-for-help-ack.spec.js`.
+  ⚠️ **Also open, and NEW since 2026-10-14 (not pinned by a test):** the
+  validator's exception for an old date (below) does not ask who writes or
+  look at `msg`, and the "last one acknowledged" way through admits any claim
+  holder. So once a call older than a minute is acknowledged, a participant
+  can rewrite its `msg` and KEEP its date; before, only by re-dating it. The
+  dashboard does not show `msg` on an acknowledged call. Found in the review
+  of #460; closing it would add `msg` unchanged-or-removed to the exception.
 
 **Schema:**
 ```json
@@ -469,8 +476,11 @@ msg: ".validate: newData.val() == null ||
 
 ack: ".validate: newData.val() == null || newData.isBoolean()"
 ```
-A new call must be dated within the last minute; the one record that may
-carry an older date is the call's own acknowledgement, which re-sends it.
+A new call must be dated within the last minute. A record may keep an older
+date only if it is acknowledged and keeps the call's `at` and `by` — the shape
+of the facilitator's acknowledgement, which re-sends the call. The validator
+does not check the writer or `msg`, so it is not the acknowledgement ALONE
+(see "Also open" above).
 
 **Notes:**
 - Written by initCallProf() when user clicks "Call a facilitator"
