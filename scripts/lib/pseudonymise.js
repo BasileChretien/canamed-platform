@@ -37,9 +37,12 @@
  *     can never be read as agreement.
  *   - A non-consenting participant's `pool` entry is removed; so is every
  *     node keyed by their clientId or by an account uid `clientMapping` ties
- *     to them; and, under `ballots` only, the entry keyed by the stableId in
- *     their own row or by one the mapping table ties to their account. A
- *     ballot under a stableId neither records stays.
+ *     to them — except under `members` / `uidMembers`, where an account that
+ *     ALSO stands behind a consenting row (two tabs of one browser) keeps its
+ *     entry, under that row's pseudonym; and, under every `ballots` node, the
+ *     entry keyed by the stableId in their own row or by one the mapping
+ *     table ties to their account. A ballot under a stableId neither records
+ *     stays.
  *   - Their name is never entered into the pseudonym map, so the existing
  *     unknown-name path redacts it to REDACTED-NAME everywhere it appears, and
  *     they get no linkage-table entry (nothing to re-identify them with).
@@ -274,8 +277,8 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   });
 
   // Research-consent split. Only opted-in participants keep a row; the rest
-  // lose theirs and the nodes keyed by their identifiers, and are NOT erased:
-  // what they authored stays (see the two blocks in the header).
+  // lose theirs and the keyed nodes the header's RESEARCH CONSENT block lists,
+  // and are NOT erased: what they authored stays (see both header blocks).
   const cids = allCids.filter(cid => hasResearchConsent(pool[cid]));
   const excludedCids = allCids.filter(cid => !hasResearchConsent(pool[cid]));
 
@@ -304,8 +307,9 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   // tie a decliner's stableId to an account the session does not tie to them
   // (no `clientMapping` row; or somebody claimed it first), and the ballot
   // would stay. The price is recorded in the tests: a declining row that
-  // names somebody else's stableId removes THAT ballot. Between keeping a
-  // ballot a person declined to give and losing one, the export loses one.
+  // names somebody else's stableId removes that participant's BALLOTS — every
+  // vote, in every room. Between keeping ballots a person declined to give
+  // and losing a consenting participant's, the export loses them.
   const excludedBallotKeys = new Set();
   Object.keys(stableIdMapping).forEach(sid => {
     if (excludedUids.has(stableIdMapping[sid])) excludedBallotKeys.add(sid);

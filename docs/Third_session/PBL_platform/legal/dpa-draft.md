@@ -1881,13 +1881,16 @@ that could not be confirmed from the code is marked.*
 - **What it does NOT do — stated plainly.**
   - **It does not erase a participant who declined research use.** Their pool
     row is removed; so is every node keyed by their clientId or by an account
-    UID the `clientMapping` table ties to them; and, among ballots only, the
-    one keyed by the stableId in their own row or by a stableId the mapping
-    table ties to their account. A ballot under a stableId that neither
-    records stays (run). The choice has a cost, also run: a declining row
-    that records somebody else's stableId removes that person's ballot — a
-    row is its writer's word, and between keeping a ballot a person declined
-    to give and losing one, the export loses one. What they wrote
+    UID the `clientMapping` table ties to them — with one exception, the
+    membership list: an account that also stands behind a consenting row (two
+    tabs of one browser) keeps its entry there, under that row's pseudonym
+    (run); and, among ballots only, those keyed by the stableId in their own
+    row or by a stableId the mapping table ties to their account. A ballot
+    under a stableId that neither records stays (run). The choice has a
+    cost, also run: a declining row that records somebody else's stableId
+    removes that person's ballots — every vote, in every room. A row is its
+    writer's word, and between keeping ballots a person declined to give and
+    losing a consenting participant's, the export loses them. What they wrote
     into a room's shared lists — answers, replies, hypotheses, deleted answers
     — stays, with the name redacted. See Annex VI, G1 (corrected) and R10.
   - **It does not remove `stableId`**, the study's join key. For a signed-in

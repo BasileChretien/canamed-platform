@@ -2031,7 +2031,8 @@ successfully'` — and do not take a green Deploy as proof.
       a decliner's ballot stayed. Now: stableIds are removed UNDER `ballots`
       ONLY (the one node the client keys by stableId), and the row is
       believed unconditionally; the cost — a declining row naming another's
-      stableId removes that ballot — is pinned by a test. **A key deleted at
+      stableId removes ALL of that participant's ballots, every vote in every
+      room — is pinned by a test. **A key deleted at
       every depth must come from a source nobody else can write.** The
       clientId and uid keys still are deleted at every depth, and a
       consent-less pool row keyed `rooms` still removes the rooms tree (on

@@ -174,8 +174,8 @@ async function main() {
 
   // RESEARCH CONSENT gate (Phase-4e compliance gap 1). Participants tick an
   // optional research box in the lobby; joining is not conditional on it. Only
-  // those who ticked it keep a row in this export — everyone else loses theirs
-  // and the nodes keyed by their identifiers in pseudonymiseSession(), though
+  // those who ticked it keep a row in this export — everyone else loses theirs,
+  // and the keyed nodes the note below lists, in pseudonymiseSession(), though
   // not what they authored. A session where nobody opted in is skipped outright
   // rather than exported as a participant-free husk.
   const consentedCodes = closedCodes.filter(c => sessionHasConsent(sessions[c]));
@@ -214,9 +214,12 @@ async function main() {
       "others, only a participant with pool/<clientId>/consent.research === true has a " +
       "pool row or a linkage entry. For a participant who declined, what is removed is: " +
       "any node keyed by their clientId or by an account uid the clientMapping table ties " +
-      "to them; and, among ballots only, the one keyed by the stableId in their own pool " +
-      "row or by a stableId the mapping table ties to their account. A ballot under a " +
-      "stableId that neither records is not removed. A participant " +
+      "to them (except a members entry of an account that also stands behind a consenting " +
+      "row, kept under that row's pseudonym); and, among ballots only, those keyed by the " +
+      "stableId in their own pool row or by a stableId the mapping table ties to their " +
+      "account. A ballot under a stableId that neither records is not removed; and a " +
+      "declining row that records another participant's stableId removes that " +
+      "participant's ballots. A participant " +
       "who declined, or whose record predates the consent field, is NOT erased from " +
       "the file: what they wrote into the room's shared lists (answers, replies, " +
       "hypotheses, deleted answers) is still here, with the name redacted. " +

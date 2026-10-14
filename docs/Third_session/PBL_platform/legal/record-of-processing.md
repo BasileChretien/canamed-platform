@@ -118,9 +118,10 @@ follow, and they are different.
 
 - **Participants who declined research use are data subjects of this export.**
   Their pool row is removed; so is everything keyed by their clientId or by an
-  account UID the `clientMapping` table ties to them, and the ballot keyed by
-  the stableId in their own row or by one the mapping table ties to their
-  account; what
+  account UID the `clientMapping` table ties to them (except a membership
+  entry of an account that also stands behind a consenting row), and the
+  ballots keyed by the stableId in their own row or by one the mapping table
+  ties to their account; what
   they wrote into shared lists is exported with the name redacted. The lawful
   basis stated below — consent — does not cover them. That is an open question
   for the controller (G1), not a drafting point.

@@ -673,17 +673,48 @@ test("a decliner's ballot goes whatever the mapping table says about their stabl
   assert.deepStrictEqual(ballots["S-ANN"], { choice: 1, at: 30 });
 });
 
-test("the cost of that, recorded: a declining row that names another's stableId removes that ballot", () => {
+test("the cost of that, recorded: a declining row that names another's stableId removes ALL that participant's ballots", () => {
   /* Nothing in a session can tell a row that records its own stableId from
-     one that records somebody else's. Between keeping a ballot the person
-     declined to give and losing one a declining row pointed at, the export
-     loses the ballot. Only the ballot: see the test above. */
+     one that records somebody else's. Between keeping ballots the person
+     declined to give and losing those a declining row pointed at, the export
+     loses them — every vote, in every room, since the stableId is removed
+     under every `ballots` node. Only ballots: see the test above. */
   const sess = ballotSession();
   sess.pool.c2.stableId = "S-ANN";
   sess.stableIdMapping = { "S-ANN": STUDENT_UID };
+  sess.rooms["Room 1"].votes.v2 = { ballots: { "S-ANN": { choice: 0, at: 40 } } };
+  sess.rooms["Room 2"] = { votes: { v1: { ballots: { "S-ANN": { choice: 2, at: 41 } } } } };
   const out = pseudonymiseSession(sess, "S1", {});
   assert.ok(!("S-ANN" in out.rooms["Room 1"].votes.v1.ballots));
+  assert.ok(!("S-ANN" in out.rooms["Room 1"].votes.v2.ballots), "every vote");
+  assert.ok(!("S-ANN" in out.rooms["Room 2"].votes.v1.ballots), "in every room");
   assert.ok(out.pool.c1, "and nothing else of the consenting participant's");
+});
+
+test("a ballot under a stableId that neither a row nor the table records stays — as the note says", () => {
+  /* The note, the header and two documents say so, with "(run)". Pinned here
+     so that widening the removal later turns this red instead of leaving
+     four sentences false. */
+  const sess = ballotSession();
+  delete sess.pool.c2.stableId;                         // the decliner's row records none
+  const ballots = pseudonymiseSession(sess, "S1", {}).rooms["Room 1"].votes.v1.ballots;
+  assert.deepStrictEqual(ballots["S-BEN"], { choice: 2, at: 31 });
+});
+
+test("an account behind a consenting AND a declining row keeps its membership entry, under the consenting row's pseudonym", () => {
+  /* Two tabs of one browser are two pool rows and one account. `members` is
+     rekeyed before any key is tested against the excluded ones, so the
+     shared account's entry survives — it is the consenting row's as much as
+     the declining one's. The documents name this as the one exception to
+     "every node keyed by an account uid tied to a declining row goes". */
+  const sess = ballotSession();
+  sess.clientMapping = { c1: STUDENT_UID, c2: STUDENT_UID };
+  sess.members = { [STUDENT_UID]: { at: 3 } };
+  sess.presenceByUid = { [STUDENT_UID]: { at: 4 } };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.deepStrictEqual(Object.keys(out.members), ["Student-A"]);
+  assert.ok(!(STUDENT_UID in (out.presenceByUid || {})), "anywhere else, the uid-keyed node goes");
+  assert.ok(!JSON.stringify(out).includes(STUDENT_UID));
 });
 
 test("only `payload` is opened: an authored scenario is JSON in a string too, and is left alone", () => {
