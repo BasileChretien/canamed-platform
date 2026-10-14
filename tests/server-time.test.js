@@ -201,10 +201,12 @@ test("saveScenario() takes its date after its read, as every flow that stores on
   assert.strictEqual(body.split("serverNow()").length - 1, 1, "and take the date once");
 });
 
-test("the certificate prints the day its published record carries", () => {
+test("the certificate's printed day and its published record come from the same clock", () => {
   /* credentials/<id>.at is the server's clock, and verify.html shows that day.
      Printed from the device's clock, the PDF and the page that verifies it
-     disagree on a device whose date is wrong. */
+     disagree on a device whose date is wrong. (The same CLOCK, not always the
+     same day: the record is write-once, so a second download prints a later
+     day than the record keeps.) */
   const src = read("takehome.js");
   const fn = src.slice(src.indexOf("\nfunction downloadCertificatePdf("), src.indexOf("\nfunction _verifyUrl("));
   assert.ok(fn.length > 500, "could not find downloadCertificatePdf() in takehome.js");

@@ -1757,8 +1757,11 @@ generates **8 bytes = 64 bits**, not 80. Corrected 2026-08-19 against
 
 It is cleared on sign-out and account deletion (`resetStableId()`), so a shared
 lab machine does not carry one account's key into the next person's session. It
-is written into `pool`, into answer metadata, and into `tests/$cid/stableId` and
-`survey/$cid/stableId` (rules cap it at 64 characters). Its stated purpose, in
+is written into `pool`, into `tests/$cid/stableId` and `survey/$cid/stableId`
+(rules cap it at 64 characters), and it is the key of each ballot. *(This said
+"into answer metadata" until 2026-10-08. An answer carries the per-tab
+`clientId`, not a `stableId`, and its schema is sealed; an answer reaches a
+`stableId` only through the author's pool row.)* Its stated purpose, in
 the code comment, is so that **researchers can deduplicate participants across
 sessionStorage resets** — that is, a *research* purpose, not service delivery.
 That profile (a persistent, device-stored identifier serving a secondary purpose)
@@ -1858,18 +1861,55 @@ that could not be confirmed from the code is marked.*
   - as a safety net, replaces any string that **exactly equals** a known
     participant name, including bare strings inside arrays;
   - uses null-prototype maps so a participant named `__proto__` cannot collide
-    with a built-in property.
-- **What it does NOT do — stated plainly.** Everything else passes through
-  **verbatim**. That includes the wrap-up questionnaire's five free-text items
-  (up to 2,000 characters each), the room `answers` and `answerReplies`, the
-  Module A `hypotheses`, and the `poll.hardest` field (280 characters). The
-  module's own comment explains that chat is dropped because "a name embedded in
-  prose can't be exact-matched" — **that reasoning applies identically to the
-  2,000-character survey items, which are not dropped**. In a small cohort,
-  free-text writing is a re-identification vector on its own. See Annex VI,
-  item R7. The output is therefore **de-identified only against exact-name
-  matching**; it is not anonymous data, and under APPI it is neither
-  仮名加工情報 nor 匿名加工情報 (Annex V.10).
+    with a built-in property;
+  - removes Firebase account identifiers (auth UIDs). Since 2026-07-23 it drops
+    the `clientMapping` and `stableIdMapping` tables and replaces the UID keys
+    of `members` with the participant's per-session pseudonym, removing an
+    entry whose UID belongs to no consenting participant.
+- **Transform version 2 — what version 1 let through.** The list above
+  describes what the module was *meant* to do. Run on sessions shaped like real
+  ones (2026-10-08), version 1 also exported, as written: **the real display
+  name and university of everyone who contributed, and the facilitator's name,
+  inside the JSON `payload` of each room event**; the facilitator's account
+  UID (`creatorUid`); the scenario author's (`scenarioRef.ownerUid`); a
+  participant's, as the key of each `roomOf` entry; and the e-mail addresses in
+  a session's mail queue, where one remained. Version 2 opens and scrubs each
+  `payload`, and drops the other four. **A file says which version wrote it**
+  (`transformVersion`; a file without the field is version 1), because the job
+  runs nightly on whatever the main branch holds and no calendar date marks
+  the boundary. See Annex VI, R10.
+- **What it does NOT do — stated plainly.**
+  - **It does not erase a participant who declined research use.** Their pool
+    row is removed; so is every node keyed by their clientId or by an account
+    UID the `clientMapping` table ties to them — with one exception, the
+    membership list: an account that also stands behind a consenting row (two
+    tabs of one browser) keeps its entry there, under that row's pseudonym
+    (run); and, among ballots only, those keyed by the stableId in their own
+    row or by a stableId the mapping table ties to their account. A ballot
+    under a stableId that neither records stays (run). The choice has a
+    cost, also run: a declining row that records somebody else's stableId
+    removes that person's ballots — every vote, in every room. A row is its
+    writer's word, and between keeping ballots a person declined to give and
+    losing a consenting participant's, the export loses them. What they wrote
+    into a room's shared lists — answers, replies, hypotheses, deleted answers
+    — stays, with the name redacted. See Annex VI, G1 (corrected) and R10.
+  - **It does not remove `stableId`**, the study's join key. For a signed-in
+    participant that *is* their account UID, the same in every session; for an
+    anonymous one it is a random value kept in the browser, carried into the
+    next session unless they left through "Leave" or changed session, which
+    clear it (Annex VI, R8 and R10). The output is therefore **not free of
+    cross-session identifiers**, and no description of it should say so.
+  - **Everything else passes through verbatim.** That includes the wrap-up
+    questionnaire's five free-text items (up to 2,000 characters each), the
+    room `answers` and `answerReplies`, the Module A `hypotheses`, and the
+    `poll.hardest` field (280 characters). The module's own comment explains
+    that chat is dropped because "a name embedded in prose can't be
+    exact-matched" — **that reasoning applies identically to the
+    2,000-character survey items, which are not dropped**. In a small cohort,
+    free-text writing is a re-identification vector on its own. See Annex VI,
+    item R7. The output is therefore **de-identified only against exact-name
+    matching**; it is not anonymous data, and under APPI it is neither
+    仮名加工情報 nor 匿名加工情報 (Annex V.10).
 - **Names on certificates** are stored only as a SHA-256 hash. The hash is
   **unsalted by design** and is stored beside the plaintext session code, so it
   is testable offline against a candidate list for a known cohort. See Annex VI,
@@ -1885,12 +1925,14 @@ that could not be confirmed from the code is marked.*
 - **Session data: two different read scopes, not one.**
   - Most of a session (`sessions/$sessionId`) requires being an authenticated
     **member**: `auth != null && data.child('members').hasChild(auth.uid)`.
-  - **But nine child paths override that with a bare `".read": "auth != null"` —
+  - **But thirteen child paths override that with a bare `".read": "auth != null"` —
     no membership test at all.** Verified in `database.rules.json`:
     `adminPasswordHash`, `creatorUid`, `created` (whose `by` field is the
-    **facilitator's display name**, ≤40 chars), `workshopLabel`, `scenarioId`,
+    **facilitator's display name**, ≤40 chars), `controller`, `workshopLabel`,
+    `scenarioId`, `sections`, `sectionBodies`, `modules`,
     **`scenarioCustomJson` (up to 262,144 characters of authored scenario)**,
-    `scenarioRef`, `closed`, and `summary`. Any authenticated user of the
+    `scenarioRef`, `closed`, and `summary`. (This sentence said nine until
+    2026-10-08; G3 had carried the count of thirteen since 2026-09-03.) Any authenticated user of the
     platform — including an anonymous participant in a *different* facilitator's
     session — can read these for any session code they know or guess. Session
     codes are 6 characters over a 31-character alphabet (~30 bits) and are
@@ -1903,10 +1945,35 @@ that could not be confirmed from the code is marked.*
   `survey/$cid`, which have no read rule of their own, are readable by **every
   other participant** — including the 2,000-character free-text reflections. See
   Annex VI, item G2.
-- Writes are bound to ownership: a browser identity is bound write-once to a
-  Firebase auth UID (`clientMapping`, `stableIdMapping`) and per-room writes are
-  gated on the room's `uidMembers` list, so a member of one room cannot tamper
-  with another room's data.
+- Writes are bound to ownership **in part**: a browser identity is bound
+  write-once to a Firebase auth UID (`clientMapping`, `stableIdMapping`), and
+  each rule tree has 35 write rules inside a room. Counted from the rules on
+  2026-10-08:
+  - **17 are gated on the writer's room claim** (`roomOf`; the `uidMembers`
+    list this paragraph used to name was replaced on 2026-08-03). A member of
+    one room cannot tamper with another room's data through *these* — among
+    them answers and their deletion log, hypotheses, scoring, the committed
+    vote, a section's phase and role assignment.
+  - **3 are the facilitator's alone** (the stage, its date, a manual score).
+  - **8 are bound to a browser identity and to no room**: presence, the typing
+    indicator, a vote's ballots, the observer flag, a role choice, the two
+    tests and the survey. While the session is open, a participant can write
+    their own entry into **another room** through any of them — the
+    application counts every ballot it finds in a room — and under an identity
+    nobody has claimed, so can anyone signed in who has the session code. Read
+    from the rules and the application; not run. Annex VI, R3 and G14, item 5.
+  - **7 carry no gate at all** — Annex VI, G14, item 5.
+
+  (Until 2026-10-08 this paragraph said "most per-room writes are gated on the
+  writer's room claim". Seventeen of thirty-five are.)
+- **A session's configuration is written during its creation, by its
+  creator** — in the rules since 2026-10-08, and in force from the date they
+  are deployed, which Annex VI, G14 records: the controller named on the join
+  screen, the facilitator's label, and the six fields that decide what the
+  session runs can be written once, only before the session has a password,
+  and — once the session has a creator — only by that account. Before, the
+  rule was "once, by anyone signed in". What that allowed, and what the change
+  does not repair, is Annex VI, item G14.
 - Roster emails are readable **only** by the session creator, and writable only
   by the participant themselves or the creator, and only while the session is
   open.
@@ -2584,6 +2651,23 @@ was not). The live privacy notice names the wrong controller.**
 > and Art. 27(5) citations is kept, so nothing changes for the canonical
 > deployment or for sessions predating the field.
 >
+> ⚠️ **"Write-once" was not "written by the facilitator" — corrected in the
+> rules on 2026-10-08, in force from the date G14 records for their
+> deployment.**
+> The rule on `controller` accepted its first write from anyone signed in. The
+> current create form always writes it, so a session created by it was not
+> exposed; a session created by the application as it was before 2026-09-03 —
+> including one created later from a browser still holding that version — has
+> no controller, and on such a session a visitor who knew only the code could
+> name one. Measured on the emulator: the join screen then read "*‹their
+> string›*, the data controller for this session, collects your first name or
+> nickname…", and the session's creator could neither change nor remove it.
+> The string was shown as text: markup in it was not interpreted. The
+> corrected rule accepts the write from nobody once a session has a password,
+> and while it is being created, from its creator — see G14, including the
+> deployment date and what the rule cannot tell about sessions already in the
+> database.
+>
 > ⚠️ **The first attempt substituted only the institution NAME** and rendered
 > "Universiteit Leiden, joint controllers under GDPR Art. 26" — a single body
 > described as joint controllers, still attributed to the CaNaMED research team.
@@ -2876,6 +2960,38 @@ absent, and the facilitator CSV is gated by the same helper. One thing this does
 NOT cover, stated so it is not read as broader than it is:
 `scripts/backup-sessions.js` remains deliberately ungated — disaster recovery on
 a different lawful basis. The original finding follows.
+
+> ⚠️ **"Erased from the pseudonymised file" overstates it — found 2026-10-08 by
+> running the job, and NOT corrected in code.** What is removed for a
+> participant who declined is their pool row, their linkage entry, and the
+> nodes *keyed* by an identifier the session records as theirs — their poll
+> answer, test and questionnaire records, presence and membership, and their
+> ballot (Annex II §1 says exactly which identifiers). What they **wrote into
+> a room's shared lists is still exported**: those lists are keyed by a
+> generated id, not by the author, so an answer, a reply, a hypothesis or a
+> deleted answer written by a decliner comes out with `REDACTED-NAME` in place
+> of the name, their bucketed university, their per-tab `clientId`, and the
+> text as written. Run on the real job: a decliner's answer was in the file,
+> text intact. (Until transform version 2 their **real name** was in the file
+> too, inside the event recording that answer — R10.) The transform's own
+> comment has always described this design ("redacts it to REDACTED-NAME
+> everywhere it appears"); it is this item's sentence above, and the export's
+> note ("contains only participants who gave research consent"), that said
+> more than the code does. The note is corrected. Each entry carries the
+> author's `clientId`, so removing a decliner's entries is a small change —
+> but whether a contribution made in a shared room discussion is the
+> decliner's to withhold from the research copy, and what an answer that
+> *replies* to theirs then means, is a question about the study and not about
+> the code. One further gap of the same kind, **closed in transform version
+> 2 before it shipped**: a decliner's ballot was removed only through the
+> `stableIdMapping` table, which the client writes on a best-effort basis;
+> run without that row, the ballot stayed in the file under the decliner's
+> `stableId`. It is now removed through the stableId in their own row as
+> well (run); what is left is a ballot under a stableId that neither their
+> row nor the table records. **[CONTROLLER / DPO TO
+> DECIDE: whether "you may decline research use" must mean that nothing the
+> participant wrote reaches the research copy. Until decided, this item is
+> not closed in the sense its heading gives.]**
 **G1 — (historical) The research export ignores research consent entirely.**
 Verified: `scripts/pseudonymise-export.js` selects sessions with
 `codes.filter(c => sessions[c] && sessions[c].closed)` — **the only filter is
@@ -4442,6 +4558,145 @@ identifier in the notice made the missing basis more visible, not less.
 
 [CONTROLLER — DATE THE JOB WAS SCHEDULED: ____ ]
 
+**G14 — (new, 2026-10-08). CORRECTED IN THE RULES; DEPLOYMENT TO BE CONFIRMED.
+A session's configuration could be written by any signed-in visitor who knew
+its code.**
+
+A session carries eight configuration fields, each written once when it is
+created: the controller named on the join screen (`controller`), the
+facilitator's label (`workshopLabel`), and six that decide what the session
+runs (`sections`, `sectionBodies/<slot>`, `modules`, `scenarioId`,
+`scenarioCustomJson`, `scenarioRef`). The rule on each was "signed in, and not
+yet written". Signing in is automatic and anonymous (G13), so the first writer
+could be anyone who knew or guessed a session code — and because each field is
+write-once, the session's creator could not then correct it.
+
+The current create form always writes `controller` and `sections`, and writes
+`workshopLabel` when one is typed. So on a session it created, four of the
+content fields were open, and the label when left blank; on a session created
+by the application as it was before 2026-09-03, the controller was open too;
+and on one created before the section picker (end of July 2026), so was the
+whole choice of content.
+
+**What that allowed was measured**, on the Firebase emulator on 2026-10-08,
+with the real create form and a second browser that knew only the code:
+
+- *The controller.* On a session with none, the visitor's string was accepted
+  and the join screen then read "*‹string›*, the data controller for this
+  session, collects your first name or nickname…". A participant reading that
+  screen was told a false controller at the moment of collection (GDPR
+  Art. 13(1)(a)). See L1.
+- *The content.* A `scenarioCustomJson` declaring another layout hid the case,
+  the vignette and the patient chat from every participant who loaded the page
+  afterwards; one with a malformed case stopped the page, leaving the
+  participant on the welcome screen while the room had moved on. A
+  `scenarioRef` did the same through a scenario the visitor had shared, and
+  could go on being changed by them. On a session with no choice of content, a
+  visitor could write the choice and the section it named, and the join screen
+  announced that section as the session's content.
+- *What was not affected.* A participant who did not reload saw no change.
+  `modules` and `scenarioId` changed nothing a participant could see in a
+  session that has a choice of sections. In such a session, and on the case
+  screen — the one place it was measured — the simulated patient's
+  instructions stayed the section's own: the visitor's text was not in what
+  was sent to the language model. It was not measured on the welcome or
+  closing screens. No personal data became readable, and nothing a participant
+  had written could be altered, through any of these fields.
+
+**What changed.** All eight can be written once, and only before the session
+has a password — that is, during creation. Three of them (`controller`,
+`workshopLabel`, `sections`) by the session's creator or, while the session has
+no creator yet, by whoever is allowed to create one: the same rule the
+recovery record has, because the application sends these together with the
+creator's claim and the rule must not depend on which arrives first. The other
+five by the session's creator and nobody else. In both rule trees. The
+application itself was not changed.
+
+**What this does not do.**
+
+1. **It does not repair a session that already carries a visitor's value, and
+   nothing in the database tells such a value from the creator's** — these
+   fields record no author. The production database was not examined. The
+   retention periods bound how long any such value can remain: 30 days after a
+   session is closed, 90 days after it is created. **[CONTROLLER TO DECIDE:
+   whether sessions created before the deployment date below are reviewed —
+   in practice, a `controller` the facilitator does not recognise, or a
+   `scenarioCustomJson` / `scenarioRef` the facilitator did not attach.]**
+2. **A value written before the correction travels with its session.** The
+   nightly backup takes the session whole, and the pseudonymised research
+   export passes all eight fields through as written, with one exception:
+   from transform version 2 it removes the author's account identifier from
+   inside `scenarioRef` (`ownerUid`) and keeps the rest of that field (run on
+   the export's transform; the export job itself was not run). Four of them
+   are free text:
+   `workshopLabel`, `controller`, `scenarioCustomJson` at up to 262,144
+   characters, and each `sectionBodies` entry at up to 131,072. See R7.
+3. **A code that no session uses yet can still be written to, in three of
+   these eight fields** (and through the other open writes item 5 counts,
+   which do not ask for a session to exist either). On a code with no creator
+   and no password, a visitor can write
+   `controller`, `workshopLabel` or `sections`. If a facilitator's creation
+   later draws that code, it is refused at its own write of the same field and
+   the facilitator sees an error and creates again; a field the facilitator's
+   application does not write — a label left blank — would be carried into the
+   session. The chance is the number of codes so prepared over 887,503,681,
+   and the nightly deletion removes an undated session. The five content
+   fields cannot be prepared this way.
+4. **The binding is to the account that created the session, not to a
+   person.** While the creation gate is off (its default), any visitor may
+   create a session of their own and configure it; what they can no longer do
+   is configure somebody else's. An ordinary password reset reopens nothing:
+   it replaces the password, and the session still has one. The rules do
+   leave one way back in, which the application never takes: whoever holds the
+   session's recovery code can, during a reset, remove the password marker
+   instead of replacing it, and the configuration is then open again — on a
+   session that has a creator, to that creator alone; on one that has none
+   (created before 2026-05-27), to whoever then claims it (read from the
+   rules; not run).
+5. **Seven other writes inside a session's rooms name no identity at all**: a
+   room's team name, its roleplay round, a call for help, the revealing of a
+   case item (two paths), the room's event log, and replies to answers. Run on
+   the emulator on 2026-10-08: a visitor who had not joined the session wrote
+   all seven into one of its rooms. This is a different defect and is **not
+   corrected by this change**. Giving them the room condition their neighbours
+   have would limit a writer to the one room they joined; it would not exclude
+   a visitor who has the code, since the code is all that joining asks for. The
+   repository's tests now list every write in a session that some way through
+   its rule leaves open, so that the list cannot grow unnoticed. There are 23
+   in each rule tree: these seven; the five creation writes; the removal of a
+   password reset in progress, which any signed-in visitor may do; and ten
+   that are open for a browser identity nobody has claimed yet — the
+   participant list and the poll, and the eight room writes Annex II §2 names.
+   **What is on record for the ten is less than the rules allow, and no
+   decision has been recorded on the difference.** R3 accepts "a narrow window
+   before identity bindings commit", and names one of the ten — the poll; the
+   repository's notes extend that by analogy to the participant list, presence
+   and the typing indicator. The ballots, the observer flag, the role choice,
+   the two tests and the survey are in neither record. And it is not a window:
+   an identity the writer invents is never claimed by anyone, so the write
+   stays open for as long as the session does, to anyone signed in who has the
+   code, in any room — an entry in the participant list (with a consent record
+   of its own making), a ballot that is counted, and a test or a survey row.
+   Read from the rules.
+   **The research export does not filter these out** (run on 2026-10-08 on the
+   export's own transform, with a made-up session; the export job itself was
+   not run). It removes only what is keyed by a participant-list entry that
+   does *not* record consent. A poll answer, a ballot, a test row and a survey
+   row under an identity with no entry at all were all kept; and one forged
+   entry recording consent was enough for a session in which no real
+   participant had consented to pass the export's consent gate. Two limits:
+   only closed sessions are exported, and all ten writes are refused once a
+   session is closed, so such a row has to be written while the session is
+   open.
+   Correcting the seven changes none of this. Until both are settled, R3's "a
+   participant with developer tools" understates who can do this: it is anyone
+   with the code, in the session or not. **[CONTROLLER TO DECIDE: accept the
+   ten as they are, with R3 reworded to say what they allow, or have them
+   bound to a claimed identity; and whether the export should keep a row that
+   belongs to no consenting entry.]**
+
+[CONTROLLER — DATE THE RULES WERE DEPLOYED: ____ ]
+
 ## Residual risks accepted by design
 
 *These are the items the Parties have considered and accepted for the supervised-
@@ -4554,6 +4809,39 @@ Controller must weigh this in its DPIA. Under APPI the export is neither
 **Recommended fix (not accepted as permanent):** apply the same drop-or-review
 treatment to the long free-text items as to chat, or hold the export to a
 reviewed-release process.
+
+> **The list above is shorter than what passes — measured 2026-10-08, and
+> still not complete.** Every field `database.rules.json` declares in a
+> session was run through the transform with a marker in it. Besides the items
+> named above, these reach the export as written: the facilitator's
+> `controller` and `workshopLabel`; the authored scenario
+> (`scenarioCustomJson`, up to 262,144 characters, and each `sectionBodies`
+> entry, up to 131,072); a room's `teamName` and its call-for-help message
+> (200); the tag on a manual score (60); the text of a *deleted* answer
+> (1,000) and the superseded wording kept with every *edited* answer or
+> hypothesis (`edits/<id>/text`, 1,000); and the three links (`teamsLink`,
+> `questionnaireLink`, `preQuestionnaireLink`). None of that was changed on
+> that date. The links deserve a separate look by whoever reviews this item: a
+> meeting or form link can carry identifiers of the organiser's account inside
+> the address, which was not examined here.
+>
+> **One field on the first version of this list did not belong on it, and the
+> mistake is the lesson.** "The payload of a room event" was filed here as free
+> text. It is not: the client writes a JSON object into it, with the author's
+> display name and university, and the facilitator's name on a manual score.
+> The marker test could not see that — it filled the field with a marker
+> instead of with what the application writes. An independent reviewer reading
+> the client found it. Those names are now scrubbed (R10); what remains free
+> text inside a payload is the call-for-help reason and the score tag, and an
+> admin audit payload holds a room name and two stage numbers.
+>
+> **And a rules-derived list cannot see a node the rules no longer declare.**
+> A session created before a rule was removed keeps the data that rule
+> guarded. Read from the rules' history: the per-prompt reply lists
+> (`promptReplies`, `exchangeReplies`, 600 characters each) still pass as
+> written where an older session holds them. The session mail queue, which
+> held e-mail addresses, is the one such node that was an identifier; it is
+> dropped since transform version 2 (R10).
 
 **R9 — No Art. 28 contract with GitHub, accepted by the Processor and put to
 the Controller (2026-09-02).** GitHub, Inc. processes personal data on the
@@ -4681,13 +4969,227 @@ participants a **64-bit** random value in `localStorage` (per-device); for
 signed-in participants the **Firebase auth UID**, which is not random, follows
 the person across devices, and is directly joinable to their account and email
 (see clause 4 for the full split). Either way it persists across
-tabs, refreshes and sessions, is cleared on sign-out and account deletion
-(`resetStableId()`), and is written into `pool`,
-answer metadata and the test/questionnaire records, and existing — per its own
-code comment — so researchers can **deduplicate participants across sessions**.
+tabs and refreshes, is cleared on sign-out and account deletion
+(`resetStableId()`), and is written into `pool` and the test/questionnaire
+records and used as the key of each ballot (not into answers — corrected
+2026-10-08, see Annex I §5). It exists — in the words of its own code comment —
+so researchers can **"deduplicate participants across sessionStorage resets"**:
+one person's rows across the tabs and reloads they went through. *(This item
+said "across sessions" until 2026-10-08. The comment does not say that, and
+the study protocol joins nothing across sessions — the difference matters for
+item 3 of R10.)* Across sessions it persists
+unconditionally for a signed-in participant; for an anonymous one only until
+they leave through "Leave", "use a different session" or "forget this session",
+each of which clears it.
 It serves a research purpose rather than service delivery, and appears nowhere in
 the notice. **[CONTROLLER / DPO TO DECIDE its lawful basis, and whether it should
 be set only for participants who ticked the research box.]**
+**It is also in the pseudonymised research export, as written** — the one
+identifier that export still keeps. Where, why it need not be, and what that
+means for a signed-in participant, is R10 item 3.
+
+**R10 — (new, 2026-10-08). CORRECTED IN THE TRANSFORM (version 2); THE FILES
+ALREADY WRITTEN ARE NOT. The "pseudonymised" research export carried real
+names, account identifiers and, where a session held any, e-mail addresses.**
+
+*How this was found.* On 2026-10-08 the transform
+(`scripts/lib/pseudonymise.js`) was run on sessions built from every field
+`database.rules.json` declares, which found the account identifiers in (b). An
+independent review of that work, reading what the application actually writes,
+then found (a) — the larger defect, which the first pass had filed under "free
+text" — and pointed to (c). Everything below marked "run" was run against the
+transform or the real export job; nothing in the archive was opened and the
+production database was not read.
+
+**(a) Real names, inside a string.** The application records each room event
+as an envelope `{ kind, by, at, payload }`, and `payload` is a JSON object
+*serialised into a string*. For every answer, edit, deletion and hypothesis it
+holds the author's **display name and university**; for a manual score, the
+**facilitator's name**. The transform rewrote the `by` beside the payload and
+never opened the string. Run: the same event came out as `"by": "Student-A"`
+next to `"payload": "{\"by\":\"Ann Dupont\",\"university\":\"Caen\", …}"`. That
+holds for **every participant who contributed, including those who had declined
+research use**, and it has been so since the first export — the code that
+writes the name is in the repository's first commit. The 2026-05-30 review that
+"closed" the name leaks did not see it, and neither did any test: every test
+checked fields, and this is a field inside a field.
+
+**(b) Account identifiers (Firebase auth UIDs).** Since 2026-07-23 the
+transform has dropped the two tables that bind a browser identity to an account
+and rekeyed `members`, on the stated ground that an account UID is the same in
+every session and is the key of the account record. Three other places hold
+one, and each reached the export as written:
+
+| Field | Whose account | In the rules since | In which files |
+|---|---|---|---|
+| `creatorUid` | The facilitator who created the session — not a research participant | 2026-05-27 | Every session the application created |
+| `scenarioRef.ownerUid` | Whoever authored the scenario; for a *shared* scenario, a person who was not in the session | 2026-05-29 | **Few.** The application stopped writing `scenarioRef` on 2026-07-31, when sessions moved to picked sections. It is in a file only for a session created before that (or from a browser still holding the older application), or where a visitor wrote one — the rule is "signed in, and not yet written" |
+| the key of each `roomOf` entry | A participant, with their `clientId` inside the entry — the join the dropped `clientMapping` table held, the other way round | 2026-08-03 | Sessions created from that date |
+
+For `roomOf`, run on the earlier transform: the entry of a participant who had
+declined was removed **where `clientMapping` bound their browser to their
+account**, and kept otherwise; a consenting participant's was always kept, and
+so was that of an account with a room claim and no pool row.
+
+**(c) E-mail addresses, in a node the rules no longer declare.**
+`sessions/<code>/mail/<id>` held `{ to, subject, text }` for the transactional
+mail function. The function, its rule and its client code were removed on
+2026-09-24; a session created before that keeps whatever queue it had for as
+long as the session lives, and the transform passed it through. Whether any
+session in production ever held one was **not** established — the feature
+existed from May to September 2026.
+
+**What that means for a reader of a file.** For (a), nothing more is needed:
+the name is in the file. For (b), an account UID is not a name, but there are
+several short ways from one to a person, and this list is what an assessment
+should start from:
+
+- it is identical in every session, so a participant's "Student-A" in one
+  exported session and "Student-C" in another could be matched — which the
+  export's own note said could not be done;
+- whoever can read the project's account list goes from a UID to the account
+  and, for a signed-in account, its e-mail address — today, the operator;
+- **every member of a session can read that session's `pool` (display names)
+  and `clientMapping` (browser identity → UID)** while the session is in the
+  database (Annex I §5), and membership is self-claimed while it is open;
+- **the session's creator can download a roster** whose columns are
+  `uid, email, name, university, recorded_at`, written for signed-in
+  participants who consented to research — the same population as the export;
+- for the facilitator, `creatorUid` and `created/by` (their display name) are
+  both readable by any signed-in visitor who knows the session's code (read
+  from the rules — Annex II §2);
+- for the author of a *shared* scenario, the shared library holds their UID
+  beside their display name — or, where they have none, their **e-mail
+  address** — readable by any signed-in user.
+
+And the facilitator, the scenario author and participants who declined are
+data subjects of this export whom its Art. 30(1) record did not list
+(`record-of-processing.md`, §2A).
+
+**What changed — transform version 2.**
+
+- A `payload` is parsed, scrubbed by the same rules as the rest of the tree,
+  and written back. One that is not what the application writes is
+  **removed**: longer than the 500 characters the application cuts a payload
+  at, not readable as JSON, or JSON that is not an object (a list is not
+  one). What cannot be opened cannot be scrubbed — and a payload nested
+  thousands of levels deep, which a visitor holding the session code could
+  write under a key the rules do not check, stopped the first version of this
+  correction, and with it the whole export (found in review, run, corrected
+  before it shipped). Only `payload` is opened —
+  an authored scenario is JSON in a string too, and its `name` keys are the
+  case's characters.
+- `creatorUid`, `ownerUid`, `roomOf` and the session's `mail` are **dropped**.
+  `creatorUid` is dropped rather than replaced by a pseudonym: a session has
+  one creator, so a stand-in would be the same constant in every session, and
+  the one thing it could convey — which participant, if any, the creator also
+  was — singles the facilitator out. `scenarioRef` keeps `scenarioId` and
+  `source`. `roomOf` is dropped rather than rekeyed like `members`: one account
+  can stand behind two pool rows (two students sharing a browser), the entry is
+  written once per account, and rekeying then put one student's pseudonym on
+  the other's row (run). Nothing is lost — each pool row carries its room.
+- The walk now continues beneath a rekeyed `members` map, where it used to
+  stop.
+- **A file states which transform wrote it** (`transformVersion: 2`), and its
+  note says what a file without that field also carries.
+- Nothing downstream read a dropped field: the scripts that use `creatorUid`
+  read the database or the identified backup, never this export.
+- The repository's tests now (i) **run the real export job** against an
+  in-memory database and read the file it writes, and (ii) derive from the
+  rules the positions that hold an account UID and run the transform on each.
+  (ii) **narrows the gap and does not close it**: it cannot see a field the
+  application writes that no rule names, a node the rules no longer declare, a
+  UID under a name that says nothing, or a name inside a string. Two of the
+  three defects above are of exactly those kinds.
+
+**What this does not do.**
+
+1. **It does not change a file that was already written, and those files hold
+   names.** Every file without a `transformVersion` field is affected; the
+   first unaffected file is the first one that carries it, which is *not*
+   fixed by this document's date — the job runs nightly on whatever the main
+   branch holds. The job's run list shows 37 runs, all successful, from
+   2026-09-02 to 2026-10-07 (the newest wrote a file of 4 sessions and 5
+   participants), and 85 successful runs to the earlier Google bucket from
+   2026-05-30 to 2026-08-26. Each night's file holds every closed,
+   research-consented session then in the database, so one session appears in
+   many files. **[TO VERIFY: that the Scaleway bucket carries the 90-day
+   lifecycle rule — the repository holds the rule file written for the Google
+   bucket and no record of it being applied to this one; and whether the
+   Google bucket and its contents still exist now that billing is closed.]**
+   Files written up to and including 2026-07-23 also carry both mapping tables
+   whole, and participants regardless of research consent (G1). A copy taken
+   out of the archive for analysis is outside every lifecycle rule — the
+   research dataset's stated retention is five years after publication.
+   **[CONTROLLER OF THE EXPORT (the operator — clause 2.6) TO DECIDE: whether
+   the stored files are deleted now, rewritten, or left to expire; whether any
+   copy was taken, and by whom; and whether this must be recorded or assessed
+   as a personal data breach (clause 9) — real names of participants,
+   including participants who had refused research use, were written nightly
+   into a file described as pseudonymised.]** No tool that rewrites a stored
+   export exists; none was written. One practical consequence for whoever
+   rewrites or searches them: an erasure request arrives by account UID, and
+   in a version-2 file nothing links an anonymous participant's rows to a UID
+   — only the identified backup's `clientMapping` does, for as long as that
+   backup is kept.
+2. **A participant who declined research use is not erased from the file.**
+   What they wrote into a room's shared lists is still exported, with the name
+   redacted. Recorded, with what was run, under G1. Not changed here.
+3. **`stableId` is still exported, as written — and that is a choice still to
+   be made, not a constraint.** It came through (run) in
+   `pool/<clientId>/stableId`, in each test and questionnaire record, and as
+   the key of each ballot; the application has not written it into `poll`
+   since 2026-06-16, and never into answers. For a signed-in participant it is
+   their account UID — so for that participant the export still carries
+   exactly the identifier this item removes elsewhere. An earlier version of
+   this item said that replacing it "would break the join the protocol depends
+   on". **That was wrong.** The pre-test, the post-test and the wrap-up
+   questionnaire all sit inside one session, so a stand-in assigned per
+   distinct `stableId` per session keeps every one of those joins, and removes
+   both the cross-session link and the raw UID (run, as a prototype applied to
+   the transform's output and not part of the repository: one signed-in
+   participant across two tabs came out with one stand-in on both pool rows,
+   the pre-test, the post-test, the questionnaire and the ballot, and no UID
+   left in the file). The only join it would break is the one the
+   protocol *plans* to a questionnaire held outside the platform, through a
+   printed code derived from the `stableId` — an unticked item in the
+   protocol's own checklist, and a code the application does not show. So the
+   real question is whether that planned join is still wanted, and if so
+   whether the export should carry the derived code rather than the raw value.
+   **[CONTROLLER / DPO TO DECIDE, with R8. Not changed here: it alters the
+   study's join key.]**
+4. **The facilitator's own "pseudonymised" archive is a different transform:
+   it removes no account identifier at all, and it has the same name leak.**
+   The dashboard's "Pseudonymise names in export" tick-box calls
+   `pseudonymiseTree()` in `lib.js`, which replaces names where a whole value
+   equals one. Run on sample sessions: `creatorUid`, `scenarioRef.ownerUid`,
+   the keys of `members` and `roomOf`, and both mapping tables all came
+   through; a participant who declined keeps their row; and **an event's
+   payload came out with the author's real name inside it**, exactly as in (a).
+   Its code comment says it matches the nightly export's strategy; it stopped
+   matching on 2026-05-30, and has removed no UID since the nightly one began
+   to on 2026-07-23. It produces the Controller's own copy of its own session,
+   in the Controller's browser — but the code describes the file as "meant to
+   be shareable", and a facilitator who ticks the box has every reason to
+   believe it. Not changed here: it is part of the application the browser
+   caches, and needs its own release.
+5. **`scenarioId` still says which scenario ran.** For a *shared* scenario the
+   library lists it with its author's UID and display name or e-mail address —
+   by the author's own choice to share it (read; not run).
+6. **The per-tab `clientId` still keys the pool**, and marks each contribution
+   as `cid`. It is random per browser tab, but it lives in `sessionStorage`
+   and is not cleared on leaving a session, so a tab that joins a second
+   session without being closed carries the same value into both (read from
+   the client; not run).
+7. **`members` is still keyed by one pseudonym per account**, the last pool
+   row's. Where one account stands behind two pool rows, that key is one of
+   the two — and where both rows share a display name, it is a pseudonym no
+   pool row carries (run). Not an identifier; a data-quality defect for
+   whoever counts members.
+8. **Free text and links pass as written.** R7, whose list was extended the
+   same day.
+
+[OPERATOR — DATE OF THE FIRST FILE CARRYING `transformVersion: 2`: ____ ]
 
 ---
 

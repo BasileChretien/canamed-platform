@@ -208,8 +208,12 @@ test("authored section bodies are snapshotted per slot, matching the tokens", ()
   const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));
   const sb = rules.rules.sessions.$sessionId.sectionBodies;
   assert.ok(sb, "the sectionBodies node must exist in the sessions tree");
-  assert.equal(sb.$slot[".write"], "auth != null && !data.exists()",
+  assert.match(sb.$slot[".write"], /^auth != null && !data\.exists\(\) && /,
     "write-once: a session's content must not change after creation");
+  /* …and its creator's. The exact string this used to pin let any signed-in
+     visitor write a body the creator had not (tests/session-config-creator-bound.test.js). */
+  assert.match(sb.$slot[".write"], /\.child\('creatorUid'\)\.val\(\) == auth\.uid/,
+    "an authored body is written by the session's creator");
   assert.ok(rules.rules.orgs.$orgSlug.sessions.$sessionId.sectionBodies,
     "…and mirrored in the org tree, or org sessions fail closed");
 });
@@ -326,7 +330,9 @@ test("the pick is written write-once, like the module narrowing before it", () =
   assert.match(SCRIPT, /oPath\(code, "sections"\)\)\.set\(sections\)/);
   const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));
   const s = rules.rules.sessions.$sessionId.sections;
-  assert.equal(s[".write"], "auth != null && !data.exists()");
+  assert.match(s[".write"], /^auth != null && !data\.exists\(\) && /);
+  assert.match(s[".write"], /\.child\('creatorUid'\)\.val\(\) == auth\.uid/,
+    "the pick is written by the session's creator");
 });
 
 test("the add-list fills itself once the lazy library lands", () => {
