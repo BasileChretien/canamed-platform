@@ -2173,7 +2173,8 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   not queried. The purge bounds it: 30 days after closing, 90 after creation.
   (e) The ten writes open for an unclaimed client id are untouched.
 - ⚠️ **Four older defects met on the way — measured the same day, NOT fixed
-  here.** Each is a change of its own. The fourth is the Leave-and-rejoin
+  here.** Each is a change of its own (the third has had one since — see
+  it). The fourth is the Leave-and-rejoin
   misplacement above: it leaves a participant in a room where none of their
   work is saved, whatever this change does.
   1. **The facilitator's acknowledgement of a call is refused.**
@@ -2186,16 +2187,35 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   2. **"Reset this room's case" deletes nothing.** Shown to a facilitator
      inside a room; it is a `remove()` on the parent `revealed` node, which has
      no write rule. Silent.
-  3. **A dashboard stops updating once its facilitator has opened a room and
-     come back.** `teardownRoom()` calls `refLeaderboard.off()`, and that ref
-     is the SAME location as the dashboard's `refRooms` — `off()` with no
-     arguments drops every listener there. Measured: after one visit the
+  3. ~~**A dashboard stops updating once its facilitator has opened a room and
+     come back.**~~ **✅ FIXED IN CODE 2026-10-14 (shell v193)** — it reaches
+     a browser when that browser loads v193. `teardownRoom()` called
+     `refLeaderboard.off()`, and that ref is the SAME location as the
+     dashboard's `refRooms` — `off()` with no arguments drops every listener
+     there, whichever Reference attached it. Measured: after one visit the
      database held a second finding and a new call for help, and the dashboard
      showed neither; the facilitator's own Advance moved the database and not
-     the row. Both lines are in this repository's first commit (2026-05-18).
-     A client fix.
-     ⚠️ In an emulator spec, read the creator's dashboard BEFORE the creator
-     opens a room.
+     the row. A room switch from the sidebar froze the sidebar the same way.
+     Both lines were in this repository's first commit (2026-05-18), and
+     nothing ever re-subscribed. `teardownRoom()` now detaches the
+     leaderboard's own callback (`off("value", onLeaderboard)`).
+     **Why the LOCAL suite never saw it:** LocalDB's `off()` removed only the
+     callbacks attached through the Reference it was called on, so in LOCAL
+     mode the dashboard's listener survived — a LOCAL spec of this exact flow
+     was green on the defect. LocalDB's `off()` now acts on the location as
+     Firebase's does (`tests/localdb-off-location.test.js`); with it, the
+     LOCAL spec fails on the old `script.js`. A test double that is MORE
+     FORGIVING than the SDK hides this whole class of bug from every LOCAL
+     spec on every device.
+     The "read the dashboard BEFORE the facilitator opens a room" ordering in
+     emulator specs is no longer needed.
+     `Verify:` `PORT=8791 npm run test:e2e:rules -- dashboard-after-room-visit`
+     and `PORT=8771 npx playwright test tests-e2e/dashboard-after-room-visit.spec.js`
+     (on the device projects; the WebKit ones with `--workers=1`).
+     ⚠️ The emulator twin is `…-sdk.spec.js` ON PURPOSE: the mobile projects'
+     `testMatch` in `playwright.config.js` matches a basename in ANY
+     directory, so an emulator spec sharing a LOCAL spec's name would run in
+     LOCAL mode there.
 - **Why nothing caught it.** As in #452: every hardening pass worked from a
   list somebody had thought of. Two tests pinned the open shape —
   `tests/rules.test.js` required the `events` rule NOT to contain

@@ -635,11 +635,7 @@ test("the product's own writes all land — a room's participants, the facilitat
   await clickWorkup(dee.page, "history:4");
   await expect.poll(async () => ((await dbReadAsOwner(`${sl}/revealed/history:4`)) || {}).by,
     { message: "a co-facilitator's reveal, by transaction, in a room it holds no claim on", timeout: 15_000 }).toBe("Dee Cofac");
-  /* Then the DOM — on the creator's dashboard, and BEFORE the creator opens a
-     room: measured while writing this test, a dashboard stops updating once
-     its facilitator has been into a room and back (teardownRoom() drops every
-     listener on `rooms`, the dashboard's own included). Not this change's, and
-     reported; it is why this line is here and not at the end. */
+  /* Then the DOM — on the creator's dashboard. */
   await expect.poll(async () => (await findingsLines(page)).filter(l => /^findings 2\//.test(l)).length,
     { message: "then the DOM: the creator's dashboard counts both findings", timeout: 15_000 }).toBe(1);
 
