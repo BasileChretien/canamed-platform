@@ -2175,17 +2175,39 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
 - ⚠️ **Four older defects met on the way — measured the same day, NOT fixed
   here.** Each is a change of its own. The fourth is the Leave-and-rejoin
   misplacement above: it leaves a participant in a room where none of their
-  work is saved, whatever this change does.
-  1. **The facilitator's acknowledgement of a call is refused.**
-     `openRoomAsAdmin()` re-sends the call with `ack: true` and its original
-     `at`; the one-call-at-a-time clause refuses it (`at` has not moved by
-     thirty seconds) — for the creator and a co-facilitator alike, before and
-     after this change. The room never sees "A facilitator is coming ✓".
-     "Resolve call" works. A rules fix; note the validator's 60-second window
-     would refuse the ack of an older call as well.
-  2. **"Reset this room's case" deletes nothing.** Shown to a facilitator
-     inside a room; it is a `remove()` on the parent `revealed` node, which has
-     no write rule. Silent.
+  work is saved, whatever this change does. **The first two are fixed by the
+  follow-up change (2026-10-14, `tests/call-for-help-ack.test.js`) — in the
+  repository; the acknowledgement works in production only once a deploy has
+  released the rules (`released successfully` in the Deploy log), the removal
+  once the shell carrying it is live.**
+  1. **The facilitator's acknowledgement of a call was refused** — since the
+     first commit (2026-05-18). `openRoomAsAdmin()` re-sends the call with
+     `ack: true` and its original `at`; the one-call-at-a-time clause refused
+     it (`at` had not moved by thirty seconds), whole or as the `ack` child,
+     for the creator and a co-facilitator alike; past a minute — the usual
+     case — the validator refused its date too. The room never saw
+     "A facilitator is coming ✓". **Fixed in the RULES only**, both trees: the
+     clause has a fifth way through, the facilitator's (the Phase 4a
+     predicate) writing `ack == true` onto the call that stands with `at` and
+     `by` unchanged and `msg` unchanged or gone; the validator takes an older
+     date on exactly that record. Both edits only ADD a way through, and the
+     rule accepts the payload the deployed client already sends, so no
+     browser needs a new shell for it. **New to students:** the acknowledged
+     state, and "tap to call again" from it. Still open, pinned as such: a
+     participant can make a call read as acknowledged by re-dating it after
+     thirty seconds — and, under the any-room claim, so can one of another
+     room, who can also cancel it.
+  2. **"Reset this room's case" deleted nothing** — since the first commit. A
+     facilitator-only `remove()` of the whole `revealed` list, which no rule
+     grants; silent. **REMOVED, by decision (2026-10-14), not repaired:** a
+     reset of the findings alone would leave the score, penalties, rule-outs
+     and chat awards they caused, a full reset is a feature of its own, and
+     either deletes a room's research record mid-session. No `.write` was
+     added at the list. Its two strings went from i18n.js and fr/ja
+     (`LOCALE_VERSION` bumped). `Verify:` `node --test
+     tests/call-for-help-ack.test.js`; on the emulator `PORT=8791 npm run
+     test:e2e:rules -- call-for-help-ack` (three tests; the product test waits
+     out the minute, so it takes about two).
   3. **A dashboard stops updating once its facilitator has opened a room and
      come back.** `teardownRoom()` calls `refLeaderboard.off()`, and that ref
      is the SAME location as the dashboard's `refRooms` — `off()` with no

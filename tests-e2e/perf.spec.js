@@ -838,6 +838,12 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     This is the structural reclaim the entries above call owed. The cap
 //     stays where it is: the margin is what the next eager change spends,
 //     and a cap set to the measured number is a test that fails on a comment.
+//   2026-10-14 (ninth entry): CAP UNCHANGED (326). "Reset this room's case"
+//     is removed — its button, its handler and its two strings — because it
+//     never deleted anything (a remove() no rule grants); the facilitator's
+//     acknowledgement of a call for help is repaired in the rules alone.
+//     Same method, against main at v192: script.js -79 B, i18n.js -84 B,
+//     first-party 320.89 -> 320.73 KB (-163 B). MARGIN ~5.3 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

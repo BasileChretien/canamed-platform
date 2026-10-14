@@ -1006,12 +1006,7 @@
       "prompts.next.last": "Save and finish →",
       "prompts.done.msg": "✓ <strong>You've worked through all the discussion prompts.</strong> Now capture your team's bullets.",
       "prompts.done.cta": "Open Group answers →",
-      "prompts.review": "← Review prompts",
-
-      // Reset button (in-room, destructive — must be discoverable in
-      // every UI language so a participant doesn't tap it by mistake).
-      "reset.btn": "Reset this room's case",
-      "reset.btn-title": "Clear this room's findings"
+      "prompts.review": "← Review prompts"
     }
   };
 
@@ -1033,7 +1028,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v29";  // splash.my-sessions.close-refused: what "Close" says when the server refuses it
+  const LOCALE_VERSION = "v30";  // reset.btn{,-title} removed from fr/ja with the "Reset this room's case" control
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

@@ -753,8 +753,6 @@
   "prompts.next.last": "Enregistrer et terminer →",
   "prompts.done.msg": "✓ <strong>Vous avez parcouru toutes les questions de discussion.</strong> Capturez maintenant les bullets de votre équipe.",
   "prompts.done.cta": "Ouvrir Réponses de groupe →",
-  "prompts.review": "← Revoir les questions",
-  "reset.btn": "Réinitialiser le cas de cette salle",
-  "reset.btn-title": "Effacer les résultats de cette salle"
+  "prompts.review": "← Revoir les questions"
 };
 });

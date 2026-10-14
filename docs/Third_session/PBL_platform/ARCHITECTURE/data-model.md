@@ -421,11 +421,22 @@ OR null (not set yet)
   still be able to call. The price: a participant of another room can raise
   or cancel this room's call. The room raises and cancels; the facilitator
   clears it with "Resolve call" from inside the room.
-  ⚠️ The acknowledgement `openRoomAsAdmin()` sends — the same call with
-  `ack: true` and its original `at` — is refused by the one-call-at-a-time
-  clause, for every facilitator (run on the emulator 2026-10-08). The product
-  therefore never stores `ack` today; the schema below describes what the rule
-  would accept.
+- **The acknowledgement** is a fifth way through the one-call-at-a-time
+  clause, since 2026-10-14, and it is the facilitator's alone: `ack == true`
+  written onto the call that stands, with its `at` and `by` unchanged and its
+  `msg` unchanged or removed. That is what `openRoomAsAdmin()` sends (the call
+  as read, `ack: true`, no `msg`), whole or as the `ack` child. Until then it
+  was refused — for the creator and a co-facilitator alike, run on the
+  emulator 2026-10-08 and again 2026-10-14 — because it is none of the other
+  four, and past a minute the validator refused its date as well; no
+  production session ever stored `ack`, and no room ever saw "A facilitator is
+  coming ✓". Rules only: the deployed client already sent this payload.
+  ⚠️ **Still open, unchanged:** a participant can make a call read as
+  acknowledged by RE-DATING it once thirty seconds have passed (the
+  thirty-second way through does not look at `ack`), and since the call asks
+  for a claim on any room, so can a participant of another room — who can
+  also simply cancel it. Pinned as open in
+  `tests-e2e/emulator/call-for-help-ack.spec.js`.
 
 **Schema:**
 ```json
@@ -444,7 +455,12 @@ OR null (no call active).
   newData.hasChildren(['by', 'at']) && 
   newData.child('by').isString() && 
   newData.child('by').val().length <= 40 && 
-  newData.child('at').isNumber()
+  newData.child('at').isNumber() &&
+  newData.child('at').val() <= now + 5000 &&
+  (newData.child('at').val() >= now - 60000 ||
+   newData.child('ack').val() == true &&
+   newData.child('at').val() == data.child('at').val() &&
+   newData.child('by').val() == data.child('by').val())
 )"
 
 msg: ".validate: newData.val() == null || 
@@ -452,11 +468,17 @@ msg: ".validate: newData.val() == null ||
 
 ack: ".validate: newData.val() == null || newData.isBoolean()"
 ```
+A new call must be dated within the last minute; the one record that may
+carry an older date is the call's own acknowledgement, which re-sends it.
 
 **Notes:**
-- Written by renderCallProf() when user clicks "Call a facilitator"
+- Written by initCallProf() when user clicks "Call a facilitator"
 - Admin sees red badge on room card
-- Opening room in admin view clears the alert (visual feedback that facilitator arrived)
+- Opening the room in admin view acknowledges the call (`openRoomAsAdmin()`):
+  the dashboard alert clears and the room's button reads "A facilitator is
+  coming ✓ (tap to call again)"; a tap raises a new call (the client keeps
+  thirty seconds between two calls of its own). Working since 2026-10-14 —
+  see the acknowledgement above.
 
 ### sessions/{sessionCode}/rooms/{roomName}/presence/{clientId}
 
@@ -549,6 +571,13 @@ OR null (item not revealed).
 - Written when user clicks "Ask", "Examine", or "Investigate" button
 - Triggers score check (e.g., milestone unlock)
 - Immutable once written; setting to null deletes it (not intended for normal use)
+- No rule grants a write at the LIST (`revealed` itself, here or per slot), so
+  the whole list cannot be deleted by anybody — the facilitator included. The
+  facilitator-only "Reset this room's case" button did exactly that
+  (`refRevealed.remove()`), was refused silently from the first commit
+  (2026-05-18) on, and was removed on 2026-10-14 rather than repaired: a reset
+  of the findings alone would leave the score, penalties, rule-outs and chat
+  awards they caused, and any reset deletes a room's research record mid-session.
 
 ## Answers (Text Responses)
 

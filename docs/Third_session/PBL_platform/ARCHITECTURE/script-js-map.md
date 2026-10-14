@@ -262,7 +262,6 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 |----------|-------|-------|---------|
 | renderPresence() | 3532–3552 | Room render | List active participants in room, show their names |
 | initTeamName() | 3510–3522 | Room entered | Set up listener for roomName; allow room to set its own team name |
-| initReset() | 3523–3531 | Admin view | Show "Reset session" button (admin-only, dangerous) |
 
 ## Language & Theming
 
