@@ -807,6 +807,16 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     main at v188: style.css +4 B, first-party 325.03 -> 325.03 KB (+5 B).
 //     The cap costs about 116 B; a comment block it made untrue, and shorter
 //     wording, paid for it. MARGIN ~0.97 KB.
+//   2026-10-08 (sixth entry): CAP UNCHANGED (326). #449: every stored date a
+//     rule bounds is read from the server's clock (`serverNow()` in lib.js —
+//     the device clock plus the offset the SDK measures), so a device with a
+//     wrong clock can join, write and close; and "Close" says so when the
+//     server refuses it. Same method, against main at v189: lib.js +160 B,
+//     script.js +39 B, i18n.js +34 B (one new string), first-party
+//     325.03 -> 325.26 KB (+233 B). None of it can be lazy: the helper is
+//     called by the join, create and close paths of the eager file.
+//     MARGIN ~0.74 KB, and no reclaim in this change — the one queued
+//     behind it moves the account screens out of the eager file.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
