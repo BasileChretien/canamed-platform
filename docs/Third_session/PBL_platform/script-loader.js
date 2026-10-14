@@ -17,6 +17,7 @@
  *   - script-admin.js             (the facilitator dashboard engine, on admin login)
  *   - tour.js                     (loaded after splash is interactive, idle window)
  *   - scenario-author.js          (loaded when scenario-author form opens)
+ *   - account-ui.js               (the sign-in view + account dialog, on first use)
  *
  * Previously planned but dropped (R2-01 — SIMULATION_ROUND2.md), and the
  * half of it that has since been DONE:
@@ -111,7 +112,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v191";
+  var SHELL_VERSION = "v192";
   // ROOT-ABSOLUTE, and the leading "/" is load-bearing (2026-08-06).
   // firebase.json rewrites `/o/**` -> /index.html for the multi-tenant org
   // entry point, so on a page served at /o/<slug>/ a BARE filename resolves to
@@ -222,6 +223,22 @@
      #gdpr-export-btn click on the waiting screen. Same shape as takehome.js:
      loaded ON CLICK from _wireDataRightsExport(), never on the splash. */
   function ensureDataRights() { return loadScript(v("data-rights.js")); }
+  /* account-ui.js — the sign-in view, the account dialog and the profile-setup
+     save, behind accountUI() in script.js. A fetch that failed, or that brought
+     something else than the file, is forgotten and its <script> taken out, so
+     the PAGE asks again on the next click. Under the service worker a 200 that
+     was not the file is already in its cache and answers that retry (sw.js
+     stores any ok response — true of every ?v= file; not fixed here). */
+  function ensureAccountUI() {
+    var src = v("account-ui.js");
+    return loadScript(src).then(function () {
+      if (typeof wireAccountChunk !== "function") throw new Error("account-ui.js arrived and declared nothing");
+    }).catch(function (e) {
+      inflight.delete(src);
+      document.querySelectorAll('script[src="' + src + '"]').forEach(function (t) { t.remove(); });
+      throw e;
+    });
+  }
   /* modA-triage.js + .css — the ?triage=1 slice, LAZY because the feature is
      default-off and cost ~5 KB gz on every splash. Resolves only when BOTH are
      in (ensureRoomStyles shape). No-ops when the flag is off. */
@@ -462,6 +479,7 @@
     ensureStudentPdf,
     ensureTakeHome,
     ensureDataRights,
+    ensureAccountUI,
     ensureModATriage,
     triageFlagOn,
     ensureAdminApp,

@@ -865,7 +865,7 @@ certificate entry** — for those, write to **[DPO / PRIVACY CONTACT EMAIL]**.
   both sides**. If the recipient is outside Japan, **Art. 28 stacks on top**.
   Add records-of-provision to the operational checklist. `[TO VERIFY]`*
 - ***CORRECTED — what "delete" deletes.** `data-rights.js :: deleteMyAccount`
-  (reached through the `script.js :: accountDelete` shim) removes `users/$uid`,
+  (reached through the `account-ui.js :: accountDelete` shim) removes `users/$uid`,
   the Firebase Auth user and — since 2026-10-07 — the author's own
   `scenarios/$uid` and published `sharedScenarios/` copies. It does **not**
   touch session contributions, roster entries (which hold the email) or

@@ -331,7 +331,8 @@ test("both in-product entry points are wired", () => {
     "the waiting-screen control is missing — it is the only route for " +
     "ANONYMOUS participants, who have no account history");
   assert.match(src, /gdpr-withdraw-btn/);
-  assert.match(src, /account-history-withdraw/,
+  // The account dialog's history list is painted by the lazy account-ui.js.
+  assert.match(read(PLATFORM, "account-ui.js"), /account-history-withdraw/,
     "the account-history control is missing — it is the only route for " +
     "someone withdrawing after the session, weeks later");
 });
