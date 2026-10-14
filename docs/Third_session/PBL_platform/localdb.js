@@ -7,8 +7,8 @@
  * backend is wired:
  *
  *   ref(path).set(val) / .remove() / .push(val) / .once()
- *   ref(path).on(event, cb) / .off()   — "value", "child_added" and
- *                                        "child_removed" events
+ *   ref(path).on(event, cb) / .off([event[, cb]])   — "value",
+ *     "child_added" and "child_removed"; off() is by location, as in Firebase
  *   ref(path).transaction(fn)
  *   ref(path).onDisconnect().remove() / .cancel()
  *   ref(path).child(sub)
@@ -207,7 +207,7 @@
   }
 
   class LocalRef {
-    constructor(dbi, path) { this._db = dbi; this._path = path; this._mine = []; }
+    constructor(dbi, path) { this._db = dbi; this._path = path; }
     child(sub) { return new LocalRef(this._db, this._path + "/" + sub); }
     set(val) {
       const tree = this._db._read();
@@ -246,15 +246,23 @@
       // initial delivery below only records them — nothing is removed yet.
       if (event === "child_removed") sub.known = Object.create(null);
       this._db._subs.push(sub);
-      this._mine.push(sub);
       // Initial delivery: "value" fires with the current whole-path value;
       // "child_added" replays each existing child (Firebase semantics).
       this._db._deliver(sub);
       return cb;
     }
-    off() {
-      this._db._subs = this._db._subs.filter((s) => this._mine.indexOf(s) === -1);
-      this._mine = [];
+    /* Firebase semantics: off() acts on the LOCATION, whichever Reference
+       attached the callback. No arguments: every callback here. off(event):
+       every callback for that event. off(event, cb): cb's first registration.
+       Scoping it to this Reference hid the dashboard freeze from the LOCAL
+       suite (tests/localdb-off-location.test.js). */
+    off(event, cb) {
+      let one = false;
+      this._db._subs = this._db._subs.filter((s) => {
+        if (s.path !== this._path || (event && s.event !== event) || (cb && s.cb !== cb) || one) return true;
+        if (cb) one = true;
+        return false;
+      });
     }
     transaction(fn) {
       const tree = this._db._read();
