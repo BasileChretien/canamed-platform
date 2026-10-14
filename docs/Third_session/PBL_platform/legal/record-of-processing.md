@@ -85,7 +85,7 @@ from `.github/workflows/pseudonymise-export.yml` over every **closed**,
 | --- | --- |
 | (a) Controller and contact | [PLATFORM OPERATOR LEGAL NAME AND ADDRESS]; DPO [DPO]. The same placeholders as §1, and for the same reason — this record cannot be more determinate than the contract it sits beside. |
 | (b) Purposes | Educational-research analysis and publication (the CaNaMED study). |
-| (c) Categories of data subjects and of personal data | Participants in closed sessions **who gave research consent**: pseudonymised session data; **free-text answers verbatim**; knowledge-test and wrap-up questionnaire responses; university (bucketed); **the study's join key `stableId`, as written — for a signed-in participant, their account identifier**. **Participants who did NOT consent**, for what they wrote into a room's shared lists (free text, name redacted). **The facilitator**, for the text they authored (scenario, labels, score tags; name redacted). Plus a real-name → pseudonym **linkage table** (consenting participants only). ⚠️ **Files written by transform version 1 hold more than this row says** — see the note below the table. |
+| (c) Categories of data subjects and of personal data | Participants in closed sessions **who gave research consent**: pseudonymised session data; **free-text answers verbatim**; knowledge-test and wrap-up questionnaire responses; university (bucketed); **the study's join key `stableId`, as written — for a signed-in participant, their account identifier**. Since transform version 3 "who gave research consent" means *included*: consent recorded, the row bound to an account by `clientMapping`, not withdrawn. **The facilitator**, for their own records and the text they authored (scenario, labels, score tags, audit log; name redacted). Plus a real-name → pseudonym **linkage table** (included participants only). **Participants who did NOT consent** are data subjects of every file written by transform versions 1 and 2, for what they wrote into a room's shared lists (free text, name redacted); version 3 removes it — see the note below the table, which also says what version 3 cannot detect. ⚠️ **Files written by transform version 1 hold more than this row says** — see the same note. |
 | (d) Categories of recipients | The named CaNaMED research team at the controlling institutions. **Scaleway** (object storage, `fr-par`). **GitHub, Inc.** (executes the job — §4). |
 | (e) Third-country transfers | **GitHub Actions runners, United States** — DPF adequacy (§4). No other transfer identified for this activity; the storage is `fr-par`. |
 | (f) Retention | Research dataset **up to 5 years after publication**. Linkage table **14 days**, enforced by an object-storage lifecycle rule. |
@@ -114,18 +114,32 @@ onto the operator.**
 file read for the first time** (DPA Annex VI **R10** and **G1**). Two things
 follow, and they are different.
 
-**What row (c) now admits, and is true of every file, old and new:**
+**What row (c) now admits — each point says which files it is true of:**
 
-- **Participants who declined research use are data subjects of this export.**
-  Their pool row is removed; so is everything keyed by their clientId or by an
-  account UID the `clientMapping` table ties to them (except a membership
-  entry of an account that also stands behind a consenting row), and the
-  ballots keyed by the stableId in their own row or by one the mapping table
-  ties to their account; what
-  they wrote into shared lists is exported with the name redacted. The lawful
-  basis stated below — consent — does not cover them. That is an open question
-  for the controller (G1), not a drafting point.
-- **So is the facilitator**, through the text they authored.
+- **Participants who declined research use are data subjects of every file
+  written by transform versions 1 and 2.** Their pool row was removed, and
+  what was keyed by their identifiers, but what they wrote into shared lists
+  was exported with the name redacted and their `clientId` beside it; so was
+  everything written under an identity with no participant-list entry. The
+  lawful basis stated below — consent — does not cover them. **Transform
+  version 3** (not yet in any stored file: [OPERATOR — DATE OF THE FIRST FILE
+  CARRYING `transformVersion: 3`: ____ ]) keeps a record that names a person
+  only when it can be shown to be an included participant's, and removes the
+  rest (DPA Annex VI G1 lists what, as run). Three things keep them from being
+  absent from a version-3 file in every case: a record written in an included
+  participant's name or `clientId` by somebody else is not detected, because
+  the database binds neither to the writer; an included participant's
+  reply to a removed entry stays; and the name-only records (events, reveals,
+  triage choices, calls for help) of a participant who is not included and is
+  bound to no account are kept as an included namesake's, if one exists — the
+  price of not letting an unbound row, which anyone holding the session code
+  can write, remove an included participant's records. What is done about the version-1 and
+  version-2 files is R10 item 1 — the operator's decision.
+- **So is the facilitator**, through the text they authored and their own
+  records (audit log, manual scores), in every version. Version 3 removes their
+  entries in a room's shared lists (an event, a reply, a reveal), which cannot
+  be told from one written in their name by somebody else. Whether their own
+  records belong in the research copy is put to the controller (G1).
 - **`stableId` is exported as written.** It has been for as long as the field
   has existed; it is named because a record that calls the data
   "pseudonymised" and omits the one identifier it keeps is not complete.

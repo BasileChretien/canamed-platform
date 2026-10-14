@@ -28,6 +28,8 @@ function sampleSession() {
     created: { by: "Dr Facilitator", at: 1 },                 // facilitator name (not in pool)
     _adminPresence: { by: "Dr Facilitator", at: 2 },          // facilitator transient
     _superadminReset: { by: "Dr Facilitator", code: "ZZZ9", requestedAt: 3 },
+    // Since transform version 3 a row counts only when bound to an account.
+    clientMapping: { c1: "uidA", c2: "uidB", c3: "uidC" },
     pool: {
       c1: { name: "Alice", university: "Caen", at: 10, consent: YES },
       c2: { name: "Bob", university: "Nagoya", at: 20, consent: YES },
@@ -124,6 +126,7 @@ test("non-name fields are left intact", () => {
 
 test("name matching is whitespace/NFC tolerant", () => {
   const sess = {
+    clientMapping: { c1: "uidA" },
     pool: { c1: { name: "Alice", at: 1, consent: YES } },
     rooms: { r1: { answers: { a1: { by: "  Alice  " } } } }   // padded variant
   };
@@ -153,6 +156,7 @@ test("normName trims and NFC-normalises, passes non-strings through", () => {
 
 test("participants named like Object built-ins are pseudonymised, not dropped", () => {
   const sess = {
+    clientMapping: { c1: "uid1", c2: "uid2", c3: "uid3" },
     pool: {
       c1: { name: "__proto__", at: 1, consent: YES },
       c2: { name: "toString", at: 2, consent: YES },
@@ -181,6 +185,7 @@ test("participants named like Object built-ins are pseudonymised, not dropped", 
 
 test("participant names appearing as bare array elements are scrubbed", () => {
   const sess = {
+    clientMapping: { c1: "uidA" },
     pool: { c1: { name: "Alice", at: 1, consent: YES } },
     rooms: { r1: { tags: ["Alice", "keep-me", "Alice"] } }
   };
@@ -301,17 +306,25 @@ test("auth-uid mappings are dropped and uid-keyed membership is rekeyed", () => 
 
 test("a consenting participant sharing a name with a decliner keeps the pseudonym", () => {
   const sess = {
+    clientMapping: { c1: "uid1", c2: "uid2" },
     pool: {
       c1: { name: "Sam", at: 10, consent: YES },
       c2: { name: "Sam", at: 20, consent: NO }
     },
-    rooms: { r1: { answers: { a1: { by: "Sam" } } } }
+    rooms: { r1: {
+      answers: { moduleA: { a1: { by: "Sam", cid: "c1", text: "mine", at: 30 } } },
+      events: { e1: { kind: "answer.moduleA", by: "Sam", at: 31 } }
+    } }
   };
   const out = pseudonymiseSession(sess, "S1", {});
-  // The shared name is ambiguous, so it must resolve to the consenting
-  // participant's pseudonym rather than being redacted away.
-  assert.strictEqual(out.rooms.r1.answers.a1.by, "Student-A");
+  // Where a record is kept — here on the strength of its clientId — the shared
+  // name resolves to the consenting participant's pseudonym rather than being
+  // redacted away.
+  assert.strictEqual(out.rooms.r1.answers.moduleA.a1.by, "Student-A");
   assert.ok(!("c2" in out.pool));
+  // Since transform version 3, a record that names its author ONLY by that
+  // name cannot be shown to be hers, and goes (tests/pseudonymise-consent-scope).
+  assert.ok(!("e1" in out.rooms.r1.events));
 });
 
 test("sessionHasConsent detects whether a session may be exported at all", () => {
@@ -526,14 +539,15 @@ test("a scrubbed payload is still JSON, and keeps everything that is not an iden
   const events = pseudonymiseSession(eventSession(), "S1", {}).rooms["Room 1"].events;
   assert.deepStrictEqual(JSON.parse(events.e1.payload),
     { by: "Student-A", university: "Univ-1", len: 12, bulletKey: "b2" });
-  assert.deepStrictEqual(JSON.parse(events.e2.payload),
-    { by: REDACTED_NAME, university: "Univ-2", len: 9 },
-    "a participant who declined is redacted inside the payload as beside it");
-  assert.deepStrictEqual(JSON.parse(events.e3.payload),
-    { tag: "good point", points: 5, by: REDACTED_NAME });
   assert.deepStrictEqual(JSON.parse(events.e4.payload), { itemId: "ecg" });
   assert.strictEqual(events.e1.by, "Student-A");
   assert.strictEqual(events.e1.kind, "answer.moduleA");
+  /* Until transform version 3 these two were kept with the name redacted
+     inside the payload as beside it. An event names its author by display
+     name only, and neither name is an included participant's: the decliner's
+     event and the facilitator's go whole (tests/pseudonymise-consent-scope). */
+  assert.ok(!("e2" in events), "an event by a participant who declined");
+  assert.ok(!("e3" in events), "an event in the facilitator's name, in a list anyone in the room writes to");
 });
 
 test("an admin audit payload is kept as it was: it names a room and two stages", () => {
@@ -659,6 +673,47 @@ test("a stableId is removed under `ballots` and nowhere else", () => {
   }
 });
 
+test("a pool row's KEY is its writer's choice, and never removes anything but that row's own entries", () => {
+  /* Until transform version 3 every clientId of a row that was not included
+     was deleted wherever it appeared as a key. A row is keyed by whatever its
+     writer chose, and anyone signed in who knows the code may write one under
+     an unclaimed clientId — so a consent-less row keyed `rooms` took every
+     room out of the export (run on the version-2 transform). The clientId of
+     a row is now removed only from the containers whose children ARE keyed by
+     clientId. */
+  for (const planted of ["rooms", "Room 1", "votes", "ballots", "answers", "moduleA", "v1", "S-ANN"]) {
+    const sess = ballotSession();
+    sess.pool[planted] = { name: "Visitor", at: 40, consent: NO };
+    sess.rooms["Room 1"].answers = { moduleA: { a1: { by: "Ann Dupont", cid: "c1", text: "kept", at: 50 } } };
+    const out = pseudonymiseSession(sess, "S1", {});
+    assert.ok(out.rooms && out.rooms["Room 1"], `a row keyed "${planted}" removed a room`);
+    assert.strictEqual(out.rooms["Room 1"].answers.moduleA.a1.text, "kept",
+      `a row keyed "${planted}" removed a consenting participant's answer`);
+    assert.deepStrictEqual(out.rooms["Room 1"].votes.v1.ballots["S-ANN"], { choice: 1, at: 30 },
+      `a row keyed "${planted}" removed a consenting participant's ballot`);
+  }
+});
+
+test("the walk's own key-based steps treat an array like an object keyed by its indices", () => {
+  /* `.val()` returns an integer-keyed node as an array (tests/fixtures/
+     rtdb-shape.js). The walk rekeyed a membership map and cleared a
+     `ballots` node only when it was a plain object; an array of either went
+     through as written. A membership map keyed 0, 1, … holds no account the
+     session ties to an included row, so it keeps nothing; a `ballots` array
+     loses the index a non-included row records as its stableId. */
+  const { asRtdbWould } = require("./fixtures/rtdb-shape");
+  const sess = ballotSession();
+  sess.pool.c2.stableId = "0";
+  sess.members = asRtdbWould({ 0: { at: 1, note: "MEMBER-SENTINEL-0" }, 1: { at: 2 } });
+  sess.rooms["Room 1"].elsewhere = { ballots: asRtdbWould({ 0: { choice: 1, note: "BALLOT-SENTINEL-0" },
+                                                             1: { choice: 2, at: 3 } }) };
+  assert.ok(Array.isArray(sess.members) && Array.isArray(sess.rooms["Room 1"].elsewhere.ballots),
+    "fixture is broken");
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  assert.ok(!blob.includes("MEMBER-SENTINEL-0"), "a membership array went through as written");
+  assert.ok(!blob.includes("BALLOT-SENTINEL-0"), "a ballot under a decliner's stableId, in an array, went through");
+});
+
 test("a decliner's ballot goes whatever the mapping table says about their stableId", () => {
   /* The first version kept the ballot when the table tied the stableId to an
      account the session did not tie to the decliner — which is the missing-row
@@ -691,14 +746,16 @@ test("the cost of that, recorded: a declining row that names another's stableId 
   assert.ok(out.pool.c1, "and nothing else of the consenting participant's");
 });
 
-test("a ballot under a stableId that neither a row nor the table records stays — as the note says", () => {
-  /* The note, the header and two documents say so, with "(run)". Pinned here
-     so that widening the removal later turns this red instead of leaving
-     four sentences false. */
+test("a ballot under a stableId that neither a row nor the table records is removed (version 3)", () => {
+  /* Until transform version 3 it stayed, and the note, the header and two
+     documents said so. A ballot is now kept only under a key shown to be an
+     included participant's: their clientId, the stableId their own row
+     records, or one the mapping table ties to their account. */
   const sess = ballotSession();
   delete sess.pool.c2.stableId;                         // the decliner's row records none
   const ballots = pseudonymiseSession(sess, "S1", {}).rooms["Room 1"].votes.v1.ballots;
-  assert.deepStrictEqual(ballots["S-BEN"], { choice: 2, at: 31 });
+  assert.ok(!("S-BEN" in ballots));
+  assert.deepStrictEqual(ballots["S-ANN"], { choice: 1, at: 30 });
 });
 
 test("an account behind a consenting AND a declining row keeps its membership entry, under the consenting row's pseudonym", () => {

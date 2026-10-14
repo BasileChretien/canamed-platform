@@ -30,24 +30,34 @@
  *   the required workshop consent (`pool/{cid}/consent = {workshop, research,
  *   verification, version, at}`), and joining is deliberately NOT conditional
  *   on it — but nothing downstream honoured it, so the export swept in every
- *   participant regardless. It now excludes non-consenting participants:
- *   - FAIL-CLOSED: only `consent.research === true` counts. Absent, false, or
- *     malformed consent (including sessions predating the field) = excluded.
- *     Consent must be affirmative and demonstrable (GDPR Art. 7), so silence
- *     can never be read as agreement.
- *   - A non-consenting participant's `pool` entry is removed; so is every
- *     node keyed by their clientId or by an account uid `clientMapping` ties
- *     to them — except under `members` / `uidMembers`, where an account that
- *     ALSO stands behind a consenting row (two tabs of one browser) keeps its
- *     entry, under that row's pseudonym; and, under every `ballots` node, the
- *     entry keyed by the stableId in their own row or by one the mapping
- *     table ties to their account. A ballot under a stableId neither records
- *     stays.
- *   - Their name is never entered into the pseudonym map, so the existing
- *     unknown-name path redacts it to REDACTED-NAME everywhere it appears, and
- *     they get no linkage-table entry (nothing to re-identify them with).
- *   - `sessionHasConsent()` lets the caller skip a session where nobody opted
- *     in, rather than exporting a participant-free husk.
+ *   participant regardless.
+ *   Since transform version 3 it is an INCLUSION filter, in
+ *   research-inclusion.js, whose header gives the principle, how each record
+ *   names its author, every decision and its cost. In short:
+ *   - FAIL-CLOSED: a participant is included only when their pool row records
+ *     `consent.research === true` AND a `clientMapping` row binds it to an
+ *     account, and they have not withdrawn. Consent must be affirmative and
+ *     demonstrable (GDPR Art. 7), so silence can never be read as agreement.
+ *   - A record attributable to a person is kept only when it can be shown to
+ *     be an included participant's — by the key of its container, by its
+ *     `cid`, by a clientId in its `by`, or (failing closed on namesakes) by a
+ *     display name held by nobody else whose pool row is bound to an account,
+ *     nor by the facilitator. The rest is removed and counted (`stats`).
+ *     Exception: the name-only records (events, reveals, triage choices,
+ *     calls for help) of a participant who is not included and is bound to no
+ *     account are kept as an included namesake's, if one exists — the price
+ *     of not letting an unbound row, which anyone holding the session code
+ *     can write, remove an included participant's records.
+ *     An account uid `clientMapping` ties to a row that is
+ *     not included is still removed wherever it appears as a key — except
+ *     under `members` / `uidMembers`, where an account that ALSO stands
+ *     behind an included row (two tabs of one browser) keeps its entry, under
+ *     that row's pseudonym. A clientId is not: see excludedKeys below.
+ *   - A name that is not an included participant's never enters the pseudonym
+ *     map, so the unknown-name path redacts it to REDACTED-NAME wherever it
+ *     still appears, and it gets no linkage-table entry.
+ *   - `sessionHasConsent()` lets the caller skip a session with nobody
+ *     included, rather than exporting a participant-free husk.
  *   - `clientMapping`/`stableIdMapping` are DROPPED from the output: they map
  *     to Firebase auth uids, which are stable across sessions and would let an
  *     analyst re-link "Student-A" in one session to "Student-C" in another,
@@ -129,13 +139,21 @@
  *   legal/dpa-draft.md (Annex VI R8, R10) — not taken here.
  *
  * WHAT THIS MODULE DOES NOT DO, so that nobody reads it as more:
- *   - A participant who declined is not ERASED from the output. Their pool
- *     row and the nodes keyed by the identifiers the session records as
- *     theirs go (which ones: the RESEARCH CONSENT block above); what they wrote into
- *     the room's shared lists (answers, replies, hypotheses, deleted answers)
- *     stays, with the name redacted and their per-tab clientId as `cid`.
+ *   - It does not detect a record written under somebody else's identity.
+ *     The rules bind no `cid`, `by` or payload to the account that writes it,
+ *     so a participant who writes in an included participant's name or
+ *     clientId is exported as that participant. Until version 3 a participant
+ *     who declined was not removed from what they wrote into the room's shared
+ *     lists; files written by versions 1 and 2 still hold it.
+ *   - It does not remove a reply an included participant wrote to a removed
+ *     entry: the reply stays under the removed entry's id.
+ *   - It does not reach a position the rules no longer declare and no list in
+ *     research-inclusion.js names.
  *   - Free text is exported as written (R7 in the DPA draft).
  */
+
+const { selectIncluded, isIncluded, sessionHasConsent, hasResearchConsent, normName } =
+  require("./research-inclusion");
 
 const REDACTED_NAME = "REDACTED-NAME";
 
@@ -146,8 +164,22 @@ const REDACTED_NAME = "REDACTED-NAME";
  *   (absent) / 1  everything before version 2
  *   2             names inside event payloads, the legacy mail queue,
  *                 creatorUid, ownerUid and roomOf are removed (header above)
+ *   3             an INCLUSION filter (research-inclusion.js): what a participant
+ *                 who is not included wrote — answers, edits, deleted answers,
+ *                 hypotheses, replies, events, reveals, triage choices, a role
+ *                 assignment, a call for help — is removed with the rows keyed
+ *                 by them; so is every row and record under an identity with no
+ *                 included pool row, a name-only record whose name is shared
+ *                 with somebody not included, and a room's team name. A row
+ *                 counts only when bound to an account by clientMapping.
+ *                 Exception: the name-only records (events, reveals, triage
+ *                 choices, calls for help) of a participant who is not
+ *                 included and is bound to no account are kept as an included
+ *                 namesake's, if one exists — the price of not letting an
+ *                 unbound row, which anyone holding the session code can
+ *                 write, remove an included participant's records.
  * Raise it with every change to what this module lets through. */
-const TRANSFORM_VERSION = 2;
+const TRANSFORM_VERSION = 3;
 
 // Keys whose ENTIRE value/subtree is removed from the export.
 const DROP_KEYS = new Set([
@@ -176,26 +208,9 @@ const PAYLOAD_MAX_CHARS = 500;
 // without exporting an identifier that is stable across sessions.
 const UID_KEYED = new Set(["uidMembers", "members"]);
 
-/**
- * Did this participant opt in to research use? Fail-closed: only an explicit
- * boolean true counts, so a missing/legacy/malformed consent record excludes
- * them (GDPR Art. 7 — consent must be affirmative, never inferred from silence).
- * @param {object} poolEntry a single `pool/{clientId}` record
- */
-function hasResearchConsent(poolEntry) {
-  return !!(poolEntry && poolEntry.consent && poolEntry.consent.research === true);
-}
-
-/**
- * True if at least one pooled participant consented to research use. Callers
- * use this to skip the session entirely rather than export a husk with every
- * participant stripped out.
- * @param {object} sess the raw session subtree
- */
-function sessionHasConsent(sess) {
-  const pool = (sess && sess.pool) || {};
-  return Object.keys(pool).some(cid => hasResearchConsent(pool[cid]));
-}
+/* hasResearchConsent(row), isIncluded(session, cid) and sessionHasConsent(session)
+   live in research-inclusion.js with the rest of "who is in". A row counts only
+   when it records consent AND is bound to an account (see that file). */
 
 /**
  * Apply a session's withdrawal records to its pool, in memory.
@@ -214,21 +229,37 @@ function sessionHasConsent(sess) {
  * that had to be remembered is how the export came to ignore consent entirely
  * in the first place (Annex VI G1).
  *
+ * WHAT A RECORD CHANGES, for the job's log (`report`, added to if given):
+ *   records        withdrawal records in the session (research === false)
+ *   rowsWithdrawn  pool rows whose clientId `clientMapping` ties to one
+ *   unmatched      records whose uid no `clientMapping` row ties to a pool row.
+ * An unmatched record changed nothing here, and used to be counted as applied.
+ * What it means for the export: a row nothing ties to that account is either
+ * bound to no account — and the export never includes an unbound row — or
+ * bound to ANOTHER account, which nothing in the session can tell apart from
+ * that account's own row.
+ *
  * @param {object} session the raw session subtree
  * @param {object} withdrawals `withdrawals/<code>` — { uid: {research, at} }
+ * @param {object} [report] counters to add to (above)
  * @returns {object} a NEW session; the input is not mutated
  */
-function applyWithdrawals(session, withdrawals) {
+function applyWithdrawals(session, withdrawals, report) {
   const out = JSON.parse(JSON.stringify(session === undefined ? null : session));
   if (!out || typeof out !== "object") return out;
   const recs = withdrawals && typeof withdrawals === "object" ? withdrawals : {};
   const withdrawn = new Set(
     Object.keys(recs).filter(uid => recs[uid] && recs[uid].research === false));
+  const tally = report || {};
+  if (withdrawn.size || report) {
+    for (const k of ["records", "rowsWithdrawn", "unmatched"]) tally[k] = tally[k] || 0;
+  }
   if (!withdrawn.size) return out;
 
   const mapping = (out.clientMapping && typeof out.clientMapping === "object")
     ? out.clientMapping : {};
   const pool = (out.pool && typeof out.pool === "object") ? out.pool : {};
+  const matched = new Set();
   for (const cid of Object.keys(pool)) {
     /* A withdrawal is by uid; the pool is keyed by clientId, and one person can
        hold several. Every clientId mapped to a withdrawn uid loses consent. */
@@ -236,13 +267,13 @@ function applyWithdrawals(session, withdrawals) {
     const entry = pool[cid];
     if (entry && typeof entry === "object") {
       entry.consent = Object.assign({}, entry.consent, { research: false });
+      tally.rowsWithdrawn++;
+      matched.add(mapping[cid]);
     }
   }
+  tally.records += withdrawn.size;
+  tally.unmatched += withdrawn.size - matched.size;
   return out;
-}
-
-function normName(s) {
-  return typeof s === "string" ? s.normalize("NFC").trim() : s;
 }
 
 // Own-property check — the lookup maps are null-prototype objects so that a
@@ -265,59 +296,37 @@ function pseudoCode(i) {
  * @param {string} sessionCode  the session code (linkage key)
  * @param {object} [linkage]    if provided, linkage[sessionCode] is set to the
  *                              realName -> pseudonym map (for re-identification)
+ * @param {object} [stats]      if provided, the counts of what the inclusion
+ *                              filter removed are added to it, by reason
+ *                              (research-inclusion.js, STAT_KEYS) — for the log
  */
-function pseudonymiseSession(sess, sessionCode, linkage) {
+function pseudonymiseSession(sess, sessionCode, linkage, stats) {
   if (!sess || typeof sess !== "object") return sess;
 
+  // WHO IS IN (research-inclusion.js): a copy holding only the pool rows of
+  // included participants and the records that can be shown to be theirs.
+  // Everything below scrubs names and identifiers out of that copy.
+  const { session: included, sets } = selectIncluded(sess, stats);
+
   const pool = sess.pool || {};
-  const allCids = Object.keys(pool).sort((a, b) => {
+  const byJoinOrder = (a, b) => {
     const ta = (pool[a] && pool[a].at) || 0;
     const tb = (pool[b] && pool[b].at) || 0;
     return ta - tb;
-  });
+  };
+  const cids = sets.included.slice().sort(byJoinOrder);
+  const excludedCids = sets.excluded.slice().sort(byJoinOrder);
 
-  // Research-consent split. Only opted-in participants keep a row; the rest
-  // lose theirs and the keyed nodes the header's RESEARCH CONSENT block lists,
-  // and are NOT erased: what they authored stays (see both header blocks).
-  const cids = allCids.filter(cid => hasResearchConsent(pool[cid]));
-  const excludedCids = allCids.filter(cid => !hasResearchConsent(pool[cid]));
-
-  // Keys to delete wherever they appear: the excluded participants' clientIds
-  // and the account uids `clientMapping` ties to them (`uidMembers` / `members`
-  // are keyed by uid, so clientId alone misses them).
+  // Account uids deleted wherever they appear as a key: those `clientMapping`
+  // ties to a pool row that is not included. Unlike a clientId (chosen by
+  // whoever writes the row — a row keyed `rooms` took the rooms tree with it
+  // until version 3), a `clientMapping` value is the writer's own auth uid:
+  // the rule requires `newData.val() == auth.uid`. So no participant can make
+  // this set hold the name of somebody else's node. What the inclusion filter
+  // above did not already remove under a known container is a uid-keyed node
+  // at a position no list names (e.g. one the rules have since dropped).
   const clientMapping = sess.clientMapping || {};
-  const stableIdMapping = sess.stableIdMapping || {};
-  const excludedUids = new Set(
-    excludedCids.map(cid => clientMapping[cid]).filter(u => typeof u === "string")
-  );
-  const excludedKeys = new Set(excludedCids);
-  excludedUids.forEach(u => excludedKeys.add(u));
-
-  // stableIds, removed under `ballots` AND NOWHERE ELSE. A ballot is the one
-  // node the client keys by stableId (ballotKey() in script.js). Two sources:
-  //   - a stableId the mapping table ties to an excluded participant's account;
-  //   - the stableId an excluded participant's OWN row records. That table row
-  //     is written once, by the join chain, and can be missing; without this
-  //     their ballot stayed in the file.
-  // Why not delete them at every depth, as the first two versions did:
-  // `pool/<clientId>/stableId` is validated by no rule and a mapping row is
-  // first-come, so either can hold ANY string — "rooms", or a consenting
-  // participant's clientId — and a key deleted everywhere takes that tree with
-  // it. Why the row is not checked against the table: the table can equally
-  // tie a decliner's stableId to an account the session does not tie to them
-  // (no `clientMapping` row; or somebody claimed it first), and the ballot
-  // would stay. The price is recorded in the tests: a declining row that
-  // names somebody else's stableId removes that participant's BALLOTS — every
-  // vote, in every room. Between keeping ballots a person declined to give
-  // and losing a consenting participant's, the export loses them.
-  const excludedBallotKeys = new Set();
-  Object.keys(stableIdMapping).forEach(sid => {
-    if (excludedUids.has(stableIdMapping[sid])) excludedBallotKeys.add(sid);
-  });
-  excludedCids.forEach(cid => {
-    const sid = pool[cid] && pool[cid].stableId;
-    if (typeof sid === "string" && sid.length > 0) excludedBallotKeys.add(sid);
-  });
+  const excludedKeys = sets.excludedUids;
 
   // uid -> pseudonym, so uid-keyed membership maps keep their shape (and their
   // research value: who was in which room) without carrying a cross-session
@@ -387,7 +396,7 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
     return out;
   }
 
-  const out = JSON.parse(JSON.stringify(sess));
+  const out = included; // already a copy; the input is not mutated
   for (const k of ROOT_DROP_KEYS) delete out[k];
 
   // A `payload` is a JSON object in a string (logEvent / logAdminAction in the
@@ -428,15 +437,20 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
     }
     for (const k of Object.keys(node)) {
       if (DROP_KEYS.has(k)) { delete node[k]; continue; }
-      // Non-consenting participant: remove the node keyed by their clientId or
-      // account uid, wherever in the tree it sits.
+      // A node keyed by the account uid of a row that is not included, wherever
+      // it sits (see excludedKeys above for why a uid, and never a clientId).
       if (excludedKeys.has(k)) { delete node[k]; continue; }
       const v = node[k];
-      // …and the ballot keyed by their stableId, under `ballots` only.
-      if (k === "ballots" && v && typeof v === "object" && !Array.isArray(v)) {
-        for (const b of Object.keys(v)) if (excludedBallotKeys.has(b)) delete v[b];
+      // …and a ballot keyed by their stableId, under `ballots` only. The
+      // inclusion filter already did this under rooms/*/votes/*/ballots; this
+      // covers a `ballots` node anywhere else.
+      // Both steps take an ARRAY like an object keyed by its indices: `.val()`
+      // returns an integer-keyed node as one (research-inclusion.js, isMap).
+      // `delete` on an array leaves a hole, written as null.
+      if (k === "ballots" && v && typeof v === "object") {
+        for (const b of Object.keys(v)) if (sets.excludedBallotKeys.has(b)) delete v[b];
       }
-      if (UID_KEYED.has(k) && v && typeof v === "object" && !Array.isArray(v)) {
+      if (UID_KEYED.has(k) && v && typeof v === "object") {
         node[k] = rekeyByUid(v);
         walk(node[k]);
       } else if (k === "payload" && typeof v === "string") {
@@ -465,6 +479,7 @@ module.exports = {
   pseudoCode,
   normName,
   hasResearchConsent,
+  isIncluded,
   sessionHasConsent,
   REDACTED_NAME,
   TRANSFORM_VERSION,
