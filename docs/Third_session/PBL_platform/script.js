@@ -2562,7 +2562,7 @@ let refPool = null, refMyPool = null, refStarted = null, refRoomCount = null,
 let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null, moduleBranched: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null,
-    refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
+    refScore = null, refTeamName = null, refLeaderboard = null, onLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refPoll = null, refCertIds = null,
     refRoleChoices = null,
     refReplayRound = null, refRoleAssign = null,
@@ -4933,7 +4933,10 @@ function teardownRoom() {
        detached by unbindSectionRefs() above. */
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
-    if (refLeaderboard) refLeaderboard.off();
+    /* Only our own callback: `rooms` is also the dashboard's location (refRooms),
+       and off() with none removes every callback there — the dashboard froze. */
+    if (refLeaderboard && onLeaderboard) refLeaderboard.off("value", onLeaderboard);
+    onLeaderboard = null;
     // Module A LLM-patient chat listeners (chat + awarded under
     // rooms/<id>/moduleA) are room-scoped. Release them like every other room
     // subscription so a room switch / leave doesn't leave a stale child_added
@@ -5296,10 +5299,12 @@ function startRoom() {
       if (!_lbResubscribed) {
         _lbResubscribed = true;
         setTimeout(function () {
-          try { if (refLeaderboard && !isRoomAdmin) refLeaderboard.on("value", _onLb, _onLbErr); } catch (_) {}
+          // not if the room was left meanwhile: teardownRoom() would miss it
+          try { if (refLeaderboard && onLeaderboard === _onLb) refLeaderboard.on("value", _onLb, _onLbErr); } catch (_) {}
         }, 1500);
       }
     };
+    onLeaderboard = _onLb;
     refLeaderboard.on("value", _onLb, _onLbErr);
   }
 
