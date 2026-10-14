@@ -922,7 +922,7 @@
         //    sharing a family id would otherwise collide on the second award.
         refs.scoreAuto.child(_scoreEventId(sl, famId)).transaction(function (cur) {
           return cur == null ? { points: pts, at: now } : undefined;
-        });
+        }, undefined, false);   // toast only what the server accepted (scoreTx in script.js)
       },
       onPenalty: function (famId, fam, slot) {
         var sl = slot || activeSlotId;
@@ -941,7 +941,7 @@
         //    the per-slot prefix before looking the family up.
         refs.scorePenalties.child(_penaltyEventId(sl, famId)).transaction(function (cur) {
           return cur == null ? { points: pts, at: now } : undefined;
-        });
+        }, undefined, false);
       },
       onUnlock: function (legacyId) {
         // The chat's red-flag questions still reveal their legacy history items

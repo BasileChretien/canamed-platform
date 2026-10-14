@@ -2115,13 +2115,15 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   well — the review's blocking finding. AFTER, as merged: the reveal is
   refused (with the team name, the replies and the round); **the call for
   help lands**, because it asks for a claim on any room (run: the spec's last
-  test drives Leave, the rejoin and the button) — though the `help` entry the
+  test, which drove Leave, the rejoin and the button — and, since the
+  placement was repaired, reaches the same state through the claim rule's
+  facilitator branch) — though the `help` entry the
   button also writes to that room's event log is refused, since `events`
   still asks for a claim on the room itself (read from `initCallProf()` and
   the rule; not run). The repair of the placement
-  itself is in the client — put a returning participant back in the room they
-  hold — and is not made here; until it is, that participant is still in a
-  room where none of their work is saved.
+  itself is in the client and came after this change: see "One room per
+  participant" below. A browser still on an older shell keeps the old
+  placement until it updates, which is one reason the any-room call stays.
   The six controls, measured by removing a participant's claim (owner bypass)
   and using them:
 
@@ -2174,8 +2176,9 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   (e) The ten writes open for an unclaimed client id are untouched.
 - ⚠️ **Four older defects met on the way — measured the same day, NOT fixed
   here.** Each is a change of its own. The fourth is the Leave-and-rejoin
-  misplacement above: it leaves a participant in a room where none of their
-  work is saved, whatever this change does.
+  misplacement above: it left a participant in a room where none of their
+  work was saved, whatever this change did — fixed in the client since
+  ("One room per participant" below).
   1. **The facilitator's acknowledgement of a call is refused.**
      `openRoomAsAdmin()` re-sends the call with `ack: true` and its original
      `at`; the one-call-at-a-time clause refuses it (`at` has not moved by
@@ -2584,6 +2587,74 @@ all seven `locales/*.js`, and the hardcoded fallback `<p>` in `index.html`.
   only; removed the dead `html:` branch in `el()`.
 - `credentials/$certId.retentionUntil` now capped (`<= now + ~5y`) so a client
   can't set retention indefinitely and defeat GDPR cleanup.
+
+### One room per participant: placement follows the claim (2026-10-14) — fixed in the client; live only once its shell has shipped
+
+`roomOf/<uid>` is written once, on the first room entry, and the rules refuse
+a participant's room writes in every other room. The account it names is the
+BROWSER's: anonymous Auth persists (`Persistence.LOCAL`) across Leave, tab
+close and restart, and every tab of a profile shares it. The client could
+nevertheless show a participant a room their claim does not name, and said
+nothing. Two routes, both run on the emulator with the real client:
+
+- **Leave, then join again in the same browser.** The claim survives; the
+  room was chosen afresh by `bestRoomFor()`. Simulated with the real
+  `assignRooms()`/`bestRoomFor()` over 4–6 rooms of about four (60 % Caen):
+  about **one leaver in five** lands elsewhere — ~14 % ties broken by room
+  name, ~5–6 % a room with fewer of their own university. Not the rare tie
+  it was taken for.
+- **Two students on one laptop, one tab each** — the case the `clientId`
+  comment says is supported. One account, one claim: the start placed the
+  tabs in different rooms, the first to enter claimed, and the second tab's
+  student could write nothing (told "please reload", which changes nothing —
+  or, with the other timing, nothing at all).
+
+There, answers stayed in their box while toasts said "+10", "+20", "+3 —
+First answer written": a score transaction applied LOCALLY fires the score
+listener before the server refuses it.
+
+**Now:** `maybeSelfAssign()` places an account that holds a claim in the
+claimed room (`readRoomClaim()`/`claimedRoom()`); `startRoom()` moves a
+participant shown another room — the two-tab race — and says "You are in
+{room}: this browser already has your place there in this session."; score
+writes go through `scoreTx()` (`applyLocally = false`), as do the triage and
+chat ones. **And, decided by Basile 2026-10-14:** a join whose name differs
+from the name on the tab's existing pool row takes a fresh client id
+(`ownClientId()`). The tab keeps its id across Leave (it is in
+sessionStorage), and that id keys the row holding a participant's name and
+the consent record their answers are read against — so the next student on a
+shared browser used to REWRITE the previous student's row. They now keep the
+browser's room (balancing is bypassed — the price of that decision) and get a
+row of their own; the same name, case and spacing aside, keeps the row.
+
+**Measured and NOT changed — each its own decision:**
+- **Leave does not take a participant off the list.** `leaveAndReload()`
+  calls `refMyPool.remove()` while `joined` is still true, and the pool
+  listener's safety net re-writes the row at once (same `room`, fresh `at`) —
+  seen on the emulator in a room and in LOCAL mode in the waiting room, where
+  the facilitator still lists the leaver. Making the remove stick would also
+  drop the consent record a leaver's answers are read against; that is the
+  export's decision, not a placement fix.
+- `leaveAndReload()` (and `switchSession` / `forgetSavedSession`) clear a
+  LEGACY localStorage `canamed_client`; the id lives in sessionStorage, so
+  "clear everything identifying" does not clear it. `ownClientId()` covers
+  the consequence that mattered.
+- **The lobby can wipe the university.** `setUnlockedSession()` shows the
+  lobby before `loadSessionScenario()` resolves, and `initLobby()` then
+  rebuilds `#uni-input` — a choice made in between is lost and the join stops
+  at "Select your university". Seen in a test; a person on a slow network can
+  hit it. Specs wait for `#session-badge`, which is set after the rebuild.
+- An answer the server refuses keeps its text and says nothing.
+- A browser on an older shell keeps the old placement until it updates —
+  one reason `callForHelp` keeps asking for a claim on ANY room.
+
+`Verify:` `node --test tests/rejoin-room-claim.test.js`;
+`PORT=8771 npx playwright test tests-e2e/leave-rejoin-own-row.spec.js`
+(every device project; the WebKit three with `--workers=1`); on the emulator
+`PORT=8791 npm run test:e2e:rules -- rejoin-room-claim room-writes-room-bound`.
+Run against main's client before this change, all ten emulator cases and the
+LOCAL case fail at their first placement, row or toast assertion. Live: the
+shell version that carries it must be the one `sw.js` serves.
 
 ### ✅ THE ROOM GATE IS BOUND — fixed 2026-09-03 (found 2026-08-03)
 

@@ -481,6 +481,7 @@
       "room.call.sent": "Facilitator called ✓",
       // group-answer edit / delete error alerts (network failures)
       "room.err.membership": "We could not confirm your place in this room. Your work may not save — please reload, and tell your facilitator if it continues.",
+      "room.moved-to-claim": "You are in {room}: this browser already has your place there in this session.",
       "room.answer.err.edit-failed": "Your edit could not be saved — check your connection. Your text: ",
       "room.answer.err.delete-failed": "That point could not be deleted — check your connection and try again.",
       // language hint + placeholder shown above each answers box
@@ -1033,7 +1034,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v29";  // splash.my-sessions.close-refused: what "Close" says when the server refuses it
+  const LOCALE_VERSION = "v30";  // room.moved-to-claim: a participant taken to the room their claim names
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
