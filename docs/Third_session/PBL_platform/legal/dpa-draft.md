@@ -1885,12 +1885,14 @@ that could not be confirmed from the code is marked.*
 - **Session data: two different read scopes, not one.**
   - Most of a session (`sessions/$sessionId`) requires being an authenticated
     **member**: `auth != null && data.child('members').hasChild(auth.uid)`.
-  - **But nine child paths override that with a bare `".read": "auth != null"` —
+  - **But thirteen child paths override that with a bare `".read": "auth != null"` —
     no membership test at all.** Verified in `database.rules.json`:
     `adminPasswordHash`, `creatorUid`, `created` (whose `by` field is the
-    **facilitator's display name**, ≤40 chars), `workshopLabel`, `scenarioId`,
+    **facilitator's display name**, ≤40 chars), `controller`, `workshopLabel`,
+    `scenarioId`, `sections`, `sectionBodies`, `modules`,
     **`scenarioCustomJson` (up to 262,144 characters of authored scenario)**,
-    `scenarioRef`, `closed`, and `summary`. Any authenticated user of the
+    `scenarioRef`, `closed`, and `summary`. (This sentence said nine until
+    2026-10-08; G3 had carried the count of thirteen since 2026-09-03.) Any authenticated user of the
     platform — including an anonymous participant in a *different* facilitator's
     session — can read these for any session code they know or guess. Session
     codes are 6 characters over a 31-character alphabet (~30 bits) and are
@@ -1903,10 +1905,35 @@ that could not be confirmed from the code is marked.*
   `survey/$cid`, which have no read rule of their own, are readable by **every
   other participant** — including the 2,000-character free-text reflections. See
   Annex VI, item G2.
-- Writes are bound to ownership: a browser identity is bound write-once to a
-  Firebase auth UID (`clientMapping`, `stableIdMapping`) and per-room writes are
-  gated on the room's `uidMembers` list, so a member of one room cannot tamper
-  with another room's data.
+- Writes are bound to ownership **in part**: a browser identity is bound
+  write-once to a Firebase auth UID (`clientMapping`, `stableIdMapping`), and
+  each rule tree has 35 write rules inside a room. Counted from the rules on
+  2026-10-08:
+  - **17 are gated on the writer's room claim** (`roomOf`; the `uidMembers`
+    list this paragraph used to name was replaced on 2026-08-03). A member of
+    one room cannot tamper with another room's data through *these* — among
+    them answers and their deletion log, hypotheses, scoring, the committed
+    vote, a section's phase and role assignment.
+  - **3 are the facilitator's alone** (the stage, its date, a manual score).
+  - **8 are bound to a browser identity and to no room**: presence, the typing
+    indicator, a vote's ballots, the observer flag, a role choice, the two
+    tests and the survey. While the session is open, a participant can write
+    their own entry into **another room** through any of them — the
+    application counts every ballot it finds in a room — and under an identity
+    nobody has claimed, so can anyone signed in who has the session code. Read
+    from the rules and the application; not run. Annex VI, R3 and G14, item 5.
+  - **7 carry no gate at all** — Annex VI, G14, item 5.
+
+  (Until 2026-10-08 this paragraph said "most per-room writes are gated on the
+  writer's room claim". Seventeen of thirty-five are.)
+- **A session's configuration is written during its creation, by its
+  creator** — in the rules since 2026-10-08, and in force from the date they
+  are deployed, which Annex VI, G14 records: the controller named on the join
+  screen, the facilitator's label, and the six fields that decide what the
+  session runs can be written once, only before the session has a password,
+  and — once the session has a creator — only by that account. Before, the
+  rule was "once, by anyone signed in". What that allowed, and what the change
+  does not repair, is Annex VI, item G14.
 - Roster emails are readable **only** by the session creator, and writable only
   by the participant themselves or the creator, and only while the session is
   open.
@@ -2552,6 +2579,23 @@ was not). The live privacy notice names the wrong controller.**
 > which the create form prefills — the joint-controller clause with its Art. 26
 > and Art. 27(5) citations is kept, so nothing changes for the canonical
 > deployment or for sessions predating the field.
+>
+> ⚠️ **"Write-once" was not "written by the facilitator" — corrected in the
+> rules on 2026-10-08, in force from the date G14 records for their
+> deployment.**
+> The rule on `controller` accepted its first write from anyone signed in. The
+> current create form always writes it, so a session created by it was not
+> exposed; a session created by the application as it was before 2026-09-03 —
+> including one created later from a browser still holding that version — has
+> no controller, and on such a session a visitor who knew only the code could
+> name one. Measured on the emulator: the join screen then read "*‹their
+> string›*, the data controller for this session, collects your first name or
+> nickname…", and the session's creator could neither change nor remove it.
+> The string was shown as text: markup in it was not interpreted. The
+> corrected rule accepts the write from nobody once a session has a password,
+> and while it is being created, from its creator — see G14, including the
+> deployment date and what the rule cannot tell about sessions already in the
+> database.
 >
 > ⚠️ **The first attempt substituted only the institution NAME** and rendered
 > "Universiteit Leiden, joint controllers under GDPR Art. 26" — a single body
@@ -4362,6 +4406,142 @@ lawful-basis limb stays open until the controller decides it** — publishing th
 identifier in the notice made the missing basis more visible, not less.
 
 [CONTROLLER — DATE THE JOB WAS SCHEDULED: ____ ]
+
+**G14 — (new, 2026-10-08). CORRECTED IN THE RULES; DEPLOYMENT TO BE CONFIRMED.
+A session's configuration could be written by any signed-in visitor who knew
+its code.**
+
+A session carries eight configuration fields, each written once when it is
+created: the controller named on the join screen (`controller`), the
+facilitator's label (`workshopLabel`), and six that decide what the session
+runs (`sections`, `sectionBodies/<slot>`, `modules`, `scenarioId`,
+`scenarioCustomJson`, `scenarioRef`). The rule on each was "signed in, and not
+yet written". Signing in is automatic and anonymous (G13), so the first writer
+could be anyone who knew or guessed a session code — and because each field is
+write-once, the session's creator could not then correct it.
+
+The current create form always writes `controller` and `sections`, and writes
+`workshopLabel` when one is typed. So on a session it created, four of the
+content fields were open, and the label when left blank; on a session created
+by the application as it was before 2026-09-03, the controller was open too;
+and on one created before the section picker (end of July 2026), so was the
+whole choice of content.
+
+**What that allowed was measured**, on the Firebase emulator on 2026-10-08,
+with the real create form and a second browser that knew only the code:
+
+- *The controller.* On a session with none, the visitor's string was accepted
+  and the join screen then read "*‹string›*, the data controller for this
+  session, collects your first name or nickname…". A participant reading that
+  screen was told a false controller at the moment of collection (GDPR
+  Art. 13(1)(a)). See L1.
+- *The content.* A `scenarioCustomJson` declaring another layout hid the case,
+  the vignette and the patient chat from every participant who loaded the page
+  afterwards; one with a malformed case stopped the page, leaving the
+  participant on the welcome screen while the room had moved on. A
+  `scenarioRef` did the same through a scenario the visitor had shared, and
+  could go on being changed by them. On a session with no choice of content, a
+  visitor could write the choice and the section it named, and the join screen
+  announced that section as the session's content.
+- *What was not affected.* A participant who did not reload saw no change.
+  `modules` and `scenarioId` changed nothing a participant could see in a
+  session that has a choice of sections. In such a session, and on the case
+  screen — the one place it was measured — the simulated patient's
+  instructions stayed the section's own: the visitor's text was not in what
+  was sent to the language model. It was not measured on the welcome or
+  closing screens. No personal data became readable, and nothing a participant
+  had written could be altered, through any of these fields.
+
+**What changed.** All eight can be written once, and only before the session
+has a password — that is, during creation. Three of them (`controller`,
+`workshopLabel`, `sections`) by the session's creator or, while the session has
+no creator yet, by whoever is allowed to create one: the same rule the
+recovery record has, because the application sends these together with the
+creator's claim and the rule must not depend on which arrives first. The other
+five by the session's creator and nobody else. In both rule trees. The
+application itself was not changed.
+
+**What this does not do.**
+
+1. **It does not repair a session that already carries a visitor's value, and
+   nothing in the database tells such a value from the creator's** — these
+   fields record no author. The production database was not examined. The
+   retention periods bound how long any such value can remain: 30 days after a
+   session is closed, 90 days after it is created. **[CONTROLLER TO DECIDE:
+   whether sessions created before the deployment date below are reviewed —
+   in practice, a `controller` the facilitator does not recognise, or a
+   `scenarioCustomJson` / `scenarioRef` the facilitator did not attach.]**
+2. **A value written before the correction travels with its session.** The
+   nightly backup takes the session whole, and the pseudonymised research
+   export removes none of these eight fields (read from
+   `scripts/lib/pseudonymise.js`; not run). Four of them are free text:
+   `workshopLabel`, `controller`, `scenarioCustomJson` at up to 262,144
+   characters, and each `sectionBodies` entry at up to 131,072. See R7.
+3. **A code that no session uses yet can still be written to, in three of
+   these eight fields** (and through the other open writes item 5 counts,
+   which do not ask for a session to exist either). On a code with no creator
+   and no password, a visitor can write
+   `controller`, `workshopLabel` or `sections`. If a facilitator's creation
+   later draws that code, it is refused at its own write of the same field and
+   the facilitator sees an error and creates again; a field the facilitator's
+   application does not write — a label left blank — would be carried into the
+   session. The chance is the number of codes so prepared over 887,503,681,
+   and the nightly deletion removes an undated session. The five content
+   fields cannot be prepared this way.
+4. **The binding is to the account that created the session, not to a
+   person.** While the creation gate is off (its default), any visitor may
+   create a session of their own and configure it; what they can no longer do
+   is configure somebody else's. An ordinary password reset reopens nothing:
+   it replaces the password, and the session still has one. The rules do
+   leave one way back in, which the application never takes: whoever holds the
+   session's recovery code can, during a reset, remove the password marker
+   instead of replacing it, and the configuration is then open again — on a
+   session that has a creator, to that creator alone; on one that has none
+   (created before 2026-05-27), to whoever then claims it (read from the
+   rules; not run).
+5. **Seven other writes inside a session's rooms name no identity at all**: a
+   room's team name, its roleplay round, a call for help, the revealing of a
+   case item (two paths), the room's event log, and replies to answers. Run on
+   the emulator on 2026-10-08: a visitor who had not joined the session wrote
+   all seven into one of its rooms. This is a different defect and is **not
+   corrected by this change**. Giving them the room condition their neighbours
+   have would limit a writer to the one room they joined; it would not exclude
+   a visitor who has the code, since the code is all that joining asks for. The
+   repository's tests now list every write in a session that some way through
+   its rule leaves open, so that the list cannot grow unnoticed. There are 23
+   in each rule tree: these seven; the five creation writes; the removal of a
+   password reset in progress, which any signed-in visitor may do; and ten
+   that are open for a browser identity nobody has claimed yet — the
+   participant list and the poll, and the eight room writes Annex II §2 names.
+   **What is on record for the ten is less than the rules allow, and no
+   decision has been recorded on the difference.** R3 accepts "a narrow window
+   before identity bindings commit", and names one of the ten — the poll; the
+   repository's notes extend that by analogy to the participant list, presence
+   and the typing indicator. The ballots, the observer flag, the role choice,
+   the two tests and the survey are in neither record. And it is not a window:
+   an identity the writer invents is never claimed by anyone, so the write
+   stays open for as long as the session does, to anyone signed in who has the
+   code, in any room — an entry in the participant list (with a consent record
+   of its own making), a ballot that is counted, and a test or a survey row.
+   Read from the rules.
+   **The research export does not filter these out** (run on 2026-10-08 on the
+   export's own transform, with a made-up session; the export job itself was
+   not run). It removes only what is keyed by a participant-list entry that
+   does *not* record consent. A poll answer, a ballot, a test row and a survey
+   row under an identity with no entry at all were all kept; and one forged
+   entry recording consent was enough for a session in which no real
+   participant had consented to pass the export's consent gate. Two limits:
+   only closed sessions are exported, and all ten writes are refused once a
+   session is closed, so such a row has to be written while the session is
+   open.
+   Correcting the seven changes none of this. Until both are settled, R3's "a
+   participant with developer tools" understates who can do this: it is anyone
+   with the code, in the session or not. **[CONTROLLER TO DECIDE: accept the
+   ten as they are, with R3 reworded to say what they allow, or have them
+   bound to a claimed identity; and whether the export should keep a row that
+   belongs to no consenting entry.]**
+
+[CONTROLLER — DATE THE RULES WERE DEPLOYED: ____ ]
 
 ## Residual risks accepted by design
 

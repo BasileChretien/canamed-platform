@@ -641,8 +641,14 @@ test("M2: `modules` is declared write-once in BOTH rule trees", () => {
     // sessions/$sessionId has NO $other catch-all, so an undeclared child is
     // denied — the field must be declared in both trees or M2 silently fails.
     assert.ok(node, label + " tree must declare `modules`");
-    assert.equal(node[".write"], "auth != null && !data.exists()",
+    /* Write-once AND the creator's (2026-10-08). This used to compare against
+       the exact string `auth != null && !data.exists()` — the rule under which
+       any signed-in visitor could narrow somebody else's session. The exact
+       text is pinned in tests/session-config-creator-bound.test.js. */
+    assert.match(node[".write"], /^auth != null && !data\.exists\(\) && /,
       label + ": must be write-once, mirroring scenarioId");
+    assert.match(node[".write"], /\.child\('creatorUid'\)\.val\(\) == auth\.uid/,
+      label + ": and written by the session's creator, not by whoever gets there first");
     assert.match(node[".validate"], /A-Za-z0-9_-/,
       label + ": ids validated generically (no A|B whitelist, so module C needs no rules change)");
   });
