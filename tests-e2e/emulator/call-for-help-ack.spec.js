@@ -24,9 +24,14 @@
  * through — the facilitator (creator, or a proof of the current password),
  * writing ack == true onto the call that stands, with its `at` and `by`
  * unchanged and its `msg` unchanged or removed; and the validator takes a date
- * older than a minute on exactly that record. Both only ADD a way through:
- * nothing accepted before is refused now. The rule accepts the payload the
- * deployed client already sends, so no browser needs a new shell for it.
+ * older than a minute on any record that is acknowledged and keeps the call's
+ * `at` and `by`. That is the acknowledgement's shape, but the validator does
+ * not ask who writes it: on an acknowledged call older than a minute, anyone
+ * the `.write` admits (a room claim anywhere in the session) can rewrite `msg`
+ * and keep the date — before, only by re-dating the call. Recorded in review,
+ * not pinned here. Both only ADD a way through: nothing accepted before is
+ * refused now. The rule accepts the payload the deployed client already
+ * sends, so no browser needs a new shell for it.
  *
  * NEW TO STUDENTS. With the acknowledgement landing, a room sees a state no
  * production session has shown before — "A facilitator is coming ✓ (tap to
@@ -320,7 +325,7 @@ test("the real client: a facilitator who opens a room answers its call — a min
   await expect(callButton(ben.page)).toHaveText(/tap to cancel/);
   /* The dashboard, read BEFORE the facilitator opens a room (a dashboard used
      to stop updating once its facilitator had been into a room and back;
-     fixed in #458, and this test does not depend on either). */
+     fixed in #459, and this test does not depend on either). */
   await expect.poll(() => callingRows(page), { message: "the dashboard shows the room calling", timeout: 15_000 })
     .toBeGreaterThan(0);
 

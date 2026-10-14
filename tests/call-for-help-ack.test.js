@@ -23,8 +23,12 @@
  *        the facilitator, writing ack == true onto the call that stands,
  *        with its `at` and its `by` unchanged and its `msg` unchanged or gone
  *
- *    and the validator accepts a date older than a minute on exactly that
- *    record: acknowledged, `at` and `by` unchanged. Nothing that was accepted
+ *    and the validator accepts a date older than a minute on any record that
+ *    is acknowledged with `at` and `by` unchanged — the acknowledgement's
+ *    shape, though the validator does not ask who writes it: a participant
+ *    the `.write` admits can rewrite an acknowledged call's `msg` and keep its
+ *    old date (before, only by re-dating it; recorded in review on #460, not
+ *    closed). Nothing that was accepted
  *    before is refused now — both edits only add a way through — and the
  *    rule accepts what the DEPLOYED client already sends, so no shell has to
  *    change for the acknowledgement to work (rules deploy at once; browsers
@@ -120,12 +124,13 @@ test("the call for help: the facilitator may acknowledge the call that stands, a
   }
 });
 
-test("the validator takes a call older than a minute only as its own acknowledgement", () => {
+test("the validator takes a date older than a minute only on an acknowledged record that keeps its date and author", () => {
   /* `at >= now - 60000` keeps a NEW call from being back-dated. The
      acknowledgement re-sends the call's own date, and a facilitator usually
      arrives more than a minute after the call — so the window applies to
      every record except one that is acknowledged and keeps its date and its
-     author. */
+     author. Whoever writes it: the validator does not look at the writer or
+     at `msg` (see this file's header). */
   for (const [label, node] of TREES) {
     const cfh = node.rooms.$roomId.callForHelp;
     assert.strictEqual(cfh[".validate"], VALIDATE, `${label}/rooms/$roomId/callForHelp .validate`);
