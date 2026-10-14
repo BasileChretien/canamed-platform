@@ -391,9 +391,10 @@ number (timestamp ms when current stage was entered)
   (`roomOf/<uid>/room`) names this room **or** the writer is the session's
   facilitator (its creator, or a proof of the current password). Until
   2026-10-14 the last clause was absent and any signed-in visitor who knew the
-  code could write it. The same clause is on `roleplayRound`, `callForHelp`,
+  code could write it. The same clause is on `roleplayRound`,
   `sections/<slot>/revealed/<item>`, `moduleA/revealed/<item>`,
-  `events/<id>` and `answerReplies/<entry>/<reply>`, in both rule trees — see
+  `events/<id>` and `answerReplies/<entry>/<reply>`, in both rule trees
+  (`callForHelp` asks for a claim on any room of the session — below) — see
   `tests/room-writes-room-bound.test.js` for the text and for why the
   facilitator half is there.
 
@@ -413,9 +414,13 @@ OR null (not set yet)
 - `.read: "auth != null"`
 - `.write`: signed in, session not closed; one call at a time (none standing,
   or the last one acknowledged, or a cancel, or thirty seconds after the last);
-  **and** a participant of this room or the session's facilitator (as
-  `teamName` above, since 2026-10-14). The room raises and cancels; the
-  facilitator clears it with "Resolve call" from inside the room.
+  **and**, since 2026-10-14, a participant who holds a room claim **anywhere
+  in this session** (`roomOf/<uid>` exists) or the session's facilitator. Not
+  a claim on THIS room, unlike the other six: a participant the client has put
+  back in a room their claim does not name (Leave, then join again) must
+  still be able to call. The price: a participant of another room can raise
+  or cancel this room's call. The room raises and cancels; the facilitator
+  clears it with "Resolve call" from inside the room.
   ⚠️ The acknowledgement `openRoomAsAdmin()` sends — the same call with
   `ack: true` and its original `at` — is refused by the one-call-at-a-time
   clause, for every facilitator (run on the emulator 2026-10-08). The product

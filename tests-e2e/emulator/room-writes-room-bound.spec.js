@@ -37,11 +37,15 @@
  *   - the legacy reveal address: the dashboard's "findings 0/31" became 1/31
  *     for a room that had found nothing.
  *
- * THE RULE NOW, on all seven, in both trees — appended to what each had:
+ * THE RULE NOW, in both trees — appended to what each had. On six of them:
  *
  *     the writer's room claim names THIS room      (roomOf/<uid>/room)
  *     OR the writer is the session's facilitator   (its creator, or a proof of
  *                                                   the current password)
+ *
+ * and on the call for help: a room claim on ANY room of the session, or the
+ * facilitator. Why it asks for less, and what that costs, is at the two places
+ * below that pin it (the first test's call-for-help section; the last test).
  *
  * WHY THE SECOND HALF. The room condition alone is what the neighbouring nodes
  * have, and it would have been wrong here. The facilitator writes six of
@@ -73,9 +77,12 @@
  * "Room 2" came back in "Room 1" holding a claim on "Room 2", with no message.
  * Such a participant's answers were ALREADY refused there (and the box kept
  * the text while a toast said "+3 — First answer written"). Their call for
- * help and their reveals were not — and now are. The `neighbour` below is
- * that participant as far as the rules can tell. The repair is in the client
- * (place a returning participant in the room they hold), not here.
+ * help and their reveals were not. Their reveals now are — and their call for
+ * help is NOT, by decision: it asks for a claim on any room, so that this
+ * participant keeps the one control that still worked for them (the last
+ * test). The `neighbour` below is that participant as far as the rules can
+ * tell. The repair is in the client (place a returning participant in the
+ * room they hold), not here.
  *
  * ── A denial here is never left to stand alone ──────────────────────────
  * Every refused write has its ALLOW: the same payload, on the same path, by a
@@ -257,14 +264,33 @@ for (const [tree, baseOf, secretsOf] of TREES) {
     const call = `${room}/callForHelp`;
     const CALL = { by: "Room One", at: Date.now(), msg: "we are ready to move on" };
     expectDenied(await tryWrite(stranger.page, call, CALL), "callForHelp: raised by the stranger");
-    expectDenied(await tryWrite(neighbour.page, call, CALL), "callForHelp: raised from another room");
     expect(await dbReadAsOwner(call), "no call reached the dashboard").toBeNull();
     expect(await tryWrite(member.page, call, CALL), "callForHelp: raised by a member — the same payload").toBe("ALLOWED");
     expect(await dbReadAsOwner(call)).toEqual(CALL);
     /* Cancelling somebody else's call was the worst of what was measured. */
     expectDenied(await tryDelete(stranger.page, call), "callForHelp: a real call cancelled by the stranger");
-    expectDenied(await tryDelete(neighbour.page, call), "callForHelp: a real call cancelled from another room");
     expect(await dbReadAsOwner(call), "the room's call is still raised").toEqual(CALL);
+
+    /* THE ONE OF THE SEVEN THAT ASKS FOR LESS, and its price, pinned. The call
+       for help needs a claim on A room of this session — any room — or the
+       facilitator. Decided on 2026-10-14 after review: with a claim on THIS
+       room required, a participant the product had moved to another room
+       (Leave, join again; the last test in this file) lost the one control
+       that still worked for them. So the neighbour, who holds a claim on
+       Room 2, can cancel Room 1's call and raise one there. That is the
+       residual the decision accepted: somebody who has JOINED can raise or
+       cancel calls in other rooms. The stranger above, who has joined
+       nothing, cannot — same payload, same path. If these two lines deny,
+       the call for help has been bound to its room again: read the last test
+       before deleting them. */
+    expect(await tryDelete(neighbour.page, call),
+      "callForHelp: cancelled by a participant of ANOTHER room — the accepted residual").toBe("ALLOWED");
+    expect(await dbReadAsOwner(call)).toBeNull();
+    expect(await tryWrite(neighbour.page, call, CALL),
+      "callForHelp: raised by a participant of another room — the accepted residual").toBe("ALLOWED");
+    expect(await dbReadAsOwner(call)).toEqual(CALL);
+    /* …and nothing else of Room 1's is theirs: the loop above refused them the
+       other six, with these same two identities. */
     /* "Resolve call": the facilitator's own delete, from a room it has no claim on. */
     expect(await tryDelete(cofac.page, call), "callForHelp: resolved by a co-facilitator").toBe("ALLOWED");
     expect(await dbReadAsOwner(call)).toBeNull();
@@ -333,8 +359,15 @@ test("rules: what the room condition does NOT do — whoever has the code can jo
 
   /* One room. Not the next one… */
   expectDenied(await tryWrite(j.page, `${r2}/teamName`, "Named by the newcomer"), "Room 2: not theirs");
-  expectDenied(await tryWrite(j.page, `${r2}/callForHelp`, CALL), "Room 2: not theirs");
+  expectDenied(await tryWrite(j.page, `${r2}/events/e1`, { kind: "reveal", by: "Newcomer", at: Date.now() }),
+    "Room 2's event log: not theirs");
   expect(await dbReadAsOwner(r2), "nothing was written in the other room").toBeNull();
+  /* …with one exception, which is the call for help: it asks for a claim on
+     any room of the session (see the note in the first test). Having joined
+     Room 1, they can call in Room 2. */
+  expect(await tryWrite(j.page, `${r2}/callForHelp`, CALL),
+    "Room 2's call for help: open to anyone who has joined the session").toBe("ALLOWED");
+  expect(Object.keys(await dbReadAsOwner(r2)), "and that is all they left there").toEqual(["callForHelp"]);
   /* …and not by moving: the claim is written once. */
   expectDenied(await tryWrite(j.page, `${base}/roomOf/${j.uid}`, { room: "Room 2", cid }), "a second claim");
 
@@ -617,4 +650,105 @@ test("the product's own writes all land — a room's participants, the facilitat
   await expect(callButton(p1.page)).toHaveText(/Call a facilitator/, { timeout: 15_000 });
 
   for (const u of students.concat([s, dee])) await u.ctx.close();
+});
+
+test("a participant who leaves and joins again can still call the facilitator, from the room they are put back in — which is not always theirs", async ({ page, browser }) => {
+  /* Why the call for help asks for a claim on ANY room of the session.
+     Leave keeps the anonymous account, and with it the write-once room claim;
+     joining again places the participant afresh (bestRoomFor(): lowest cost,
+     and on a tie the first room by name). Measured on 2026-10-08, twice out of
+     two: left "Room 2", came back in "Room 1", claim still on "Room 2", no
+     message. In that room their answers are refused (they were before any of
+     this), and with a claim on THIS room required, so was their call for
+     help — the one control that had still worked. That was the review's
+     blocking finding on the first version of this change. */
+  test.setTimeout(240_000);
+  page.on("dialog", d => { try { d.accept(); } catch (_) {} });
+  await installModalAutoAccept(page);
+
+  await page.goto("/");
+  await page.locator("#splash-go-create").click();
+  await page.locator("#splash-create-name").fill("Emu Fac");
+  await page.locator("#splash-create-label").fill("leave-rejoin");
+  await page.locator("#splash-create-pass").fill("emu-room-pw");
+  await page.locator("#splash-create-submit").click();
+  const codeNode = page.locator("#splash-shown-code");
+  await expect(codeNode).toHaveText(/^[A-Z0-9]{3}-[A-Z0-9]{3}$/i, { timeout: 20_000 });
+  const code = (await codeNode.textContent()).trim();
+  const base = await page.evaluate((c) => oPath(sanitizeCode(c)), code);
+  await page.locator("#splash-go-admin").click();
+  await expect(page.locator("#admin-app")).toBeVisible({ timeout: 15_000 });
+
+  const students = [];
+  for (const name of ["Ana", "Ben", "Cho"]) students.push(await joinAsStudent(browser, code, name));
+  await expect(page.locator("#prestart-count")).toHaveText("3", { timeout: 20_000 });
+  await page.locator("#roomcount-input").selectOption("2");
+  await page.locator("#start-session-btn").click();
+  for (const x of students) {
+    await expect(x.page.locator("#app")).toBeVisible({ timeout: 25_000 });
+    x.room = await x.page.evaluate(() => myRoom);
+    await expect.poll(async () => ((await dbReadAsOwner(`${base}/roomOf/${x.uid}`)) || {}).room,
+      { message: `${x.name}: the room claim`, timeout: 15_000 }).toBe(x.room);
+  }
+  const pairRoom = ["Room 1", "Room 2"].find(r => students.filter(x => x.room === r).length === 2);
+  expect(pairRoom, "three participants over two rooms: one room has two").toBeTruthy();
+  const leaver = students.find(x => x.room === pairRoom);
+  const stayedAlone = students.find(x => x.room !== pairRoom);
+
+  /* ── Leave (the product's own button), then join again, same browser ──── */
+  await Promise.all([
+    leaver.page.waitForEvent("load", { timeout: 20_000 }),
+    leaver.page.evaluate(() => document.getElementById("leave-btn").click())
+  ]);
+  await toLobby(leaver.page, code, leaver.name);
+  const uni = await leaver.page.locator("#uni-input option:not([disabled])").first().getAttribute("value");
+  await leaver.page.locator("#uni-input").selectOption(uni);
+  await leaver.page.locator("#consent-workshop").check();
+  await expect(leaver.page.locator("#join-btn")).toBeEnabled({ timeout: 10_000 });
+  await leaver.page.locator("#join-btn").click();
+  await expect(leaver.page.locator("#app")).toBeVisible({ timeout: 30_000 });
+  const shown = await leaver.page.evaluate(() => myRoom);
+
+  expect(await leaver.page.evaluate(() => firebase.auth().currentUser.uid), "the same account as before").toBe(leaver.uid);
+  expect(((await dbReadAsOwner(`${base}/roomOf/${leaver.uid}`)) || {}).room, "and the same claim: it is written once").toBe(pairRoom);
+  /* THE PRECONDITION, asserted — not a condition around what follows. If this
+     fails, the participant came back to the room they hold: the placement has
+     been corrected, or assignRooms()/bestRoomFor() now break the tie another
+     way. Then this test no longer shows what it is for; the rule-level case in
+     the first test still pins the rule. Rewrite it, do not wrap it in an if. */
+  expect(shown, "the participant must have been put in a room their claim does not name").not.toBe(pairRoom);
+  expect(shown).toBe(stayedAlone.room);
+  const shownRoom = `${base}/rooms/${shown}`;
+
+  /* ── the call for help, through the button, from the room on screen ───── */
+  await callButton(leaver.page).click();
+  await expect.poll(async () => ((await dbReadAsOwner(`${shownRoom}/callForHelp`)) || {}).by,
+    { message: "the call must reach the database from a participant whose claim names another room", timeout: 15_000 })
+    .toBe(leaver.name);
+  await expect.poll(() => callingRows(page), { message: "then the DOM: the dashboard shows the room calling", timeout: 15_000 })
+    .toBeGreaterThan(0);
+  await expect(callButton(leaver.page)).toHaveText(/tap to cancel/);
+
+  /* ── and that is the ONLY one of the seven that is theirs in this room ──
+     The allow leg is the room's own participant, same payload, same path. */
+  const NAME = "Named from the room on screen";
+  expectDenied(await tryWrite(leaver.page, `${shownRoom}/teamName`, NAME),
+    "teamName: by a participant whose claim names another room");
+  expect(await dbReadAsOwner(`${shownRoom}/teamName`)).toBeNull();
+  expect(await tryWrite(stayedAlone.page, `${shownRoom}/teamName`, NAME),
+    "teamName: by the participant who holds this room").toBe("ALLOWED");
+
+  /* ── somebody who has joined NOTHING still cannot touch the call ──────── */
+  const s = await someone(browser);
+  expect(students.map(x => x.uid), "a fourth user").not.toContain(s.uid);
+  expect(await dbReadAsOwner(`${base}/roomOf/${s.uid}`), "with no claim in this session").toBeNull();
+  expectDenied(await tryDelete(s.page, `${shownRoom}/callForHelp`), "a visitor who never joined cancels the call");
+  expect(((await dbReadAsOwner(`${shownRoom}/callForHelp`)) || {}).by, "the DB first: the call stands").toBe(leaver.name);
+  expect(await callingRows(page), "then the DOM: the dashboard still shows it").toBeGreaterThan(0);
+  /* The allow leg of that denial: the caller's own cancel, through the button. */
+  await callButton(leaver.page).click();
+  await expect.poll(() => dbReadAsOwner(`${shownRoom}/callForHelp`),
+    { message: "the caller cancels their own call", timeout: 15_000 }).toBeNull();
+
+  for (const u of students.concat([s])) await u.ctx.close();
 });

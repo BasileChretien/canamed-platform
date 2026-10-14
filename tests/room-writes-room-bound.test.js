@@ -17,10 +17,26 @@
  * wrote all seven into a room of a running session; what that did is in the
  * header of tests-e2e/emulator/room-writes-room-bound.spec.js, measured.
  *
- * THE RULE NOW — the same clause appended to each of the seven, in both trees:
+ * THE RULE NOW — one clause appended to each of the seven, in both trees. For
+ * six of them:
  *
  *     (  the writer's room claim names this room
  *     || the writer is the session's facilitator  )
+ *
+ * and for the call for help, which asks for less:
+ *
+ *     (  the writer holds a room claim in this session — on any room
+ *     || the writer is the session's facilitator  )
+ *
+ * WHY THE CALL FOR HELP IS DIFFERENT (decided 2026-10-14, after review). The
+ * product can show a participant a room their claim does not name: Leave, then
+ * join again in the same browser, keeps the account and its write-once claim
+ * and places the participant afresh. In that room their answers were already
+ * refused; with the first form of the rule, so was their call for help — the
+ * one control that had still worked, and a regression against the rules as
+ * they were. The price is accepted and pinned on the emulator: somebody who
+ * has JOINED the session can raise or cancel a call in another room. A visitor
+ * who has joined nothing still cannot.
  *
  * This file pins two things the emulator cannot.
  *
@@ -84,6 +100,9 @@ function facilitatorOf(node, p) {
   return stage.slice(head.length, stage.length - tail.length);
 }
 const who = (node, p) => "(" + roomClaim(p) + " || (" + facilitatorOf(node, p) + "))";
+/* The call for help: a claim on ANY room of this session. */
+const sessionClaim = (p) => p + ".child('roomOf').child(auth.uid).exists()";
+const whoInSession = (node, p) => "(" + sessionClaim(p) + " || (" + facilitatorOf(node, p) + "))";
 
 /* What each of the seven carried before, and still carries: the clause is
    appended, nothing is taken away. */
@@ -99,7 +118,7 @@ const SEVEN = [
      or thirty seconds later */
   ["callForHelp", (p) => "auth != null && " + closedOf(p) +
     " && (!data.exists() || data.child('ack').val() == true || newData.val() == null || " +
-    "newData.child('at').val() >= data.child('at').val() + 30000)"],
+    "newData.child('at').val() >= data.child('at').val() + 30000)", whoInSession],
 ];
 const at = (node, p) => p.split("/").reduce((a, k) => a && a[k], node.rooms.$roomId);
 
@@ -112,14 +131,21 @@ function bodyOf(src, name) {
 /* Comments say what the code used to do; only the code may answer. */
 const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'])\/\/.*$/gm, "$1");
 
-test("each of the seven carries what it had, and then: this room's participant, or the session's facilitator", () => {
+test("each of the seven carries what it had, and then: this room's participant (for the call for help, the session's), or the facilitator", () => {
   for (const [label, node, p] of TREES) {
-    for (const [where, had] of SEVEN) {
+    for (const [where, had, clause] of SEVEN) {
       const n = at(node, where);
       assert.ok(n && typeof n[".write"] === "string",
         `${label}/rooms/$roomId/${where}: no write rule — the node would fail closed`);
-      assert.strictEqual(n[".write"], had(p) + " && " + who(node, p), `${label}/rooms/$roomId/${where}`);
+      assert.strictEqual(n[".write"], had(p) + " && " + (clause || who)(node, p), `${label}/rooms/$roomId/${where}`);
     }
+  }
+  /* Exactly one of the seven asks for the weaker claim, and it is the call for
+     help. A second one would be a room's work writable from another room. */
+  assert.deepStrictEqual(SEVEN.filter((r) => r[2]).map((r) => r[0]), ["callForHelp"]);
+  for (const [label, node, p] of TREES) {
+    const weaker = SEVEN.map((r) => r[0]).filter((where) => at(node, where)[".write"].includes(sessionClaim(p)));
+    assert.deepStrictEqual(weaker, ["callForHelp"], label + ": which of the seven accept a claim on any room");
   }
 });
 
@@ -191,12 +217,13 @@ test("the facilitator writes a room's event log from the dashboard, with no clai
     "logEvent() no longer appends to rooms/<room>/events");
 });
 
-test("the facilitator answers and clears a call for help, from the dashboard and from inside the room", () => {
-  const open = code(bodyOf(ADMIN, "openRoomAsAdmin"));
-  assert.match(open, /"rooms\/" \+ roomName \+ "\/callForHelp"/);
-  assert.match(open, /cfh\.set\(/, "openRoomAsAdmin() no longer writes the call it acknowledges");
+test("the facilitator clears a call for help from inside the room, whichever room it is", () => {
   /* "Resolve call": the same button the room calls with, in the facilitator's
-     hands — a delete. */
+     hands — a delete, and the write the facilitator half of this rule is for.
+     (openRoomAsAdmin() also tries to ACKNOWLEDGE a call. That write is refused
+     by the one-call-at-a-time clause for every facilitator, before and after
+     this change — run on the emulator — so nothing here rests on it and it is
+     not pinned: whoever repairs or removes it should not meet this test.) */
   assert.match(code(bodyOf(SCRIPT, "initCallProf")), /if \(isRoomAdmin\) \{ refCallForHelp\.remove\(\); return; \}/,
     "the facilitator's Resolve call is no longer a remove() on the room's callForHelp");
 });

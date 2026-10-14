@@ -1959,10 +1959,22 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   participant the string NAMES, so a forged entry is attributed to that
   participant; `text`, `msg`, `payload` and the team name pass as written
   (read from `scripts/lib/pseudonymise.js`; not run).
-- **The rule now — one clause appended to each of the seven, both trees:**
-  `&& (roomOf/<auth.uid>/room == $roomId || (<the Phase 4a facilitator
-  predicate>))`. Nothing each rule had was taken away. `script.js` was not
-  changed.
+- **The rule now — one clause appended to each of the seven, both trees.**
+  Six of them: `&& (roomOf/<auth.uid>/room == $roomId || (<the Phase 4a
+  facilitator predicate>))`. **`callForHelp` asks for less:**
+  `&& (roomOf/<auth.uid>.exists() || (<the same predicate>))` — a claim on
+  ANY room of the session. Nothing each rule had was taken away. `script.js`
+  was not changed.
+  ⚠️ **Why the call for help is different — a decision, taken on 2026-10-14
+  after the merge gate's review blocked the first version** (relayed to the
+  session that wrote this by the coordinating session, as Basile's). With a
+  claim on THIS room required, a participant the product had put in another
+  room (Leave, then join again — below) lost the one control that still
+  worked for them: a regression against the rules as they were. **The price,
+  accepted and pinned on the emulator: somebody who has JOINED the session can
+  raise or cancel a call in another room.** A visitor who has joined nothing
+  still cannot. Do not "tidy" `callForHelp` back to the room claim without
+  reading the last test of the spec.
 - ⚠️ **Why not "the room condition their neighbours have".** That was the
   likely fix, and it would have broken the facilitator. Run before the rule
   was written:
@@ -2006,10 +2018,14 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   "Room 2" came back in "Room 1" holding a claim on "Room 2". There, BEFORE
   this change: the answer was refused, the box kept its text, and a toast
   said "+3 — First answer written"; the call for help and the reveal landed.
-  AFTER: those two are refused as well. So this change takes the last
-  working control from a participant in a state the product can put them in.
-  The repair is in the client — put a returning participant back in the room
-  they hold — and is not made here.
+  AFTER, in the first version of this change: those two were refused as
+  well — the review's blocking finding. AFTER, as merged: the reveal is
+  refused (with the team name, the replies and the round); **the call for
+  help lands**, because it asks for a claim on any room (run: the spec's last
+  test drives Leave, the rejoin and the button). The repair of the placement
+  itself is in the client — put a returning participant back in the room they
+  hold — and is not made here; until it is, that participant is still in a
+  room where none of their work is saved.
   The six controls, measured by removing a participant's claim (owner bypass)
   and using them:
 
@@ -2023,23 +2039,27 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   | Swap roles | refused, and that participant's client rotates its OWN role twice (once optimistically, once in the catch path) while the room stays where it was |
 
   None of this is new code: it is what each control does on ANY failed write,
-  a dropped connection included. ⚠️ But until this change the call for help
-  was the one thing a participant with no claim could still do. They can still
-  ask aloud; the button no longer reaches the dashboard. Not changed here — it
+  a dropped connection included. The two call rows now apply only to a
+  participant with NO claim in the session at all (the claim write failed);
+  one whose claim names another room keeps the button. Not changed here — it
   is a client change (shell bump, and the eager budget has under 1 KB).
 - ⚠️ **What it does not do.**
   (a) **It is not a boundary against somebody who has the code.** Joining is
   three writes (`clientMapping`, `pool`, `roomOf`) and asks for nothing else.
   Measured: refused before; allowed in the room joined; refused in the other;
   and present in the facilitator's waiting list. Everything in the first table
-  can still be done by such a person — in ONE room, as a listed participant.
-  The spec has a test whose only purpose is to record this.
+  can still be done by such a person — in ONE room, as a listed participant;
+  and, having joined, they can raise or cancel a call for help in ANY room
+  (the decision above). The spec has a test whose only purpose is to record
+  this.
   (b) **No ownership inside a room.** A roommate can still rewrite or delete
   another's reply (the G9 emulator case now records that instead of the
   missing gate), take back a reveal, cancel a call, rename the team.
-  (c) **Nothing is sealed.** No `$other` on any of the seven: extra children
-  are accepted, and `answerReplies`' `cid` has no length bound. The tracked
-  `$other` item, in both trees at once.
+  (c) **Five of the seven are not sealed.** `teamName` must be a string and
+  `roleplayRound` a number, so neither can carry anything else; the other five
+  have no `$other`, so extra children are accepted, and `answerReplies`' `cid`
+  has no length bound. The tracked `$other` item, in both trees at once.
+  (This said "no `$other` on any of the seven" until the review counted.)
   (d) It does not repair a session that already carries a stranger's value,
   and nothing tells one from the room's — `by` is free text. Production was
   not queried. The purge bounds it: 30 days after closing, 90 after creation.
@@ -2084,8 +2104,10 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
 `Verify:` `node --test tests/room-writes-room-bound.test.js
 tests/rule-tree-parity.test.js tests/session-config-creator-bound.test.js`,
 and on the emulator `PORT=8791 npm run test:e2e:rules -- room-writes-room-bound`
-(four tests; against the rules as they were, all four fail at their first
-denial). Those test the REPOSITORY. For the live rules: the deploy step is
+(five tests. Run against the rules as they were, the first four fail at
+their first denial; run against the first version of this change, the fifth
+fails where the misplaced participant's call must land). Those test the
+REPOSITORY. For the live rules: the deploy step is
 best-effort, so read its log — `gh run view <deploy run> --log | grep -F
 'released successfully'` — and do not take a green Deploy as proof.
 

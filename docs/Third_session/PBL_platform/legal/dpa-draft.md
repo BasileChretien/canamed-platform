@@ -1922,17 +1922,22 @@ that could not be confirmed from the code is marked.*
     application counts every ballot it finds in a room — and under an identity
     nobody has claimed, so can anyone signed in who has the session code. Read
     from the rules and the application; not run. Annex VI, R3 and G14, item 5.
-  - **7 are gated on the writer's room claim or on the facilitator's title**
+  - **6 are gated on the writer's room claim or on the facilitator's title**
     (the session's creator, or a co-facilitator who has proved its current
-    password): a room's team name, its roleplay round, a call for help, the
-    revealing of a case item (two paths), the room's event log, and replies to
-    answers. In the rules since 2026-10-14, recounted that day, and in force
-    from the date Annex VI, G14, item 5 records for their deployment. **Until
-    then these seven carry no gate at all.**
+    password): a room's team name, its roleplay round, the revealing of a case
+    item (two paths), the room's event log, and replies to answers.
+  - **1, the call for help, is gated on a room claim anywhere in the session
+    or on the facilitator's title.** A participant of one room can therefore
+    raise or cancel a call for help in another; a visitor who has not joined
+    the session cannot. Decided on 2026-10-14 — Annex VI, G14, item 5 (d).
+
+  These seven are in the rules since 2026-10-14, recounted that day, and in
+  force from the date Annex VI, G14, item 5 records for their deployment.
+  **Until then all seven carry no gate at all.**
 
   (Until 2026-10-08 this paragraph said "most per-room writes are gated on the
   writer's room claim". Seventeen of thirty-five are, on that claim alone;
-  twenty-four once the seven above are deployed.)
+  twenty-three once the six above are deployed.)
 - **A session's configuration is written during its creation, by its
   creator** — in the rules since 2026-10-08, and in force from the date they
   are deployed, which Annex VI, G14 records: the controller named on the join
@@ -4549,10 +4554,12 @@ application itself was not changed.
    participant's name is therefore attributed to that participant in the
    research copy. See R7.
 
-   **What changed.** Each of the seven can now be written only by a
+   **What changed.** Six of the seven can now be written only by a
    participant whose room claim names that room, or by the session's
    facilitator — its creator, or a co-facilitator who has proved its current
-   password. In both rule trees. The application itself was not changed. The
+   password. The seventh, the call for help, can be written by a participant
+   who holds a room claim anywhere in the session, or by the facilitator: see
+   (d). In both rule trees. The application itself was not changed. The
    facilitator is included because the application has the facilitator write
    six of these without belonging to the room: a stage change is logged in the
    room's event log from the dashboard, a call for help is cleared from inside
@@ -4563,17 +4570,19 @@ application itself was not changed.
 
    a. **It does not keep out a person who has the session code.** Joining a
       session asks for the code and nothing else. Such a person can join and
-      then do everything listed above — in the one room they joined, and as an
-      entry in the facilitator's list of participants (measured). The change
+      then do everything listed above — in the one room they joined (and, for
+      the call for help, in any room: see d), and as an entry in the
+      facilitator's list of participants (measured). The change
       binds a writer to a room; it is not a control on who may be in the
       session. That control is the session code, which is not secret (G3).
    b. **Inside a room, nothing belongs to its author.** A participant can
       still rewrite or delete another participant's reply, take back a
       revealed item, cancel the room's call for help, and rename the team.
-      Nor are these nodes' contents sealed: fields beyond the expected ones
-      are accepted, and one expected field of a reply has no length limit
-      (measured: 200,000 characters accepted). Both are tracked, for both rule
-      trees at once.
+      Nor are the contents of five of them sealed (the team name must be a
+      text and the roleplay round a number; the other five accept fields
+      beyond the expected ones), and one expected field of a reply has no
+      length limit (measured: 200,000 characters accepted). Both are tracked,
+      for both rule trees at once.
    c. **It does not repair a session that already carries a visitor's entry,
       and nothing in the database tells one from a participant's** — the
       author field is free text. The production database was not examined.
@@ -4582,18 +4591,26 @@ application itself was not changed.
       backup and the research copy (R7). **[CONTROLLER TO DECIDE: whether
       research data from sessions held before the deployment date below needs
       a caveat on authorship.]**
-   d. **A participant shown a room their claim does not name can no longer
-      call the facilitator from the application.** The application can put a
-      participant there: one who presses Leave and joins again in the same
-      browser keeps their account and its room claim, but is placed afresh,
-      and may be placed in another room (measured on 2026-10-08: twice out of
-      two, with two rooms). Such a participant was already unable to save an
-      answer there, and is not told — the application reports the answer as
-      written. Until this change the call-for-help button was the one control
-      that still worked for them; they can still ask aloud. **[CONTROLLER TO
-      DECIDE: accept this until the placement is corrected in the application
-      (not yet done), or have the call for help left open to any participant
-      of the session meanwhile.]**
+   d. **The call for help is not bound to one room — DECIDED on 2026-10-14.**
+      The application can show a participant a room their claim does not
+      name: one who presses Leave and joins again in the same browser keeps
+      their account and its room claim, but is placed afresh, and may be
+      placed in another room (measured on 2026-10-08: twice out of two, with
+      two rooms). Such a participant was already unable to save an answer
+      there, and is not told — the application reports the answer as written.
+      The call-for-help button was the one control that still worked for
+      them, and the first version of this correction, which required a claim
+      on the room itself, took it away; the independent review of that
+      version held it to be a regression. **The decision: the call for help
+      asks for a room claim anywhere in the session.** No participant of a
+      session loses the button, and a visitor who has not joined is refused.
+      **What is accepted in exchange: a person who has joined the session can
+      raise or cancel a call for help in a room other than their own** — run
+      on the emulator, and held by a test. [CONTROLLER — the decision was
+      relayed to the author of this change by the session coordinating the
+      repository's work, as the operator's; confirm it here: ____ ] The
+      placement itself is not corrected (an application change): until it is,
+      that participant remains in a room where none of their work is saved.
 
    [CONTROLLER — DATE THE SEVEN ROOM RULES WERE DEPLOYED: ____ ]
 
