@@ -1917,9 +1917,11 @@ undoing it.
   (c) A session restored by `restore-sessions.js` comes back with its
   `creatorUid` and without its password, so its original creator can write
   its unset configuration again until it is re-keyed. Nobody else can.
-  (d) The session body goes to the nightly backup and the research export
-  whole: `scripts/lib/pseudonymise.js` drops none of these eight (read, not
-  run), so a value written before the fix travels with its session.
+  (d) The session body goes to the nightly backup whole, and the research
+  export passes all eight through as written — except `ownerUid` inside
+  `scenarioRef`, which the transform removes from version 2 (run on the
+  transform, not on the job) — so a value written before the fix travels
+  with its session.
 - **Four older emulator tests wrote `modules` / `sections` / `sectionBodies`
   on a code nobody had claimed.** They now claim it first. A rules test that
   seeds a session by hand must write `creatorUid` before the five creator-only
@@ -1940,6 +1942,135 @@ successfully'` — and do not take a green Deploy as proof.
   the pure, unit-tested `scripts/lib/pseudonymise.js` (drops chat + facilitator
   transient fields, redacts unknown names, collision-safe, buckets university).
   Also `cleanup-stale-sessions.js` redacts `e.message` in `CLEANUP_QUIET` mode.
+  - ⚠️ **"Closed" was wrong: the export still carried REAL NAMES, account uids
+    and (where a session had any) e-mail addresses — ✅ fixed in the transform
+    2026-10-08 (version 2); ⛔ the files already written are NOT changed; and
+    two things it still exports are decisions nobody has taken.** Found by
+    RUNNING the transform and then the real export job — nothing had ever read
+    the file the job writes.
+    - **(a) Names, inside a string — the big one, and the 2026-05-30 review
+      missed it.** `logEvent()` writes a room event as
+      `{kind, by, at, payload: JSON.stringify({by: myName, university, len…})}`
+      for every answer, edit, deletion and hypothesis, and for a manual score
+      with the FACILITATOR's name. The walker rewrote the `by` beside it and
+      never opened the string: `"by":"Student-A"` next to
+      `"payload":"{\"by\":\"Ann Dupont\",…}"`. Every contributor's real name
+      and university, **decliners included**, in every export since the first.
+    - **(b) Auth uids outside the two mapping tables:** `creatorUid` (the
+      facilitator), `scenarioRef.ownerUid` (the scenario's author; few sessions
+      — the client stopped writing `scenarioRef` on 2026-07-31) and the key of
+      every `roomOf/<uid>` entry (a participant's, with their clientId inside:
+      the join `clientMapping` was dropped to withhold, the other way round).
+      `roomOf` entered the rules 2026-08-03 (#268), after `UID_KEYED` was
+      written; the erasure planner listed it (`BY_UID`), the pseudonymiser
+      did not.
+    - **(c) A node the rules no longer declare:** `sessions/<code>/mail/<id>`
+      `{to, subject, text}`, the queue of the mail function removed
+      2026-09-24. A rule being deleted does not delete what it guarded.
+    - **Fix (`TRANSFORM_VERSION = 2`):** a `payload` is parsed, scrubbed by the
+      same walk, re-serialised — and REMOVED if it is not what a client
+      writes: over 500 chars (the client's own cut), not JSON, or JSON that is
+      not an object (an array is not one). ⚠️ The first version parsed any
+      length and let `walk()` throw: `events/$pushId` validates its own
+      `payload` to 500 chars and nothing else, so a visitor with the code
+      could write `z: { payload: "[[[[…" }` nested thousands deep, and the
+      RangeError stopped the export of EVERY session, nightly (found in
+      review 2026-10-14, run, fixed before it shipped). **Opening a string
+      gives a walker depth the database never could (RTDB stops at 32
+      levels): bound it, and never let it throw past the session.**
+      ONLY `payload` is opened: `scenarioCustomJson` / `sectionBodies` are JSON
+      strings too and their `name` keys are the case's characters.
+      `creatorUid`, `ownerUid`, `roomOf` dropped; `mail` dropped at the ROOT
+      only (a content id may be called "mail"). `roomOf` is dropped, NOT
+      rekeyed like `members`: two students on one browser are two pool rows
+      under ONE uid, `roomOf` is written once per uid, and rekeying put one
+      student's pseudonym on the other's row — the first version of this fix
+      did exactly that. `pool/<cid>/room` already says who was in which room.
+      The walk now also continues beneath a rekeyed `members`.
+    - **The file says which transform wrote it** (`transformVersion`; absent =
+      version 1). **Never date this boundary by the calendar:** the job runs
+      nightly on whatever `main` holds, so the day a fix is written, the day
+      it merges and the day a file is first written by it are three days. The
+      first draft of the note said "exports written before 2026-10-08" while
+      the PR was still open at that day's run time.
+    - **Why no test caught any of it, and what the new ones cannot see.**
+      (1) Nothing RAN the job: `tests/pseudonymise-export-run.test.js` now
+      does, against the in-memory database, and reads the file. (2) Every
+      fixture filled `payload` with nothing or with a marker. **Fill a field
+      with what the CLIENT writes there** — my own "run every field" pass put
+      an opaque marker in `payload`, filed it under free text and reported the
+      job clean; an independent reviewer reading `script.js` found the names.
+      (3) `tests/pseudonymise.test.js` pinned the uid list AS IT THEN WAS.
+      `tests/pseudonymise-uid-coverage.test.js` now DERIVES uid positions from
+      the rules (a `$uid` key or any wildcard compared with `auth.uid`, a
+      value compared with `auth.uid`, a field named `uid` / `…Uid`) and runs
+      the function on each. It NARROWS the gap: it cannot see a field no rule
+      names, a node that has left the rules, a uid under a name that says
+      nothing, or a name inside a string — (a) and (c) are exactly those.
+    - ⛔ **The stored exports are untouched, they hold names, and that is not
+      code.** Run list: 37 successful runs to Scaleway (2026-09-02 → 10-07;
+      the newest held 4 sessions, 5 participants), 85 to the Google bucket
+      (2026-05-30 → 08-26). Whether the Scaleway bucket really has the 90-day
+      lifecycle rule, and whether the Google bucket still exists, is NOT
+      established from the repo. Deleting, rewriting or leaving them, and
+      whether this is to be assessed as a breach, is the operator's decision
+      as controller of the export — DPA Annex VI **R10** item 1. No tool
+      rewrites a stored export.
+    - ⚠️ **A participant who DECLINED research use is NOT erased from the
+      export, and that is NOT fixed.** Their pool row and the nodes KEYED by
+      the ids the session records as theirs go; what they wrote into the shared lists (answers, replies,
+      hypotheses, deleted answers) is exported under `REDACTED-NAME` with
+      their `cid`. DPA G1 said "erased"; it now carries the correction and a
+      `[TO DECIDE]`. The export-run test pins the present behaviour AS OPEN —
+      if it goes red because the entry is gone, the decision was taken: update
+      G1 and R10. Same family, closed before version 2 shipped: a decliner's
+      ballot was removed only via `stableIdMapping`; it now also goes by the
+      `stableId` in their own pool row. ⚠️ **Two wrong versions of that fix
+      were caught in review, both run:** (1) the row's stableId was added to
+      the keys deleted at EVERY depth — `pool/<cid>/stableId` is validated
+      by no rule, so `"rooms"` or a consenting participant's clientId took
+      that tree with it; (2) the row was believed only when the table did not
+      tie the stableId to another account — and the table is first-come, so
+      a decliner's ballot stayed. Now: stableIds are removed UNDER `ballots`
+      ONLY (the one node the client keys by stableId), and the row is
+      believed unconditionally; the cost — a declining row naming another's
+      stableId removes ALL of that participant's ballots, every vote in every
+      room — is pinned by a test. **A key deleted at
+      every depth must come from a source nobody else can write.** The
+      clientId and uid keys still are deleted at every depth, and a
+      consent-less pool row keyed `rooms` still removes the rooms tree (on
+      `main` too; for the consent-scope change).
+    - ⚠️ **`stableId` is still exported as written — do NOT describe this
+      export as free of cross-session identifiers, and do NOT repeat that the
+      join needs it.** For a signed-in participant it IS the auth uid. I first
+      wrote that rewriting it "breaks the pre ↔ post ↔ questionnaire join";
+      the review showed that is false: `tests/<cid>/{pre,post}` and
+      `survey/<cid>` are in ONE session, so a stand-in per distinct stableId
+      per session keeps them all (prototyped on the output: one signed-in
+      participant, two tabs → one stand-in everywhere, no uid left). The only
+      join it would break is the PLANNED one to an external questionnaire via
+      a printed code (`study_protocol_SAP.md` §9, unticked in §15) that the
+      client does not show. Not changed: it is the study's join key, so it is
+      Basile's call (R8, R10 item 3). The coverage test lists every place it
+      is carried so the list cannot grow unnoticed.
+    - ⚠️ **NOT fixed, separate change: the dashboard's "Pseudonymise names in
+      export"** (`pseudonymiseTree()` in `lib.js`) has the SAME name leak in
+      event payloads and removes no uid at all (run). Its comment says it
+      matches the nightly export; it stopped matching 2026-05-30. `lib.js` is
+      a shell asset, so that fix carries a shell bump.
+    - **Also seen, not changed:** `members` is keyed by a uid's LAST pool
+      row's pseudonym while names keep the FIRST, so one account behind two
+      rows with one name is `Student-A` in the pool and `Student-B` in
+      `members` (run). Free text that passes is longer than DPA R7 listed; R7
+      now has the measured list, the three links included.
+    - `Verify:` `node --test tests/pseudonymise.test.js
+      tests/pseudonymise-uid-coverage.test.js
+      tests/pseudonymise-export-run.test.js`. That tests the REPO. The live
+      job checks out `main` when it runs:
+      `gh run list --workflow pseudonymise-export.yml --limit 1 --json headSha,conclusion,createdAt`
+      — `headSha` at or after the merge commit means that run's file is
+      version 2. The file itself is the authority: `"transformVersion": 2`
+      near its top.
 - **Per-room write gating (P1)** — added the `uidMembers` gate to
   `score/auto`, `score/penalties`, `moduleA/hypotheses`, `moduleA/promptReplies`,
   `moduleB/exchangeReplies`, `votes/committed` (sessions + orgs) so a member of
