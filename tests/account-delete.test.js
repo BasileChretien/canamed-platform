@@ -10,9 +10,9 @@
  * profile and history" and said session contributions were "no longer linked to
  * your identity" — while pool/<cid>/name still held the name.
  *
- * WHERE THE CODE IS: deleteMyAccount() in the LAZY data-rights.js; script.js
- * keeps accountDelete() as an on-click shim that loads the chunk. Both halves
- * are executed here.
+ * WHERE THE CODE IS: deleteMyAccount() in the LAZY data-rights.js; the on-click
+ * shim that loads it, accountDelete(), in the lazy account-ui.js with the rest
+ * of the account dialog. Both halves are executed here.
  *
  * These tests EXECUTE the real functions, sliced out of the source, against a
  * fake database that keeps the two behaviours the code depends on: a key-range
@@ -38,6 +38,8 @@ const vm = require("node:vm");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const CHUNK = fs.readFileSync(path.join(P, "data-rights.js"), "utf8");
+/* The account dialog's own chunk: openAccountDialog(), and the deletion's shim. */
+const ACCOUNT_UI = fs.readFileSync(path.join(P, "account-ui.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 
 /* The key-range sentinel, built rather than typed: as a literal it is an
@@ -439,17 +441,21 @@ test("the account dialog's standing text makes the same promise as the confirmat
   assert.doesNotMatch(HTML, /no longer linked to your identity/i);
 });
 
-/* ---- the shim in script.js ----------------------------------------------- */
+/* ---- the shim in account-ui.js ------------------------------------------- */
 
-test("script.js keeps no copy of the deletion — only the shim", () => {
+test("neither script.js nor account-ui.js keeps a copy of the deletion — only the shim", () => {
   /* They share the global script scope: a second declaration of any of these
      is a SyntaxError that fires only when the chunk evaluates, on the click. */
   for (const name of ["listOwnSharedScenarioIds", "accountDeletionPaths", "deleteMyAccount"]) {
     assert.ok(CHUNK.includes("function " + name + "("), name + " must be in data-rights.js");
     assert.ok(!SCRIPT.includes("function " + name + "("), name + " must not be in script.js");
+    assert.ok(!ACCOUNT_UI.includes("function " + name + "("), name + " must not be in account-ui.js");
   }
   assert.doesNotMatch(SCRIPT, /_accountDeleteInFlight/);
-  const shim = extractFn(SCRIPT, "accountDelete");
+  assert.doesNotMatch(ACCOUNT_UI, /_accountDeleteInFlight/);
+  assert.ok(!SCRIPT.includes("function accountDelete("),
+    "the shim is part of the account dialog: one declaration, in account-ui.js");
+  const shim = extractFn(ACCOUNT_UI, "accountDelete");
   assert.doesNotMatch(shim, /\.update\(|\.remove\(|\.delete\(/,
     "the shim must not delete anything itself");
 });
@@ -470,7 +476,7 @@ function runShim({ loader, signedIn = true, preloaded = false }) {
     console: { warn() {} }
   };
   vm.createContext(sandbox);
-  vm.runInContext(extractFn(SCRIPT, "accountDelete") + "\naccountDelete();", sandbox);
+  vm.runInContext(extractFn(ACCOUNT_UI, "accountDelete") + "\naccountDelete();", sandbox);
   return new Promise(r => setImmediate(() => setImmediate(() => r(calls))));
 }
 
@@ -565,12 +571,13 @@ test("opening and closing the account dialog runs without a ReferenceError", () 
   };
   vm.createContext(sandbox);
   /* The declaration is taken from script.js itself — pre-seeding it in the
-     sandbox would make this pass on the broken file. */
+     sandbox would make this pass on the broken file. The two functions that
+     open the dialog are in the lazy account-ui.js, and read that declaration
+     across the two files as they do in the page: script.js first. */
+  vm.runInContext(decl[0] + "\n" + extractFn(SCRIPT, "closeAccountDialog") + "\n", sandbox);
   vm.runInContext(
-    decl[0] + "\n" +
-    extractFn(SCRIPT, "openAccountDialog") + "\n" +
-    extractFn(SCRIPT, "closeAccountDialog") + "\n" +
-    extractFn(SCRIPT, "loadHistoryForDialog") + "\n",
+    extractFn(ACCOUNT_UI, "openAccountDialog") + "\n" +
+    extractFn(ACCOUNT_UI, "loadHistoryForDialog") + "\n",
     sandbox
   );
 
@@ -633,8 +640,15 @@ test("the account dialog has an opener that the locked front page does not hide"
     return ranges.some(([from, to]) => at > from && at < to);
   };
 
+  /* The dialog's code is lazy, so an opener is wired to openAccount(), which
+     loads it and then calls openAccountDialog(). Both halves are required: an
+     opener wired to something that never reaches the dialog opens nothing. */
+  assert.match(extractFn(SCRIPT, "openAccount"), /\bopenAccountDialog\(\)/,
+    "openAccount() must end in openAccountDialog()");
+  assert.ok(ACCOUNT_UI.includes("function openAccountDialog("),
+    "openAccountDialog() must be declared in account-ui.js");
   const openers = [...extractFn(SCRIPT, "wireAccountUI")
-    .matchAll(/el\("([\w-]+)"\)\s*\.addEventListener\("click",\s*openAccountDialog\)/g)]
+    .matchAll(/el\("([\w-]+)"\)\s*\.addEventListener\("click",\s*openAccount\)/g)]
     .map(m => m[1]);
   assert.ok(openers.includes("user-chip") && within("user-chip", hiddenRanges),
     "premise: the header chip opens the dialog, and a locked page hides it");

@@ -254,6 +254,8 @@ test.describe("Withdrawing from one session does not touch another", () => {
     await page.evaluate(async ({ uid, old }) => {
       // @ts-ignore — script.js globals
       await db.ref("users/" + uid + "/history/" + old).set({ code: old, joinedAt: 1 });
+      // openAccountDialog() is in the lazy account-ui.js: fetched first.
+      await window.CanamedLoader.ensureAccountUI();
       // @ts-ignore
       openAccountDialog();
     }, { uid: USER.uid, old: OLD });
@@ -292,7 +294,7 @@ test.describe("Withdrawing from one session does not touch another", () => {
     await page.goto("/");
     await page.waitForFunction(() =>
       // @ts-ignore — script.js globals
-      typeof openAccountDialog === "function" && typeof dbInit === "function");
+      typeof dbInit === "function" && !!(window.CanamedLoader && window.CanamedLoader.ensureAccountUI));
     await page.evaluate(async ({ u, old }) => {
       // @ts-ignore — script.js globals
       dbInit();
@@ -300,6 +302,8 @@ test.describe("Withdrawing from one session does not touch another", () => {
       currentUser = u;
       // @ts-ignore
       await db.ref("users/" + u.uid + "/history/" + old).set({ code: old, joinedAt: 1 });
+      // openAccountDialog() is in the lazy account-ui.js: fetched first.
+      await window.CanamedLoader.ensureAccountUI();
       // @ts-ignore
       openAccountDialog();
     }, { u: USER, old: OLD });
@@ -405,7 +409,7 @@ async function toFrontPage(page) {
   await expect(page.locator("#splash")).toBeVisible({ timeout: 20_000 });
   await page.waitForFunction(() =>
     // @ts-ignore — script.js globals
-    typeof openAccountDialog === "function" && typeof dbInit === "function");
+    typeof dbInit === "function" && !!(window.CanamedLoader && window.CanamedLoader.ensureAccountUI));
   // @ts-ignore — script.js global
   expect(await page.evaluate(() => sessionNum), "the page is in a session after all").toBe("");
   expect((await storedResume(page)).consent.research,
@@ -415,11 +419,13 @@ async function toFrontPage(page) {
 /* On the front page: open the account dialog (with the user stood in again —
    the stand-in does not survive a page load) and withdraw from `code`. */
 async function withdrawFromFrontPage(page, code) {
-  await page.evaluate((u) => {
+  await page.evaluate(async (u) => {
     // @ts-ignore — script.js globals
     dbInit();
     // @ts-ignore
     currentUser = u;
+    // openAccountDialog() is in the lazy account-ui.js: fetched first.
+    await window.CanamedLoader.ensureAccountUI();
     // @ts-ignore
     openAccountDialog();
   }, USER);

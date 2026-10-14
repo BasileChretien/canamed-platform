@@ -826,6 +826,18 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     version string compresses differently), first-party
 //     325.26 -> 325.22 KB (-41 B).
 //     MARGIN ~0.78 KB.
+//   2026-10-14 (eighth entry): CAP UNCHANGED (326). #450: the account screens
+//     load on first use. Thirteen functions — the three sign-in routes, the
+//     profile-setup save, the account dialog with its session list, the
+//     delete entry — move, text unchanged, into the lazy account-ui.js;
+//     accountUI() in script.js is the one way in, and the file is asked for
+//     neither by the front page nor by code -> join -> room
+//     (tests-e2e/account-ui-lazy.spec.js). Same method, against main at v191:
+//     script.js -4,780 B, script-loader.js +351 B, first-party
+//     325.22 -> 320.89 KB (-4,429 B). MARGIN ~5.1 KB.
+//     This is the structural reclaim the entries above call owed. The cap
+//     stays where it is: the margin is what the next eager change spends,
+//     and a cap set to the measured number is a test that fails on a comment.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
@@ -956,6 +968,10 @@ test.describe("Perf budget — splash", () => {
       // data-rights.js (2026-09-08): the GDPR Art. 15 self-export, behind ONE
       // click on the waiting screen — the reclaim the header entries name.
       "data-rights.js",
+      // account-ui.js: the sign-in view and the account dialog, loaded on first
+      // use. Never prefetched (tests-e2e/account-ui-lazy.spec.js pins that it is
+      // not requested on the front page); listed so it stays out if it ever is.
+      "account-ui.js",
       /* Module A appropriateness triage (2026-08-19): the feature is gated
          behind ?triage=1 and default-off, so shipping it eagerly cost every
          splash ~5 KB gz for a path almost no session takes — which is what
