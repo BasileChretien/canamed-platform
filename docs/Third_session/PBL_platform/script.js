@@ -2520,6 +2520,7 @@ let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees 
                       // { by, cid, university, text, at }.
 let modBPhase = 0;          // Module B synced phase index (0..5) — room-shared
 let callForHelp = null;
+let roomClaimSettled = Promise.resolve();
 let teamsLink = "";
 let quizLink = "";          // end-of-session questionnaire link
 let preQuizLink = "";       // pre-session questionnaire link (shown on Welcome)
@@ -5363,6 +5364,7 @@ function startRoom() {
 
      The transaction stays idempotent; on a transient failure those room writes
      are denied until it is re-claimed on the next room entry. */
+  roomClaimSettled = Promise.resolve();
   try {
     const auth = (typeof firebase !== "undefined" && firebase.auth) ? firebase.auth() : null;
     const uid = auth && auth.currentUser && auth.currentUser.uid;
@@ -5419,12 +5421,15 @@ function startRoom() {
           "You are in {room}: this browser already has your place there in this session.")
           .split("{room}").join(room));
       };
+      let _settle;   // every outcome settles it, and 10 s regardless (_afterClaim)
+      roomClaimSettled = new Promise((r) => { _settle = r; setTimeout(r, 10000); });
       const _claimRoomOf = (retry) => {
         const ref = db.ref(sPath("roomOf/" + uid));
         ref.once("value")
           .then(snap => (snap.exists()
             ? _follow(snap.val())
             : ref.set({ room: myRoom, cid: clientId })))
+          .then(_settle)
           .catch(e => {
             const code = String((e && (e.code || e.message)) || "");
             const denied = /permission[_ ]denied/i.test(code);
@@ -5432,10 +5437,11 @@ function startRoom() {
             if (!denied && retry) { setTimeout(() => _claimRoomOf(false), 1200); return; }
             // Denied: another tab of this account claimed first. Join it.
             if (denied && retry) {
-              ref.once("value").then(s => (s.exists() ? _follow(s.val()) : _notConfirmed()), _notConfirmed);
+              ref.once("value").then(s => (s.exists() ? _follow(s.val()) : _notConfirmed()), _notConfirmed).then(_settle, _settle);
               return;
             }
             _notConfirmed();
+            _settle();
           });
       };
       _claimRoomOf(true);
@@ -6385,6 +6391,8 @@ function initStageNav() {
 // applies as a second layer of defence.
 const HELP_CALL_THROTTLE_MS = 30000;
 let lastHelpCallAt = 0;
+/* A call needs the room claim (#457); a press before it landed was refused. */
+const _afterClaim = (write) => roomClaimSettled.then(write);
 function initCallProf() {
   el("call-prof-btn").addEventListener("click", () => {
     if (!refCallForHelp) return;
@@ -6401,13 +6409,16 @@ function initCallProf() {
         return;
       }
       lastHelpCallAt = now;
-      refCallForHelp.set({ by: myName, at: now });
-      logEvent(myRoom, "help", { msg: "" });
+      _afterClaim(() => {
+        if (!refCallForHelp) return;
+        refCallForHelp.set({ by: myName, at: now });
+        logEvent(myRoom, "help", { msg: "" });
+      });
     } else if (callForHelp) {
       // cancel a pending (un-acked) call — record the cancel time as the
       // throttle anchor so a quick cancel-then-recall is throttled too
       lastHelpCallAt = serverNow();
-      refCallForHelp.remove();
+      _afterClaim(() => { if (refCallForHelp) refCallForHelp.remove(); });
     } else {
       const now = serverNow();
       if (now < lastHelpCallAt + HELP_CALL_THROTTLE_MS) {
@@ -6419,8 +6430,11 @@ function initCallProf() {
         return;
       }
       lastHelpCallAt = now;
-      refCallForHelp.set({ by: myName, at: now });
-      logEvent(myRoom, "help", { msg: "" });
+      _afterClaim(() => {
+        if (!refCallForHelp) return;
+        refCallForHelp.set({ by: myName, at: now });
+        logEvent(myRoom, "help", { msg: "" });
+      });
     }
   });
 }
@@ -6486,9 +6500,12 @@ function _callFacilitatorToAdvance(msgKey, fallbackMsg) {
   }
   lastHelpCallAt = now;
   const reason = tFallback(msgKey, fallbackMsg).slice(0, 200);
-  refCallForHelp.set({ by: myName, at: now, msg: reason })
-    .catch(e => console.error("advance call failed", e));
-  logEvent(myRoom, "help", { msg: reason });
+  _afterClaim(() => {
+    if (!refCallForHelp) return;
+    refCallForHelp.set({ by: myName, at: now, msg: reason })
+      .catch(e => console.error("advance call failed", e));
+    logEvent(myRoom, "help", { msg: reason });
+  });
   if (typeof toast === "function") {
     toast(tFallback("room.call.sent", "Facilitator called ✓"), reason, "gain");
   }

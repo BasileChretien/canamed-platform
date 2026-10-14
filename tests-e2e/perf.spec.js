@@ -861,6 +861,12 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     facilitator's acknowledgement of a call for help is repaired in the
 //     rules alone. Same method, against main at v194: script.js -86 B,
 //     i18n.js -77 B, first-party 322.15 -> 321.99 KB (-163 B). MARGIN ~4.0 KB.
+//   2026-10-14 (twelfth entry): CAP UNCHANGED (326). "Call a facilitator"
+//     pressed before the room claim landed was refused; the button's writes
+//     now wait for startRoom()'s claim to settle (roomClaimSettled,
+//     _afterClaim). Same method, against main at v195: script.js +232 B,
+//     first-party 321.99 -> 322.22 KB. The button and startRoom() are eager.
+//     MARGIN ~3.8 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
