@@ -318,9 +318,11 @@ test("script: initCallProf enforces a client-side help-call throttle", () => {
   assert.match(SCRIPT, /lastHelpCallAt/,
     "Throttle anchor variable must exist");
   // Cancel must also anchor the timer (without this, cancel-then-call
-  // bypasses the throttle — the original C20 finding).
+  // bypasses the throttle — the original C20 finding). On the SERVER's
+  // clock, like the calls themselves: the rule compares a new call's `at`
+  // with the stored one, so the throttle counts on the clock that is stored.
   const cancelAnchorsThrottle = /refCallForHelp\.remove\(\)/.test(SCRIPT) &&
-    /lastHelpCallAt\s*=\s*Date\.now\(\)/.test(SCRIPT);
+    /lastHelpCallAt\s*=\s*serverNow\(\)/.test(SCRIPT);
   assert.ok(cancelAnchorsThrottle,
     "Cancel branch must update lastHelpCallAt so cancel-then-call is throttled too");
 });
