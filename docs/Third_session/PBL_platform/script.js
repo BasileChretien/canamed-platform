@@ -6391,7 +6391,8 @@ function initStageNav() {
 // applies as a second layer of defence.
 const HELP_CALL_THROTTLE_MS = 30000;
 let lastHelpCallAt = 0;
-/* A call needs the room claim (#457); a press before it landed was refused. */
+/* Room writes need the room claim (#457); one made before it landed was
+   refused. Used by the call button, reveal() and the team-name save. */
 const _afterClaim = (write) => roomClaimSettled.then(write);
 function initCallProf() {
   el("call-prof-btn").addEventListener("click", () => {
@@ -6935,13 +6936,19 @@ function reveal(id) {
   const entry = { by: myName, at: serverNow() };
   myPendingReveal = id;
   // undefined aborts - if someone already revealed this item, do not re-write it
-  refRevealed.child(id).transaction(cur => (cur == null ? entry : undefined))
-    .then(res => {
-      // append-only event log (Phase 1 dual-write — EVENT_SOURCING_DESIGN.md);
-      // only emit when WE were the first revealer, so the event log mirrors the
-      // mutable `revealed` subtree's first-wins semantics
-      if (res && res.committed) logEvent(myRoom, "reveal", { itemId: id });
-    });
+  // The list and room are the ones clicked in: refRevealed follows the stage,
+  // and the wait for the claim can outlast a stage change or a move.
+  const revealedRef = refRevealed, room = myRoom;
+  _afterClaim(() => {
+    if (myRoom !== room) return;
+    revealedRef.child(id).transaction(cur => (cur == null ? entry : undefined))
+      .then(res => {
+        // append-only event log (Phase 1 dual-write — EVENT_SOURCING_DESIGN.md);
+        // only emit when WE were the first revealer, so the event log mirrors the
+        // mutable `revealed` subtree's first-wins semantics
+        if (res && res.committed) logEvent(room, "reveal", { itemId: id });
+      });
+  });
 }
 function renderButtons() {
   // Dry-run change (2026-05-26): investigations (imaging + bloods) are NO
@@ -9443,7 +9450,8 @@ function initTeamName() {
     btn.disabled = true;
     const origLabel = btn.textContent;
     btn.textContent = _t("room.team-name.saving", "Saving…");
-    refTeamName.set(v)
+    const room = myRoom;   // not another room's name, if the wait ends in a move
+    _afterClaim(() => (refTeamName && myRoom === room ? refTeamName.set(v) : Promise.reject(new Error("left the room"))))
       .then(() => {
         btn.disabled = false;
         btn.textContent = origLabel;

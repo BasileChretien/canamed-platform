@@ -267,7 +267,8 @@ test("a reveal is a transaction — the one write among the seven that is", () =
      a participant and by a co-facilitator whose only title is that proof
      (room-writes-room-bound.spec.js). If another of the seven becomes a
      transaction, run it there before trusting it. */
-  assert.match(code(bodyOf(SCRIPT, "reveal")), /refRevealed\.child\(id\)\.transaction\(/,
+  /* `revealedRef` is refRevealed captured at the click (#464). */
+  assert.match(code(bodyOf(SCRIPT, "reveal")), /(refRevealed|revealedRef)\.child\(id\)\.transaction\(/,
     "reveal() no longer writes by transaction");
   const client = code(SCRIPT) + code(ADMIN);
   for (const [name, re] of [
