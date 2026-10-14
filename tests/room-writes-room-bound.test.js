@@ -29,9 +29,11 @@
  *     || the writer is the session's facilitator  )
  *
  * WHY THE CALL FOR HELP IS DIFFERENT (decided 2026-10-14, after review). The
- * product can show a participant a room their claim does not name: Leave, then
- * join again in the same browser, keeps the account and its write-once claim
- * and places the participant afresh. In that room their answers were already
+ * product could show a participant a room their claim does not name: Leave,
+ * then join again in the same browser, kept the account and its write-once
+ * claim and placed the participant afresh. (The client now places them by the
+ * claim — tests/rejoin-room-claim.test.js; a browser on an older shell still
+ * does not.) In that room their answers were already
  * refused; with the first form of the rule, so was their call for help — the
  * one control that had still worked, and a regression against the rules as
  * they were. The price is accepted and pinned on the emulator: somebody who

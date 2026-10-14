@@ -838,6 +838,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     This is the structural reclaim the entries above call owed. The cap
 //     stays where it is: the margin is what the next eager change spends,
 //     and a cap set to the measured number is a test that fails on a comment.
+//   2026-10-14 (ninth entry): CAP UNCHANGED (326). #458: a participant who
+//     joins again goes back to the room their claim names, a second tab of
+//     the same browser is taken there, a different name after Leave gets a
+//     pool row of its own, and score writes are announced only once the
+//     server accepts them. Same method, against main at v192: script.js
+//     +862 B, i18n.js +83 B (one string, and the LOCALE_VERSION line),
+//     first-party 320.89 -> 321.82 KB (+945 B). None of it can be lazy: it
+//     is the join and room-entry path of the eager file. MARGIN ~4.2 KB.
+//   2026-10-14 (tenth entry): CAP UNCHANGED (326). #459: the facilitator's
+//     dashboard froze after a room visit — teardownRoom() detached every
+//     callback at `rooms`, the dashboard's included. It now detaches its own;
+//     and LocalDB's off() acts on the location as Firebase's does, so the
+//     LOCAL suite can see the next one. Same method, against main at v193:
+//     script.js +145 B, localdb.js +192 B, first-party 321.82 -> 322.15 KB
+//     (+337 B). Neither can be lazy: localdb.js is the LOCAL backend dbInit()
+//     builds synchronously, teardownRoom() runs on every room change.
+//     MARGIN ~3.9 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

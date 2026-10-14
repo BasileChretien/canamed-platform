@@ -2116,12 +2116,14 @@ let started = false, roomCount = 4;
    closes; no manual cleanup needed. */
 let clientId = (typeof sessionStorage !== "undefined")
   ? sessionStorage.getItem("canamed_client") : null;
-if (!clientId) {
+if (!clientId) clientId = mintClientId();
+function mintClientId() {
   // 80 bits of entropy in 16 lowercase hex chars
   const buf = new Uint8Array(8);
   crypto.getRandomValues(buf);
-  clientId = "c" + Array.from(buf).map(b => b.toString(16).padStart(2, "0")).join("");
-  try { sessionStorage.setItem("canamed_client", clientId); } catch (e) {}
+  const id = "c" + Array.from(buf).map(b => b.toString(16).padStart(2, "0")).join("");
+  try { sessionStorage.setItem("canamed_client", id); } catch (e) {}
+  return id;
 }
 
 /* stableId — R2-24/25 fix — survives a tab close / refresh / new-tab open
@@ -2562,7 +2564,7 @@ let refPool = null, refMyPool = null, refStarted = null, refRoomCount = null,
 let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null, moduleBranched: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null,
-    refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
+    refScore = null, refTeamName = null, refLeaderboard = null, onLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refPoll = null, refCertIds = null,
     refRoleChoices = null,
     refReplayRound = null, refRoleAssign = null,
@@ -3544,6 +3546,16 @@ function claimStableIdMapping() {
   }
 }
 
+/* The tab's id survives Leave and keys the pool row (name, consent record).
+   A different name takes a fresh id, so the next student here does not
+   rewrite the previous one's row; the same name is the leaver coming back. */
+function ownClientId() {
+  if (!db || !sessionNum) return Promise.resolve();
+  const norm = s => String(s || "").trim().toLowerCase();
+  return db.ref(sPath("pool/" + clientId + "/name")).once("value").then(s => {
+    if (typeof s.val() === "string" && norm(s.val()) !== norm(myName)) clientId = mintClientId();
+  }, () => {});
+}
 function _joinParticipantAfterAuth() {
   // user may have hit "Leave" while we were waiting for auth
   if (!joined) return;
@@ -3555,6 +3567,7 @@ function _joinParticipantAfterAuth() {
   // R3 FINDING-01: also bind clientId->uid before the pool write so the
   // owner-only write rules accept our own pool/presence/typing/tests writes.
   claimMembership("participant")
+    .then(() => ownClientId())
     .then(() => claimClientMapping())
     .then(() => claimStableIdMapping())
     .then(() => writeRoster())
@@ -4481,6 +4494,17 @@ function renderWrapupSummary() {
       }
     });
 }
+/* This account's room claim in this session (`roomOf/<uid>`), or null. */
+function readRoomClaim() {
+  const me = currentUser && currentUser.uid;
+  if (MODE !== "shared" || !db || !me) return Promise.resolve(null);
+  return db.ref(sPath("roomOf/" + me)).once("value").then(s => s.val(), () => null);
+}
+/* The room a claim names, if it is a room of this session. */
+function claimedRoom(claim, rc) {
+  const r = claim && claim.room;
+  return roomNames(rc).indexOf(r) >= 0 ? r : null;
+}
 function maybeSelfAssign() {
   if (myRoom || selfAssigning || !started) return;
   const mine = pool[clientId];
@@ -4489,7 +4513,7 @@ function maybeSelfAssign() {
   // if the round-trip stalls (flaky wifi), release the lock so a later pool
   // update can retry instead of leaving the student stuck in the waiting room
   const stallGuard = setTimeout(() => { selfAssigning = false; }, 8000);
-  Promise.all([refPool.once("value"), refRoomCount.once("value")]).then(res => {
+  Promise.all([refPool.once("value"), refRoomCount.once("value"), readRoomClaim()]).then(res => {
     const poolNow = res[0].val() || {};
     const rc = res[1].val() || 4;
     if (poolNow[clientId] && poolNow[clientId].room) {
@@ -4497,7 +4521,9 @@ function maybeSelfAssign() {
     }
     const assignedPool = Object.keys(poolNow).map(cid => poolNow[cid]);
     const person = poolNow[clientId] || mine;
-    const target = bestRoomFor(person, assignedPool, rc);
+    // An account already placed goes back to its room: the claim is
+    // write-once, and any other room refuses its writes (after Leave).
+    const target = claimedRoom(res[2], rc) || bestRoomFor(person, assignedPool, rc);
     return refMyPool.child("room").set(target).then(() => {
       clearTimeout(stallGuard); selfAssigning = false;
     });
@@ -4931,7 +4957,10 @@ function teardownRoom() {
        detached by unbindSectionRefs() above. */
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
-    if (refLeaderboard) refLeaderboard.off();
+    /* Only our own callback: `rooms` is also the dashboard's location (refRooms),
+       and off() with none removes every callback there — the dashboard froze. */
+    if (refLeaderboard && onLeaderboard) refLeaderboard.off("value", onLeaderboard);
+    onLeaderboard = null;
     // Module A LLM-patient chat listeners (chat + awarded under
     // rooms/<id>/moduleA) are room-scoped. Release them like every other room
     // subscription so a room switch / leave doesn't leave a stale child_added
@@ -5294,10 +5323,12 @@ function startRoom() {
       if (!_lbResubscribed) {
         _lbResubscribed = true;
         setTimeout(function () {
-          try { if (refLeaderboard && !isRoomAdmin) refLeaderboard.on("value", _onLb, _onLbErr); } catch (_) {}
+          // not if the room was left meanwhile: teardownRoom() would miss it
+          try { if (refLeaderboard && onLeaderboard === _onLb) refLeaderboard.on("value", _onLb, _onLbErr); } catch (_) {}
         }, 1500);
       }
     };
+    onLeaderboard = _onLb;
     refLeaderboard.on("value", _onLb, _onLbErr);
   }
 
@@ -5367,22 +5398,44 @@ function startRoom() {
          `!data.exists()` is what enforces it, and it always did. The read below
          only avoids attempting a write that would be denied for the ordinary
          reason (this participant already holds a room). */
+      const _notConfirmed = () => {
+        try {
+          toast(tFallback("room.err.membership",
+            "We could not confirm your place in this room. Your work may not " +
+            "save — please reload, and tell your facilitator if it continues."));
+        } catch (_) { /* toast not available pre-room */ }
+      };
+      /* A claim on ANOTHER room (a second tab of this browser, placed
+         elsewhere at the start) means every write here is refused: go to the
+         claimed room, and say why. */
+      const _follow = (claim) => {
+        if (isRoomAdmin || !claim || claim.room === myRoom) return;
+        const room = claimedRoom(claim, roomCount);
+        if (!room) { _notConfirmed(); return; }
+        try { refPresence.child(clientId).remove(); refTyping.child(clientId).remove(); } catch (_) {}
+        if (refMyPool) refMyPool.child("room").set(room).catch(() => {});
+        enterRoom(room, false);
+        toast(tFallback("room.moved-to-claim",
+          "You are in {room}: this browser already has your place there in this session.")
+          .split("{room}").join(room));
+      };
       const _claimRoomOf = (retry) => {
         const ref = db.ref(sPath("roomOf/" + uid));
         ref.once("value")
           .then(snap => (snap.exists()
-            ? null
+            ? _follow(snap.val())
             : ref.set({ room: myRoom, cid: clientId })))
           .catch(e => {
             const code = String((e && (e.code || e.message)) || "");
             const denied = /permission[_ ]denied/i.test(code);
             console.warn("roomOf claim failed — per-room writes will be denied:", code);
             if (!denied && retry) { setTimeout(() => _claimRoomOf(false), 1200); return; }
-            try {
-              toast(tFallback("room.err.membership",
-                "We could not confirm your place in this room. Your work may not " +
-                "save — please reload, and tell your facilitator if it continues."));
-            } catch (_) { /* toast not available pre-room */ }
+            // Denied: another tab of this account claimed first. Join it.
+            if (denied && retry) {
+              ref.once("value").then(s => (s.exists() ? _follow(s.val()) : _notConfirmed()), _notConfirmed);
+              return;
+            }
+            _notConfirmed();
           });
       };
       _claimRoomOf(true);
@@ -7244,6 +7297,9 @@ function renderCase() {
 /* Detect which auto-events the room now satisfies, and write any new ones.
    Idempotent: each event is a fixed key written under a transaction guard, so
    it cannot be double-claimed. Only participants write; admins just watch. */
+/* Not applied locally: the score listener (and its "+3" toast) then fires
+   only for a write the server accepted, never for a refused one. */
+function scoreTx(ref, fn) { return ref.transaction(fn, undefined, false); }
 function checkScoreEvents() {
   if (isRoomAdmin || !refScore) return;
   const earned = roomScore.auto || {};
@@ -7323,7 +7379,7 @@ function checkScoreEvents() {
   if (typeof _triageWants === "function") _triageWants(setWant);
 
   Object.keys(want).forEach(ev => {
-    refScore.child("auto").child(ev).transaction(cur =>
+    scoreTx(refScore.child("auto").child(ev), cur =>
       (cur == null ? { points: want[ev], at: serverNow() } : undefined)
     ).then(res => {
       // only emit the event when WE wrote the score - the transaction returns
@@ -7342,7 +7398,7 @@ function checkScoreEvents() {
     PENALTIES.forEach(p => {
       if (pen[p.id]) return;                       // already lost
       if (!revealed[p.item]) return;               // the wrong choice not made
-      refScore.child("penalties").child(p.id).transaction(cur =>
+      scoreTx(refScore.child("penalties").child(p.id), cur =>
         (cur == null ? { points: p.points, at: serverNow() } : undefined)
       ).then(res => {
         if (res && res.committed) {
@@ -7366,7 +7422,7 @@ function checkScoreEvents() {
       if (!opt) return;
       if (opt.correct) {
         if (earned["decision_" + d.id]) return;
-        refScore.child("auto").child("decision_" + d.id).transaction(cur =>
+        scoreTx(refScore.child("auto").child("decision_" + d.id), cur =>
           (cur == null ? { points: d.points, at: serverNow() } : undefined)
         ).then(res => {
           if (res && res.committed) {
@@ -7375,7 +7431,7 @@ function checkScoreEvents() {
         }).catch(e => console.error("Decision score write failed", e));
       } else if (d.penalty > 0) {
         if (pen["decpen_" + d.id]) return;
-        refScore.child("penalties").child("decpen_" + d.id).transaction(cur =>
+        scoreTx(refScore.child("penalties").child("decpen_" + d.id), cur =>
           (cur == null ? { points: d.penalty, at: serverNow() } : undefined)
         ).then(res => {
           if (res && res.committed) {
