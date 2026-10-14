@@ -1028,7 +1028,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v30";  // reset.btn{,-title} removed from fr/ja with the "Reset this room's case" control
+  const LOCALE_VERSION = "v29";  // splash.my-sessions.close-refused: what "Close" says when the server refuses it
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
