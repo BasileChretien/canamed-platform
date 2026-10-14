@@ -387,7 +387,16 @@ number (timestamp ms when current stage was entered)
 
 **Read/Write Authority:**
 - `.read: "auth != null"`
-- `.write: "auth != null && !root.child('sessions').child($sessionCode).child('closed').exists()"`
+- `.write`: signed in, session not closed, **and** the writer's room claim
+  (`roomOf/<uid>/room`) names this room **or** the writer is the session's
+  facilitator (its creator, or a proof of the current password). Until
+  2026-10-14 the last clause was absent and any signed-in visitor who knew the
+  code could write it. The same clause is on `roleplayRound`,
+  `sections/<slot>/revealed/<item>`, `moduleA/revealed/<item>`,
+  `events/<id>` and `answerReplies/<entry>/<reply>`, in both rule trees
+  (`callForHelp` asks for a claim on any room of the session — below) — see
+  `tests/room-writes-room-bound.test.js` for the text and for why the
+  facilitator half is there.
 
 **Schema:**
 ```
@@ -403,7 +412,20 @@ OR null (not set yet)
 
 **Read/Write Authority:**
 - `.read: "auth != null"`
-- `.write: "auth != null && !root.child('sessions').child($sessionCode).child('closed').exists()"`
+- `.write`: signed in, session not closed; one call at a time (none standing,
+  or the last one acknowledged, or a cancel, or thirty seconds after the last);
+  **and**, since 2026-10-14, a participant who holds a room claim **anywhere
+  in this session** (`roomOf/<uid>` exists) or the session's facilitator. Not
+  a claim on THIS room, unlike the other six: a participant the client has put
+  back in a room their claim does not name (Leave, then join again) must
+  still be able to call. The price: a participant of another room can raise
+  or cancel this room's call. The room raises and cancels; the facilitator
+  clears it with "Resolve call" from inside the room.
+  ⚠️ The acknowledgement `openRoomAsAdmin()` sends — the same call with
+  `ack: true` and its original `at` — is refused by the one-call-at-a-time
+  clause, for every facilitator (run on the emulator 2026-10-08). The product
+  therefore never stores `ack` today; the schema below describes what the rule
+  would accept.
 
 **Schema:**
 ```json
@@ -496,7 +518,12 @@ OR null (not typing)
 
 **Read/Write Authority:**
 - `.read: "auth != null"`
-- `.write: "auth != null && !root.child('sessions').child($sessionCode).child('closed').exists)"`
+- `.write`: signed in, session not closed, **and** a participant of this room
+  or the session's facilitator (as `teamName` above, since 2026-10-14).
+- This is the address from before per-slot room state. The client now reveals
+  at `rooms/{roomName}/sections/{slot}/revealed/{itemId}` (same rule, same
+  schema) and nothing writes here any more; the dashboard and the exports
+  still read it for a room that has no slot state.
 
 **Schema:**
 ```json

@@ -198,16 +198,34 @@ test("rules: events writes are append-only and freshness-bounded", () => {
   assert.match(v, /child\('at'\)\.val\(\) >= now - 60000/);
 });
 
-test("rules: events are writable by any authenticated participant (not admin-only)", () => {
-  // /events/ is written by ordinary participants — NOT admin-gated. This
-  // test guards against a future change accidentally tightening the rule
-  // to admin-only and silently breaking the dual-write — see
-  // EVENT_SOURCING_DESIGN.md §6.
-  const eventsWrite = rules.rules.sessions["$sessionId"].rooms["$roomId"].events["$pushId"][".write"];
-  assert.ok(eventsWrite.includes("auth != null"),
-    "events writes must require an authenticated user: " + eventsWrite);
-  assert.ok(!eventsWrite.includes("adminPasswordHash"),
-    "events writes must NOT require adminPasswordHash — any participant emits: " + eventsWrite);
+test("rules: events are written by a room's participants AND by the facilitator — neither alone", () => {
+  // /events/ has two kinds of writer, and the rule has to let both through.
+  //   - Participants emit most of it (reveal, answer, vote, score, help). So
+  //     the rule must not be admin-ONLY — the guard this test has carried
+  //     since the dual-write shipped (EVENT_SOURCING_DESIGN.md §6).
+  //   - The facilitator emits `stage` from the dashboard (setRoomStage →
+  //     logEvent) with no claim on the room. So it must not be room-ONLY.
+  // Until 2026-10-14 the rule satisfied both by naming nobody at all, and this
+  // test pinned that: it forbade the string `adminPasswordHash`, which was
+  // green on a rule any signed-in visitor could use and went red on the fix.
+  // The exact text of the rule is pinned in tests/room-writes-room-bound.test.js;
+  // this states what it is for.
+  const trees = [
+    ["sessions", rules.rules.sessions["$sessionId"],
+      "root.child('sessions').child($sessionId)"],
+    ["orgs", rules.rules.orgs["$orgSlug"].sessions["$sessionId"],
+      "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)"]
+  ];
+  for (const [label, session, prefix] of trees) {
+    const eventsWrite = session.rooms["$roomId"].events["$pushId"][".write"];
+    assert.ok(eventsWrite.includes("auth != null"),
+      label + ": events writes must require an authenticated user: " + eventsWrite);
+    assert.ok(
+      eventsWrite.includes("(" + prefix + ".child('roomOf').child(auth.uid).child('room').val() == $roomId || "),
+      label + ": a participant of the room must be able to append — events must not be admin-only: " + eventsWrite);
+    assert.ok(eventsWrite.includes(prefix + ".child('creatorUid').val() == auth.uid"),
+      label + ": the facilitator appends `stage` from the dashboard — events must not be room-only: " + eventsWrite);
+  }
 });
 
 test("rules: bounded numeric fields stay clamped (no integer overflow tricks)", () => {
