@@ -4664,8 +4664,11 @@ application itself was not changed.
    a visitor who has the code, since the code is all that joining asks for. The
    repository's tests now list every write in a session that some way through
    its rule leaves open, so that the list cannot grow unnoticed. There are 23
-   in each rule tree: these seven; the five creation writes; the removal of a
-   password reset in progress, which any signed-in visitor may do; and ten
+   in each rule tree: these seven; the five creation writes; the deletion of
+   the former password-reset node, which any signed-in visitor may do — and
+   which, once the rules that moved the reset record are released (Annex II
+   §3), removes at most a leftover, since no rule reads that node and no
+   client writes it; until then it cancels a reset in progress; and ten
    that are open for a browser identity nobody has claimed yet — the
    participant list and the poll, and the eight room writes Annex II §2 names.
    **What is on record for the ten is less than the rules allow, and no

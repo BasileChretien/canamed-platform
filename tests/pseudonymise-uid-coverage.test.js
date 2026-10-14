@@ -217,9 +217,9 @@ for (const [treeName, tree] of Object.entries(TREES)) {
        these, a clean run below proves nothing. One of each kind — a uid key
        (`$uid`), a value the rule compares with `auth.uid` (the two mapping
        tables, `creatorUid`), a value found by its name alone (`ownerUid`).
-       `_superadminReset/uid` is left out on purpose although the walk finds it
-       today: the reset flag is on its way out of the session tree, and a floor
-       must not fail because a uid LEFT the rules. */
+       `_superadminReset/uid` is left out on purpose: the walk found it until
+       the reset flag left the session tree (#451), and a floor must not fail
+       because a uid LEFT the rules. */
     const found = accountIdPositions(tree).map(label);
     for (const known of ["members/$uid", "roomOf/$uid", "creatorUid", "scenarioRef/ownerUid",
                          "clientMapping/$clientId", "stableIdMapping/$stableId"]) {

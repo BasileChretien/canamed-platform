@@ -209,8 +209,9 @@ const OPEN = {
   "/workshopLabel": CREATING + " — as controller",
   "/sections": CREATING + " — as controller",
   "/_superadminReset":
-    "its DELETE branch (`newData.val() == null`) names nobody: any signed-in visitor can remove a " +
-    "reset in progress on an open session. Not this change's; writing one needs the recovery code",
+    "delete-only since the reset flag moved to adminSecrets/<code>/reset/<uid> (#451), and the delete " +
+    "names nobody: any signed-in visitor can remove what is there. Nothing reads this node any more " +
+    "and no client writes it, so that is a leftover from before the move",
   "/poll/$cid": UNCLAIMED_CLIENT_ID,
   "/pool/$clientId": UNCLAIMED_CLIENT_ID,
   "/rooms/$roomId/presence/$clientId": UNCLAIMED_CLIENT_ID,
