@@ -162,8 +162,10 @@ test("the note does not promise what the file does not deliver", () => {
     "the note must say who is in the file: only what can be shown to be an included participant's");
   assert.ok(/a clientMapping row binds it to an account/.test(note),
     "the note must say that a row counts only when bound to an account");
-  assert.ok(/an included participant can lose such records to a namesake/.test(note),
+  assert.ok(/an included participant can lose such\s+records to a namesake/.test(note),
     "the note must say what failing closed on a shared name costs");
+  assert.ok(/any signed-in visitor holding the session code who binds a row of their own under her display name removes them/.test(note),
+    "the note must say that the shared-name rule is a lever any visitor can pull, not only a coincidence");
   assert.ok(/is not detected/.test(note),
     "the note must say that a record written in somebody else's name is not caught");
   assert.ok(/version 2 or earlier is NOT erased of participants who declined/.test(note),
@@ -184,6 +186,31 @@ test("what a declining participant wrote is NOT in the file (transform version 3
   assert.ok(!pseudo.includes("written by the decliner"));
   const answers = JSON.parse(pseudo).sessions.ABC234.rooms["Room 1"].answers.moduleA;
   assert.deepStrictEqual(Object.keys(answers), ["a1"]);
+});
+
+test("a multi-section session, as the database returns it (slots as ARRAYS), holds only the included participants", () => {
+  /* The job reads with `.val()`, which returns integer-keyed nodes — section
+     slots — as arrays. The first version of the filter judged nothing inside
+     one, and the in-memory database here had only ever been handed plain
+     objects. Here it holds the arrays, and returns them as `.val()` would. */
+  const { asRtdbWould } = require("./fixtures/rtdb-shape");
+  const sess = consentScopeSession();
+  const room = sess.rooms["Room 1"];
+  room.sections[2] = JSON.parse(JSON.stringify(room.sections[1]));
+  room.answers.sections[2] = JSON.parse(JSON.stringify(room.answers.sections[1]));
+  const shaped = asRtdbWould(sess);
+  assert.ok(Array.isArray(shaped.rooms["Room 1"].sections), "fixture is broken");
+  const tree = { sessions: { ABC234: shaped }, withdrawals: { ABC234: consentScopeWithdrawals() } };
+  const { run, pseudo } = runExport(tree);
+  assert.strictEqual(run.code, 0, run.out);
+  for (const key of EXCLUDED) {
+    assert.ok(!pseudo.includes(PARTIES[key].token), PARTIES[key].what + " (" + key + ") is in the file");
+  }
+  const r = JSON.parse(pseudo).sessions.ABC234.rooms["Room 1"];
+  for (const slot of [1, 2]) {
+    assert.strictEqual(r.answers.sections[slot]["sans-ANN7"].text, "section answer by ANN7");
+    assert.strictEqual(r.sections[slot].triage["tri-ANN7"].reason, "triage reason by ANN7");
+  }
 });
 
 test("the stock-client session: the job's file holds only the included participants, and its log counts the rest", () => {

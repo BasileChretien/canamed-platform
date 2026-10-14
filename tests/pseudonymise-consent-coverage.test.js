@@ -34,6 +34,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { pseudonymiseSession, DROP_KEYS } = require("../scripts/lib/pseudonymise");
+const { asArraysEverywhere, holdsArray } = require("./fixtures/rtdb-shape");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const rules = JSON.parse(fs.readFileSync(path.join(PLATFORM, "database.rules.json"), "utf8")).rules;
@@ -115,16 +116,33 @@ function authoredRecords(sessionRules) {
 
 const YES = { workshop: true, research: true, version: "PIS-v12", at: 5 };
 const NO = { workshop: true, research: false, version: "PIS-v12", at: 5 };
-const IN = { cid: "c1", uid: "uidAnn000000000000000000001", stableId: "sid-ann", name: "Ann" };
-const OUT = { cid: "cid-NOT-INCLUDED", uid: "uidNobody00000000000000001", stableId: "sid-nobody",
-              name: "Nobody Known" };
+/* Every case runs in TWO shapes. The job reads with `.val()`, which returns an
+   integer-keyed node as an ARRAY: section slots are integer-keyed by rule, and
+   so may a clientId be. The first version of the filter judged nothing inside
+   an array, and every fixture was a plain object (found in review). In the
+   "arrays" shape the clientIds are integers and every integer-keyed node is an
+   array (tests/fixtures/rtdb-shape.js, asArraysEverywhere) — pool,
+   clientMapping, every identity-keyed container, every slot level. Account
+   uids are not integers in either shape: Firebase mints them, and a `$uid`
+   rule requires the key to be the writer's own. */
+const SHAPES = [
+  { name: "objects", convert: (b) => b,
+    IN: { cid: "c1", uid: "uidAnn000000000000000000001", stableId: "sid-ann", name: "Ann" },
+    OUT: { cid: "cid-NOT-INCLUDED", uid: "uidNobody00000000000000001", stableId: "sid-nobody", name: "Nobody Known" },
+    BEN: "c2" },
+  { name: "arrays", convert: asArraysEverywhere,
+    IN: { cid: "0", uid: "uidAnn000000000000000000001", stableId: "sid-ann", name: "Ann" },
+    OUT: { cid: "2", uid: "uidNobody00000000000000001", stableId: "sid-nobody", name: "Nobody Known" },
+    BEN: "1" }
+];
 
-function baseSession() {
+function baseSession(shape) {
+  const { IN, BEN } = shape;
   return {
-    clientMapping: { c1: IN.uid, c2: "uidBen000000000000000000002" },
+    clientMapping: { [IN.cid]: IN.uid, [BEN]: "uidBen000000000000000000002" },
     stableIdMapping: { [IN.stableId]: IN.uid },
-    pool: { c1: { name: IN.name, at: 10, consent: YES, stableId: IN.stableId },
-            c2: { name: "Ben", at: 20, consent: NO } },
+    pool: { [IN.cid]: { name: IN.name, at: 10, consent: YES, stableId: IN.stableId },
+            [BEN]: { name: "Ben", at: 20, consent: NO } },
     rooms: { r1: {} }
   };
 }
@@ -140,7 +158,7 @@ function author(recordPath, who) {
 /** Put `value` at `segs` (wildcards filled), giving every intermediate node
  *  that is itself an authored record the included participant as author, so
  *  that only the node under test decides the outcome. */
-function put(body, segs, value, recordLabels) {
+function put(body, segs, value, recordLabels, IN) {
   let node = body;
   segs.forEach((seg, i) => {
     const key = seg.startsWith("$") ? wildValue(seg) : seg;
@@ -184,24 +202,30 @@ for (const [treeName, tree] of Object.entries(TREES)) {
 
   test(`${treeName}: under every container keyed by a participant identity, only the included participant's child stays`, () => {
     const failures = [];
-    for (const p of keyedContainers(tree)) {
-      const wildcard = p[p.length - 1];
-      const container = p.slice(0, -1);
-      const body = baseSession();
-      if (label(container) === "pool") {
-        body.pool.c1.sentinel = "KEYED-IN";
-        body.pool[OUT.cid] = { name: OUT.name, at: 30, consent: YES, sentinel: "KEYED-OUT" };
-      } else {
-        put(body, container.concat(identityFor(wildcard, IN)), { sentinel: "KEYED-IN", at: 1 }, recordLabels);
-        put(body, container.concat(identityFor(wildcard, OUT)), { sentinel: "KEYED-OUT", at: 1 }, recordLabels);
+    for (const shape of SHAPES) {
+      const { IN, OUT } = shape;
+      for (const p of keyedContainers(tree)) {
+        const wildcard = p[p.length - 1];
+        const container = p.slice(0, -1);
+        let body = baseSession(shape);
+        if (label(container) === "pool") {
+          body.pool[IN.cid].sentinel = "KEYED-IN";
+          body.pool[OUT.cid] = { name: OUT.name, at: 30, consent: YES, sentinel: "KEYED-OUT" };
+        } else {
+          put(body, container.concat(identityFor(wildcard, IN)), { sentinel: "KEYED-IN", at: 1 }, recordLabels, IN);
+          put(body, container.concat(identityFor(wildcard, OUT)), { sentinel: "KEYED-OUT", at: 1 }, recordLabels, IN);
+        }
+        body = shape.convert(body);
+        const db = JSON.stringify(body);
+        assert.ok(db.includes("KEYED-IN") && db.includes("KEYED-OUT"), "fixture for " + label(p) + " is broken");
+        if (shape.name === "arrays") assert.ok(holdsArray(body), "fixture for " + label(p) + " holds no array");
+        const blob = JSON.stringify(pseudonymiseSession(body, "S1", {}));
+        const where = `${label(p)} [${shape.name}]`;
+        if (blob.includes("KEYED-OUT")) failures.push(where + ": a child keyed by an identity nobody included holds stayed");
+        const dropped = DROPPED_WHOLE.includes(container[0]) && container.length === 1;
+        if (!dropped && !blob.includes("KEYED-IN")) failures.push(where + ": the included participant's child was removed");
+        if (dropped && blob.includes("KEYED-IN")) failures.push(where + ": listed as dropped whole, and is not");
       }
-      const db = JSON.stringify(body);
-      assert.ok(db.includes("KEYED-IN") && db.includes("KEYED-OUT"), "fixture for " + label(p) + " is broken");
-      const blob = JSON.stringify(pseudonymiseSession(body, "S1", {}));
-      if (blob.includes("KEYED-OUT")) failures.push(label(p) + ": a child keyed by an identity nobody included holds stayed");
-      const dropped = DROPPED_WHOLE.includes(container[0]) && container.length === 1;
-      if (!dropped && !blob.includes("KEYED-IN")) failures.push(label(p) + ": the included participant's child was removed");
-      if (dropped && blob.includes("KEYED-IN")) failures.push(label(p) + ": listed as dropped whole, and is not");
     }
     assert.deepStrictEqual(failures, [],
       "database.rules.json keys these by a participant identity and the export does not treat " +
@@ -211,24 +235,30 @@ for (const [treeName, tree] of Object.entries(TREES)) {
 
   test(`${treeName}: at every record that carries an author, only the included participant's record stays`, () => {
     const failures = [];
-    for (const rec of authoredRecords(tree)) {
-      const facilitator = rec.adminOnly || FACILITATOR_BY_DEFINITION.includes(label(rec.path));
-      const dropped = DROP_KEYS.has(rec.path[rec.path.length - 1]);
-      const variants = [["by the included participant", IN, true],
-                        ["by somebody who is not included", OUT, facilitator]];
-      if (rec.hasCid) {
-        variants.push(["with the included participant's cid and a name nobody included holds",
-          { cid: IN.cid, name: OUT.name }, false]);
-      }
-      for (const [how, who, shouldStay] of variants) {
-        const body = baseSession();
-        put(body, rec.path, Object.assign(author(rec.path, who), { at: 1, sentinel: "RECORD-SENTINEL" }),
-            recordLabels);
-        assert.ok(JSON.stringify(body).includes("RECORD-SENTINEL"), "fixture for " + label(rec.path) + " is broken");
-        const stayed = JSON.stringify(pseudonymiseSession(body, "S1", {})).includes("RECORD-SENTINEL");
-        const expected = dropped ? false : shouldStay;
-        if (stayed !== expected) {
-          failures.push(`${label(rec.path)} ${how}: ${stayed ? "kept" : "removed"}, expected ${expected ? "kept" : "removed"}`);
+    for (const shape of SHAPES) {
+      const { IN, OUT } = shape;
+      for (const rec of authoredRecords(tree)) {
+        const facilitator = rec.adminOnly || FACILITATOR_BY_DEFINITION.includes(label(rec.path));
+        const dropped = DROP_KEYS.has(rec.path[rec.path.length - 1]);
+        const variants = [["by the included participant", IN, true],
+                          ["by somebody who is not included", OUT, facilitator]];
+        if (rec.hasCid) {
+          variants.push(["with the included participant's cid and a name nobody included holds",
+            { cid: IN.cid, name: OUT.name }, false]);
+        }
+        for (const [how, who, shouldStay] of variants) {
+          let body = baseSession(shape);
+          put(body, rec.path, Object.assign(author(rec.path, who), { at: 1, sentinel: "RECORD-SENTINEL" }),
+              recordLabels, IN);
+          body = shape.convert(body);
+          assert.ok(JSON.stringify(body).includes("RECORD-SENTINEL"), "fixture for " + label(rec.path) + " is broken");
+          if (shape.name === "arrays") assert.ok(holdsArray(body), "fixture for " + label(rec.path) + " holds no array");
+          const stayed = JSON.stringify(pseudonymiseSession(body, "S1", {})).includes("RECORD-SENTINEL");
+          const expected = dropped ? false : shouldStay;
+          if (stayed !== expected) {
+            failures.push(`${label(rec.path)} [${shape.name}] ${how}: ${stayed ? "kept" : "removed"}, ` +
+              `expected ${expected ? "kept" : "removed"}`);
+          }
         }
       }
     }
@@ -249,10 +279,15 @@ test("legacy per-prompt reply lists — keyed by clientId until 2026-07-24 — k
   /* Their rules were removed in #244 (moduleA/promptReplies/$promptIdx/$cid,
      moduleB/exchangeReplies/$promptIdx/$cid), so part A cannot see them. A
      closed session older than that may still be in the database. */
-  const body = baseSession();
-  body.rooms.r1.moduleA = { promptReplies: { 0: { c1: { text: "LEGACY-IN" }, [OUT.cid]: { text: "LEGACY-OUT" } } } };
-  body.rooms.r1.moduleB = { exchangeReplies: { 2: { c2: { text: "LEGACY-OUT" } } } };
-  const blob = JSON.stringify(pseudonymiseSession(body, "S1", {}));
-  assert.ok(blob.includes("LEGACY-IN"));
-  assert.ok(!blob.includes("LEGACY-OUT"));
+  for (const shape of SHAPES) {
+    const { IN, OUT, BEN } = shape;
+    let body = baseSession(shape);
+    body.rooms.r1.moduleA = { promptReplies: { 0: { [IN.cid]: { text: "LEGACY-IN" }, [OUT.cid]: { text: "LEGACY-OUT" } } } };
+    body.rooms.r1.moduleB = { exchangeReplies: { 2: { [BEN]: { text: "LEGACY-OUT" } } } };
+    body = shape.convert(body);
+    if (shape.name === "arrays") assert.ok(Array.isArray(body.rooms.r1.moduleA.promptReplies), "fixture is broken");
+    const blob = JSON.stringify(pseudonymiseSession(body, "S1", {}));
+    assert.ok(blob.includes("LEGACY-IN"), shape.name);
+    assert.ok(!blob.includes("LEGACY-OUT"), shape.name);
+  }
 });

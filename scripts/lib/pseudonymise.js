@@ -432,10 +432,13 @@ function pseudonymiseSession(sess, sessionCode, linkage, stats) {
       // …and a ballot keyed by their stableId, under `ballots` only. The
       // inclusion filter already did this under rooms/*/votes/*/ballots; this
       // covers a `ballots` node anywhere else.
-      if (k === "ballots" && v && typeof v === "object" && !Array.isArray(v)) {
+      // Both steps take an ARRAY like an object keyed by its indices: `.val()`
+      // returns an integer-keyed node as one (research-inclusion.js, isMap).
+      // `delete` on an array leaves a hole, written as null.
+      if (k === "ballots" && v && typeof v === "object") {
         for (const b of Object.keys(v)) if (sets.excludedBallotKeys.has(b)) delete v[b];
       }
-      if (UID_KEYED.has(k) && v && typeof v === "object" && !Array.isArray(v)) {
+      if (UID_KEYED.has(k) && v && typeof v === "object") {
         node[k] = rekeyByUid(v);
         walk(node[k]);
       } else if (k === "payload" && typeof v === "string") {

@@ -42,15 +42,21 @@
  *      inside their payload), reveals, triage choices, the call for help.
  *      Kept only when every name in the record is held by an included
  *      participant AND by nobody else the session records — the pool rows not
- *      included, and the facilitator's name as the admin-only records give it.
+ *      included that a `clientMapping` row binds to an account, and the
+ *      facilitator's name as the admin-only records give it.
  *
  * DECISIONS, EACH WITH ITS COST.
  *   - Name-only attribution fails closed. Display names are not unique: when
- *     an included participant shares hers with somebody who is not included,
- *     her events, reveals and triage choices go too (stats.nameShared). Two
- *     included participants sharing a name are both kept, and both become the
- *     first one's pseudonym — a misattribution between two people who both
- *     consented.
+ *     an included participant shares hers with somebody bound to an account
+ *     who is not included, her events, reveals and triage choices go too
+ *     (stats.nameShared). THAT IS A LEVER, not only a coincidence: any
+ *     signed-in visitor holding the code who binds a pool row of their own
+ *     under her display name removes her name-only records from the export.
+ *     Unbound rows do not count (anyone can write one, so counting them made
+ *     the lever free); the price is that an unbound namesake's name-only
+ *     records, if any, are judged as hers. Two included participants sharing
+ *     a name are both kept, and both become the first one's pseudonym — a
+ *     misattribution between two people who both consented.
  *   - The gate counts only a row bound to an account. Every stock client
  *     claims `clientMapping/<cid>` before it writes its row
  *     (_joinParticipantAfterAuth), so a participant whose claim failed loses
@@ -86,7 +92,19 @@
  * record that carries `by` or `cid`, and runs this on each.
  */
 
+/* A RECORD is a plain object. A CONTAINER may also be an array, and every
+   filter below must treat one exactly like an object keyed by its indices:
+   the job reads with the Admin SDK's `.val()`, which returns a node whose keys
+   are small integers as an array. Section slots are integer-keyed by rule
+   (`$slot` is /^[1-9]$/), so `rooms/<r>/sections` and `answers/sections`
+   come back as arrays in every multi-section session; the legacy reply lists
+   are indexed from 0; and anyone may write `poll/0`, `poll/1`, … The first
+   version of this filter descended into plain objects only, and judged
+   nothing under those (found in review; tests/fixtures/rtdb-shape.js).
+   Object.keys() of an array gives its indices and skips holes; `delete`
+   leaves a hole, which JSON writes as null — the database's "absent". */
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+const isMap = (v) => v !== null && typeof v === "object";
 const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
 // The longest `payload` a client writes (logEvent cuts there); pseudonymise.js
@@ -132,20 +150,20 @@ function hasResearchConsent(poolEntry) {
 }
 
 function boundUid(sess, cid) {
-  const m = isObj(sess && sess.clientMapping) ? sess.clientMapping : {};
+  const m = isMap(sess && sess.clientMapping) ? sess.clientMapping : {};
   const u = hasOwn(m, cid) ? m[cid] : undefined;
   return typeof u === "string" && u.length > 0 ? u : null;
 }
 
 /** Is pool row `cid` an included participant (consent, bound, not withdrawn)? */
 function isIncluded(sess, cid) {
-  const pool = isObj(sess && sess.pool) ? sess.pool : {};
+  const pool = isMap(sess && sess.pool) ? sess.pool : {};
   return hasOwn(pool, cid) && hasResearchConsent(pool[cid]) && boundUid(sess, cid) !== null;
 }
 
 /** True if the session has at least one included participant. */
 function sessionHasConsent(sess) {
-  const pool = isObj(sess && sess.pool) ? sess.pool : {};
+  const pool = isMap(sess && sess.pool) ? sess.pool : {};
   return Object.keys(pool).some((cid) => isIncluded(sess, cid));
 }
 
@@ -154,10 +172,10 @@ function facilitatorNames(s) {
   const names = [];
   const push = (rec) => { if (isObj(rec) && typeof rec.by === "string") names.push(rec.by); };
   push(s.created); push(s.closed); push(s._adminPresence);
-  if (isObj(s.audit)) Object.values(s.audit).forEach(push);
-  const rooms = isObj(s.rooms) ? s.rooms : {};
+  if (isMap(s.audit)) Object.values(s.audit).forEach(push);
+  const rooms = isMap(s.rooms) ? s.rooms : {};
   for (const room of Object.values(rooms)) {
-    const manual = isObj(room) && isObj(room.score) && isObj(room.score.manual) ? room.score.manual : {};
+    const manual = isMap(room) && isMap(room.score) && isMap(room.score.manual) ? room.score.manual : {};
     Object.values(manual).forEach(push);
   }
   return names;
@@ -169,8 +187,8 @@ function facilitatorNames(s) {
  */
 function participantSets(sess) {
   const s = isObj(sess) ? sess : {};
-  const pool = isObj(s.pool) ? s.pool : {};
-  const stableIdMapping = isObj(s.stableIdMapping) ? s.stableIdMapping : {};
+  const pool = isMap(s.pool) ? s.pool : {};
+  const stableIdMapping = isMap(s.stableIdMapping) ? s.stableIdMapping : {};
   const included = [];
   const excluded = [];
   let unbound = 0;
@@ -197,7 +215,17 @@ function participantSets(sess) {
   const otherNames = new Set();
   const addName = (set, v) => { const n = normName(v); if (typeof n === "string" && n) set.add(n); };
   for (const cid of included) addName(includedNames, isObj(pool[cid]) ? pool[cid].name : null);
-  for (const cid of excluded) addName(otherNames, isObj(pool[cid]) ? pool[cid].name : null);
+  /* Only a row BOUND to an account counts against an included participant's
+     name. A pool row needs neither consent nor a mapping row, so counting
+     every row let anyone holding the code write pool/x = { name: <hers> } and
+     remove her name-only records — and her reveals from the room's revealed
+     set (found in review). Binding raises the bar and does not close it: a
+     signed-in visitor who binds a row of their own under her name still
+     removes them. The other side of it: an unbound namesake's name-only
+     records, if any, are judged as hers. */
+  for (const cid of excluded) {
+    if (boundUid(s, cid)) addName(otherNames, isObj(pool[cid]) ? pool[cid].name : null);
+  }
   for (const n of facilitatorNames(s)) addName(otherNames, n);
   return {
     included, excluded, unbound,
@@ -232,7 +260,7 @@ function cidRecordFault(sets, rec) {
   }
   const names = [];
   if (hasOwn(rec, "by")) names.push(rec.by);
-  if (isObj(rec.edits)) {
+  if (isMap(rec.edits)) {
     for (const e of Object.values(rec.edits)) if (isObj(e) && hasOwn(e, "by")) names.push(e.by);
   }
   return names.every((n) => nameStatus(sets, n) !== "notIncluded") ? null : "byNamesNobodyIncluded";
@@ -260,7 +288,7 @@ function clientIdInByFault(sets, rec) {
 function eachAt(root, pattern, fn) {
   const segs = pattern.split("/");
   (function go(node, i) {
-    if (!isObj(node)) return;
+    if (!isMap(node)) return;
     const seg = segs[i];
     const keys = seg === "*" ? Object.keys(node) : (hasOwn(node, seg) ? [seg] : []);
     for (const k of keys) {
@@ -271,7 +299,7 @@ function eachAt(root, pattern, fn) {
 }
 
 function keepKeys(container, keep, stats, statKey) {
-  if (!isObj(container)) return;
+  if (!isMap(container)) return;
   for (const k of Object.keys(container)) {
     if (!keep(k)) { delete container[k]; stats[statKey]++; }
   }
@@ -322,15 +350,15 @@ function selectIncluded(sess, stats) {
   counts.participantsIncluded += sets.included.length;
   counts.participantsUnbound += sets.unbound;
   counts.participantsNoConsent += sets.excluded.length - sets.unbound;
-  if (isObj(out.pool)) {
+  if (isMap(out.pool)) {
     for (const cid of Object.keys(out.pool)) if (!sets.includedCids.has(cid)) delete out.pool[cid];
   }
   for (const name of ROOT_KEYED_BY_CLIENT_ID) {
     keepKeys(out[name], (k) => sets.includedCids.has(k), counts, "keyedRows");
   }
-  const rooms = isObj(out.rooms) ? out.rooms : {};
+  const rooms = isMap(out.rooms) ? out.rooms : {};
   for (const roomId of Object.keys(rooms)) {
-    if (isObj(rooms[roomId])) filterRoom(rooms[roomId], sets, counts);
+    if (isMap(rooms[roomId])) filterRoom(rooms[roomId], sets, counts);
   }
   return { session: out, sets };
 }

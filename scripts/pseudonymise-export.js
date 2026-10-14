@@ -249,8 +249,11 @@ async function main() {
       "and by nobody else the session records. Everything else attributable to a person " +
       "is removed: what a participant who declined, withdrew or is bound to no account " +
       "wrote; what an identity with no included pool row wrote; and a name-only record " +
-      "whose name an included participant shares with somebody who is not included (so " +
-      "an included participant can lose such records to a namesake). A room's team name " +
+      "whose name an included participant shares with somebody who is not included but " +
+      "whose pool row is bound to an account (so an included participant can lose such " +
+      "records to a namesake — and any signed-in visitor holding the session code who " +
+      "binds a row of their own under her display name removes them; a row bound to no " +
+      "account does not count). A room's team name " +
       "is removed (free text, no author recorded); its stage, scores and committed votes " +
       "stay. The facilitator's own records (created, closed, audit, manual scores, " +
       "configuration) stay, name redacted; their entries in shared lists do not. A record " +

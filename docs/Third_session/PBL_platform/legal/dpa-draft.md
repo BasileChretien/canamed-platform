@@ -1900,7 +1900,9 @@ that could not be confirmed from the code is marked.*
     to give and losing a consenting participant's, the export loses them. The
     same reasoning, applied to display names, costs an included participant
     her events, reveals and triage choices when a participant who is not
-    included shares her name (run). A record written under an included
+    included, and whose pool row is bound to an account, shares her name
+    (run) — which any signed-in visitor holding the session code can bring
+    about by binding a row of their own under that name (G1 (a)). A record written under an included
     participant's name or `clientId` by somebody else is not detected: the
     rules bind neither to the writer. **Files written by versions 1 and 2**
     hold what a participant who declined wrote into a room's shared lists —
@@ -3035,7 +3037,11 @@ a different lawful basis. The original finding follows.
 > recorded consent made a session exportable by itself. On version 3 none of
 > their text or identifiers is in the file and the consenting participants'
 > work is (run, `tests/pseudonymise-consent-scope.test.js`, and the real job,
-> `tests/pseudonymise-export-run.test.js`). What version 3 removes, from the
+> `tests/pseudonymise-export-run.test.js`) — also for a multi-section session
+> in the shape the job reads it, where the database returns the
+> integer-keyed section slots as arrays (run; the first version of this
+> correction judged nothing inside an array, and was caught in review before
+> it shipped). What version 3 removes, from the
 > first file that carries `transformVersion: 3`:
 > - for a participant who declined, withdrew, or whose consenting row is bound
 >   to no account: every row keyed by their `clientId` (pool, poll, tests,
@@ -3045,8 +3051,10 @@ a different lawful basis. The original finding follows.
 >   for help in their name;
 > - the same for an identity with no pool row at all;
 > - an included participant's event, reveal or triage choice when her display
->   name is also held by somebody who is not included (the record names its
->   author by display name only, so it cannot be shown to be hers);
+>   name is also held by somebody who is not included and whose pool row is
+>   bound to an account (the record names its author by display name only, so
+>   it cannot be shown to be hers); a row bound to no account does not count,
+>   because anyone holding the session code can write one;
 > - a facilitator's event, reveal or reply in a room (it cannot be told from
 >   one written in their name by somebody else); the facilitator's own records
 >   (`created`, `closed`, `audit`, manual scores, configuration) stay, name
@@ -3062,8 +3070,15 @@ a different lawful basis. The original finding follows.
 >
 > **[CONTROLLER TO DECIDE: (a) whether failing closed on a shared display name
 > is right — an included participant loses her events, reveals and triage
-> choices to a namesake who declined; the alternative keeps the record and
-> strips the name, which keeps a decliner's action in the file; (b) whether a
+> choices (and her reveals drop out of the room's revealed set) to a namesake
+> who declined; and it is a lever, not only a coincidence: **any signed-in
+> visitor holding the session code who binds a pool row of their own under her
+> display name removes her name-only records from the export.** Counting only
+> rows bound to an account removed the free version of that lever (an unbound
+> row, which anyone can write) and not this one; its price is that an unbound
+> namesake's name-only records, if any, are judged as hers. The alternative
+> keeps the record and strips the name, which keeps a decliner's action in the
+> file; (b) whether a
 > participant whose consenting row is bound to no account (a failed claim) is
 > rightly left out; (c) whether an included participant's reply to a removed
 > entry stays; (d) whether the facilitator's own records belong in the research

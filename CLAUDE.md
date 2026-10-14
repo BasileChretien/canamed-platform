@@ -2384,7 +2384,12 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       reveals, triage, call for help). The rest is removed and counted in the
       job's log. **Costs, each pinned by a test and put to the controller in
       G1:** a namesake who declined costs an included participant her
-      name-only records; the facilitator's events/replies/reveals go (cannot be
+      name-only records — and that is a LEVER: any signed-in visitor holding
+      the code who binds a pool row of their own under her display name
+      removes them. Only BOUND rows count as namesakes; the first version
+      counted every pool row, so one unbound `pool/x = {name: <hers>}` (the
+      tolerant first-write branch — anyone with the code) did it for free
+      (found in review); the facilitator's events/replies/reveals go (cannot be
       told from forgeries) while `audit`/`score/manual`/`created`/`closed`
       stay; `teamName` goes (free text, no author); a reveal by someone not
       included disappears from the room's revealed set. **NOT closed:** a
@@ -2395,7 +2400,17 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       with `by`/`cid` and runs the function on each — add a new one to the
       lists in research-inclusion.js or that test goes red. The stock-client
       fixture is `tests/fixtures/consent-scope-session.js`; fill a new record
-      kind there with what the CLIENT writes. Same family, closed before version 2 shipped: a decliner's
+      kind there with what the CLIENT writes. ⚠️ **An integer-keyed node comes
+      back from `.val()` as an ARRAY** — section slots (`$slot` is `[1-9]`),
+      legacy reply lists, any `poll/0`. The first version of the filter
+      descended into plain objects only, so in every multi-section session a
+      decliner's section answers, hypotheses, reveals, triage and role
+      assignments went out untouched — and every fixture, the coverage test and
+      the fake admin used plain objects, so nothing caught it (review).
+      Containers are now `isMap` (object OR array); the coverage test runs
+      every case in both shapes (`tests/fixtures/rtdb-shape.js`). **Any walker
+      over `.val()` output must take an array as an object keyed by its
+      indices.** Same family, closed before version 2 shipped: a decliner's
       ballot was removed only via `stableIdMapping`; it now also goes by the
       `stableId` in their own pool row. ⚠️ **Two wrong versions of that fix
       were caught in review, both run:** (1) the row's stableId was added to

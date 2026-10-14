@@ -694,6 +694,26 @@ test("a pool row's KEY is its writer's choice, and never removes anything but th
   }
 });
 
+test("the walk's own key-based steps treat an array like an object keyed by its indices", () => {
+  /* `.val()` returns an integer-keyed node as an array (tests/fixtures/
+     rtdb-shape.js). The walk rekeyed a membership map and cleared a
+     `ballots` node only when it was a plain object; an array of either went
+     through as written. A membership map keyed 0, 1, … holds no account the
+     session ties to an included row, so it keeps nothing; a `ballots` array
+     loses the index a non-included row records as its stableId. */
+  const { asRtdbWould } = require("./fixtures/rtdb-shape");
+  const sess = ballotSession();
+  sess.pool.c2.stableId = "0";
+  sess.members = asRtdbWould({ 0: { at: 1, note: "MEMBER-SENTINEL-0" }, 1: { at: 2 } });
+  sess.rooms["Room 1"].elsewhere = { ballots: asRtdbWould({ 0: { choice: 1, note: "BALLOT-SENTINEL-0" },
+                                                             1: { choice: 2, at: 3 } }) };
+  assert.ok(Array.isArray(sess.members) && Array.isArray(sess.rooms["Room 1"].elsewhere.ballots),
+    "fixture is broken");
+  const blob = JSON.stringify(pseudonymiseSession(sess, "S1", {}));
+  assert.ok(!blob.includes("MEMBER-SENTINEL-0"), "a membership array went through as written");
+  assert.ok(!blob.includes("BALLOT-SENTINEL-0"), "a ballot under a decliner's stableId, in an array, went through");
+});
+
 test("a decliner's ballot goes whatever the mapping table says about their stableId", () => {
   /* The first version kept the ballot when the table tied the stableId to an
      account the session did not tie to the decliner — which is the missing-row

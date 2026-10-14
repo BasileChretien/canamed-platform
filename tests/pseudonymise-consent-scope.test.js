@@ -26,6 +26,7 @@ const { pseudonymiseSession, applyWithdrawals, sessionHasConsent, TRANSFORM_VERS
   require("../scripts/lib/pseudonymise");
 const { PARTIES, INCLUDED, EXCLUDED, ids, consentScopeSession, consentScopeWithdrawals, YES } =
   require("./fixtures/consent-scope-session");
+const { asRtdbWould, holdsArray } = require("./fixtures/rtdb-shape");
 
 function exported(stats) {
   const sess = applyWithdrawals(consentScopeSession(), consentScopeWithdrawals());
@@ -266,6 +267,125 @@ test("a record with a clientId is dropped when a name in it belongs to nobody in
   const out = pseudonymiseSession(sess, "S1", {}, stats);
   assert.ok(!("ans-ANN7" in out.rooms["Room 1"].answers.moduleA));
   assert.strictEqual(stats.byNamesNobodyIncluded, 1);
+});
+
+/* ============ THE SHAPE THE JOB ACTUALLY READS ============
+ * Found in review of the first version of this change. The job reads a
+ * session with the Admin SDK's `.val()`, which returns an integer-keyed node
+ * as an ARRAY (tests/fixtures/rtdb-shape.js). Section slots are integer-keyed
+ * by rule, so in every multi-section session `rooms/<r>/sections` and
+ * `rooms/<r>/answers/sections` arrive as arrays — and the filter, which only
+ * descended into plain objects, judged nothing under them: a decliner's
+ * section answers, hypotheses, reveals, triage choices and role assignments
+ * went out with their text and their clientId. The fixtures above are plain
+ * objects, which is why nothing caught it. */
+
+function slotsSession() {
+  const sess = consentScopeSession();
+  const room = sess.rooms["Room 1"];
+  room.sections[2] = JSON.parse(JSON.stringify(room.sections[1]));
+  room.answers.sections[2] = JSON.parse(JSON.stringify(room.answers.sections[1]));
+  room.moduleA.promptReplies = { 0: { [ids("ann").cid]: { text: "prompt reply by ANN7" },
+                                      [ids("ben").cid]: { text: "prompt reply by BEN7" } } };
+  return asRtdbWould(sess);
+}
+
+test("slots, legacy reply lists and the rest come back from the database as ARRAYS — and are judged all the same", () => {
+  const sess = slotsSession();
+  const room = sess.rooms["Room 1"];
+  assert.ok(Array.isArray(room.sections) && Array.isArray(room.answers.sections) &&
+            Array.isArray(room.moduleA.promptReplies),
+    "fixture is broken: it does not hold the shape .val() returns");
+  const out = pseudonymiseSession(applyWithdrawals(sess, consentScopeWithdrawals()), "S1", {});
+  for (const key of EXCLUDED) {
+    const left = whereIs(out, PARTIES[key].token);
+    assert.deepStrictEqual(left, [], `${PARTIES[key].what} (${key}) is still in the export at:\n  ` +
+      left.join("\n  "));
+  }
+  const r = out.rooms["Room 1"];
+  for (const slot of [1, 2]) {
+    assert.strictEqual(r.answers.sections[slot]["sans-ANN7"].text, "section answer by ANN7");
+    assert.strictEqual(r.sections[slot].hypotheses["shyp-ANN7"].text, "section hypothesis by ANN7");
+    assert.strictEqual(r.sections[slot].revealed["item-ANN7"].by, "Student-A");
+    assert.strictEqual(r.sections[slot].triage["tri-ANN7"].reason, "triage reason by ANN7");
+    assert.ok(!("roleAssign" in r.sections[slot]), "slot " + slot + ": assigned by a decliner");
+  }
+  assert.strictEqual(r.moduleA.promptReplies[0][ids("ann").cid].text, "prompt reply by ANN7");
+});
+
+test("a poll, pool and mapping table keyed by integers are arrays too, and are filtered", () => {
+  /* Anyone holding the code may write poll/0, poll/1, … (the poll rule's
+     first-write branch), and a pool row under an unclaimed integer clientId. */
+  const visitorPoll = consentScopeSession();
+  visitorPoll.poll = { 0: { hardest: "poll by MAL7", feeling: "ok", by: "Mallory Noentry", at: 1 },
+                       1: { hardest: "poll by FORGE7", feeling: "ok", by: "Fergus Forged", at: 2 } };
+  const shaped = asRtdbWould(visitorPoll);
+  assert.ok(Array.isArray(shaped.poll), "fixture is broken");
+  const out = pseudonymiseSession(shaped, "S1", {});
+  assert.ok(!JSON.stringify(out).includes("MAL7") && !JSON.stringify(out).includes("FORGE7"));
+
+  const integerIds = asRtdbWould({
+    clientMapping: { 0: "uidAnn00000000000000000001", 1: "uidBen00000000000000000002" },
+    pool: { 0: { name: "Ann", at: 1, consent: YES }, 1: { name: "Ben", at: 2, consent: { research: false } } },
+    poll: { 0: { hardest: "poll by ANN7" }, 1: { hardest: "poll by BEN7" } },
+    rooms: { r1: { tests: { 0: { pre: { note: "test by ANN7" } }, 1: { pre: { note: "test by BEN7" } } } } }
+  });
+  assert.ok(Array.isArray(integerIds.pool) && Array.isArray(integerIds.clientMapping), "fixture is broken");
+  assert.strictEqual(sessionHasConsent(integerIds), true,
+    "an included participant under an integer clientId was not seen at all");
+  const blob = JSON.stringify(pseudonymiseSession(integerIds, "S1", {}));
+  assert.ok(!blob.includes("BEN7"), "the decliner's rows went out");
+  assert.ok(blob.includes("poll by ANN7") && blob.includes("test by ANN7"), "the included one's went too");
+  assert.ok(blob.includes("Student-A") && !blob.includes("\"Ann\""));
+});
+
+test("an edit log that comes back as an array is still read for another hand", () => {
+  const sess = consentScopeSession();
+  sess.rooms["Room 1"].answers.moduleA["ans-ANN7"].edits =
+    asRtdbWould({ 0: { text: "Ann's words, replaced by Ben", by: "Ben Sato", at: 99 } });
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.ok(!("ans-ANN7" in out.rooms["Room 1"].answers.moduleA));
+});
+
+test("the array shape is really what the fixture builds", () => {
+  assert.ok(holdsArray(slotsSession()));
+  assert.ok(!holdsArray(consentScopeSession()), "the plain fixture should stay plain, for contrast");
+});
+
+/* ============ WHOSE NAME COUNTS AGAINST AN INCLUDED PARTICIPANT ============
+ * Found in review of the first version. A name-only record is kept only when
+ * nobody else the session records holds that name — and "the session records"
+ * used to include every pool row that was not included. A pool row needs
+ * neither consent nor a mapping row: anyone holding the code could write
+ * pool/x = { name: "Ann Dupont" } and so remove every event, reveal and triage
+ * choice of an included Ann from the export, and her reveals from the room's
+ * revealed set. On version 2 those records were kept. Now only a row BOUND to
+ * an account counts. That raises the bar and does not close it: a visitor can
+ * bind a row of their own. */
+
+test("an UNBOUND row carrying an included participant's name removes nothing of hers", () => {
+  const sess = consentScopeSession();
+  sess.pool["cid-VISITOR"] = { name: "Ann Dupont", university: "Caen", year: 3, english: "B2", at: 5 };
+  const stats = {};
+  const out = pseudonymiseSession(applyWithdrawals(sess, consentScopeWithdrawals()), "S1", {}, stats);
+  const room = out.rooms["Room 1"];
+  assert.ok("ev-ANN7" in room.events, "her event went because of a row anyone can write");
+  assert.ok("item-ANN7" in room.sections[1].revealed);
+  assert.ok("tri-ANN7" in room.sections[1].triage);
+  assert.strictEqual(stats.nameShared, 6, "only the two Danas, as without the visitor's row");
+});
+
+test("a BOUND row carrying her name does remove them — the cost that is left, pinned", () => {
+  const sess = consentScopeSession();
+  sess.pool["cid-VISITOR"] = { name: "Ann Dupont", university: "Caen", year: 3, english: "B2", at: 5 };
+  sess.clientMapping["cid-VISITOR"] = "uid-VISITOR-0000000000000000";
+  const stats = {};
+  const out = pseudonymiseSession(applyWithdrawals(sess, consentScopeWithdrawals()), "S1", {}, stats);
+  const room = out.rooms["Room 1"];
+  assert.ok(!("ev-ANN7" in room.events));
+  assert.ok(!("item-ANN7" in room.sections[1].revealed));
+  assert.strictEqual(room.answers.moduleA["ans-ANN7"].text, "answer by ANN7", "what carries her clientId stays");
+  assert.strictEqual(stats.nameShared, 9);
 });
 
 test("the file says it was written by a transform that removes this", () => {
