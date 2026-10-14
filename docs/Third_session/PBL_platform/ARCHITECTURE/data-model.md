@@ -483,7 +483,9 @@ does not check the writer or `msg`, so it is not the acknowledgement ALONE
 (see "Also open" above).
 
 **Notes:**
-- Written by initCallProf() when user clicks "Call a facilitator"
+- Written by initCallProf() when user clicks "Call a facilitator" — after the
+  participant's room claim has settled (`roomClaimSettled`): the rule needs
+  the claim, and a press before it landed was refused (fixed 2026-10-14)
 - Admin sees red badge on room card
 - Opening the room in admin view acknowledges the call (`openRoomAsAdmin()`):
   the dashboard alert clears and the room's button reads "A facilitator is

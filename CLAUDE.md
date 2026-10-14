@@ -2245,6 +2245,22 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
      `testMatch` in `playwright.config.js` matches a basename in ANY
      directory, so an emulator spec sharing a LOCAL spec's name would run in
      LOCAL mode there.
+- **A call pressed before the room claim landed was refused** (found
+  2026-10-14, a consequence of this change). `startRoom()` issues the claim
+  as the room appears — a read, then a write — and "Call a facilitator" is
+  live before the write reaches the server; pressed in that moment, the call
+  and its `help` event were refused and the button went back, silently.
+  **Fixed in the client:** the button's participant writes (call, re-call,
+  cancel, the advance CTAs' call, the `help` event) wait for
+  `roomClaimSettled`, which `startRoom()` settles on every outcome of the
+  claim and after 10 s regardless. Reproduced, not inferred: the emulator
+  spec holds the claim's WebSocket frame in transit (`page.routeWebSocket`)
+  and asserts the hold happened; red before the fix, green after.
+  ⚠️ **Not fixed:** the other room writes a participant can make in that
+  first moment — a workup reveal, the team name, a reply — need a claim on
+  the room too and race it the same way. Not measured.
+  `Verify:` `node --test tests/call-before-claim.test.js`; `PORT=8791 npm run
+  test:e2e:rules -- call-before-claim`.
 - **Why nothing caught it.** As in #452: every hardening pass worked from a
   list somebody had thought of. Two tests pinned the open shape —
   `tests/rules.test.js` required the `events` rule NOT to contain
