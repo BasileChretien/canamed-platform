@@ -1962,10 +1962,22 @@ that could not be confirmed from the code is marked.*
     application counts every ballot it finds in a room — and under an identity
     nobody has claimed, so can anyone signed in who has the session code. Read
     from the rules and the application; not run. Annex VI, R3 and G14, item 5.
-  - **7 carry no gate at all** — Annex VI, G14, item 5.
+  - **6 are gated on the writer's room claim or on the facilitator's title**
+    (the session's creator, or a co-facilitator who has proved its current
+    password): a room's team name, its roleplay round, the revealing of a case
+    item (two paths), the room's event log, and replies to answers.
+  - **1, the call for help, is gated on a room claim anywhere in the session
+    or on the facilitator's title.** A participant of one room can therefore
+    raise or cancel a call for help in another; a visitor who has not joined
+    the session cannot. Decided on 2026-10-14 — Annex VI, G14, item 5 (d).
+
+  These seven are in the rules since 2026-10-14, recounted that day, and in
+  force from the date Annex VI, G14, item 5 records for their deployment.
+  **Until then all seven carry no gate at all.**
 
   (Until 2026-10-08 this paragraph said "most per-room writes are gated on the
-  writer's room claim". Seventeen of thirty-five are.)
+  writer's room claim". Seventeen of thirty-five are, on that claim alone;
+  twenty-three once the six above are deployed.)
 - **A session's configuration is written during its creation, by its
   creator** — in the rules since 2026-10-08, and in force from the date they
   are deployed, which Annex VI, G14 records: the controller named on the join
@@ -3450,11 +3462,16 @@ safeguard.**
 > which is worse than the missing rule it replaced. A deliberate asymmetry must
 > be declared in its `ASYMMETRIC` map with a reason.
 >
-> ⚠️ **One thing the mirror faithfully reproduces: `answerReplies` has NO
+> ⚠️ ~~**One thing the mirror faithfully reproduces: `answerReplies` has NO
 > ownership gate** in either tree (`auth != null && !closed`). The emulator case
-> asserts that a peer CAN write one, so the real contract is recorded rather than
-> implied. Hardening it belongs to the `$other`-sentinel item and must happen in
-> **both** trees at once — not smuggled into a parity change.
+> asserts that a peer CAN write one~~ **Corrected in part on 2026-10-14, in the
+> rules; in force from the date they are deployed.** The node had no gate of any
+> kind: the "peer" in that test had not joined the session. A reply can now be
+> written only by a participant of that room or by the session's facilitator, in
+> both trees, and the test asserts that an outsider is refused. **What it still
+> lacks is ownership:** once in the room, a participant can rewrite or delete
+> another participant's reply; the test now records that. Hardening it belongs
+> to the `$other`-sentinel item and must happen in **both** trees at once.
 
 It mirrors
 the same participant, answer, chat and questionnaire model. *(Original finding:
@@ -4654,21 +4671,125 @@ application itself was not changed.
    session that has a creator, to that creator alone; on one that has none
    (created before 2026-05-27), to whoever then claims it (read from the
    rules; not run).
-5. **Seven other writes inside a session's rooms name no identity at all**: a
-   room's team name, its roleplay round, a call for help, the revealing of a
-   case item (two paths), the room's event log, and replies to answers. Run on
-   the emulator on 2026-10-08: a visitor who had not joined the session wrote
-   all seven into one of its rooms. This is a different defect and is **not
-   corrected by this change**. Giving them the room condition their neighbours
-   have would limit a writer to the one room they joined; it would not exclude
-   a visitor who has the code, since the code is all that joining asks for. The
-   repository's tests now list every write in a session that some way through
-   its rule leaves open, so that the list cannot grow unnoticed. There are 23
-   in each rule tree: these seven; the five creation writes; the deletion of
-   the former password-reset node, which any signed-in visitor may do — and
-   which, once the rules that moved the reset record are released (Annex II
-   §3), removes at most a leftover, since no rule reads that node and no
-   client writes it; until then it cancels a reset in progress; and ten
+5. **Seven other writes inside a session's rooms named no identity at all —
+   CORRECTED IN THE RULES on 2026-10-14 by a separate change; DEPLOYMENT TO BE
+   CONFIRMED.** A room's team name, its roleplay round, a call for help, the
+   revealing of a case item (two paths), the room's event log, and replies to
+   answers could be written by anyone signed in who knew the session code,
+   joined or not.
+
+   **What that allowed was measured**, on the Firebase emulator on 2026-10-08,
+   with the application in every seat and a further browser that had never
+   entered the code:
+
+   - *A call for help.* The visitor's call appeared on the facilitator's
+     dashboard with up to 200 characters of the visitor's text. The
+     thirty-second limit between calls did not hold (cancel, then call
+     again). **A real call raised by a room was cancelled by the visitor**,
+     and disappeared from the dashboard.
+   - *A revealed case item.* An investigation the case does not call for,
+     revealed by the visitor, was answered at once by a participant's own
+     application recording the score penalty for it. The visitor then removed
+     the reveal; the penalty remained, and nobody in the room can remove one.
+   - *The roleplay round.* Each participant's application changed that
+     participant's own role and told them they had swapped seats — repeatably.
+   - *Replies to answers.* A reply was written under a participant's name; a
+     participant's real reply was rewritten; another was deleted.
+   - *The team name* appeared on the room's score display and on the
+     dashboard. *The event log*, which nothing displays, accepted an entry
+     signed with the facilitator's name. *The older reveal path* changed the
+     dashboard's count of findings for a room that had found none.
+
+   No personal data became readable through any of the seven. What a visitor
+   wrote under a participant's name is another matter: these nodes go to the
+   nightly backup with the session, and the pseudonymised research export, as
+   it stood on 2026-10-14, keeps them and replaces an author field by the
+   pseudonym of whichever participant the text names (read from
+   `scripts/lib/pseudonymise.js`; not run). An entry forged under a
+   participant's name is therefore attributed to that participant in the
+   research copy. See R7.
+
+   **What changed.** Six of the seven can now be written only by a
+   participant whose room claim names that room, or by the session's
+   facilitator — its creator, or a co-facilitator who has proved its current
+   password. The seventh, the call for help, can be written by a participant
+   who holds a room claim anywhere in the session, or by the facilitator: see
+   (d). In both rule trees. The application itself was not changed. The
+   facilitator is included because the application has the facilitator write
+   six of these without belonging to the room: a stage change is logged in the
+   room's event log from the dashboard, a call for help is cleared from inside
+   the room, and a facilitator who opens a room is given the room's own
+   controls. Each was run before the rule was written.
+
+   **What this does not do.**
+
+   a. **It does not keep out a person who has the session code.** Joining a
+      session asks for the code and nothing else. Such a person can join and
+      then do everything listed above — in the one room they joined (and, for
+      the call for help, in any room: see d), and as an entry in the
+      facilitator's list of participants at the time they join (measured).
+      That entry does not have to stay: its owner may delete it afterwards
+      and keep the room claim, which is written once, so an account that is no
+      longer on the facilitator's list can go on doing all of this (read from
+      the rules; not run). The claim itself still records the account. The
+      change
+      binds a writer to a room; it is not a control on who may be in the
+      session. That control is the session code, which is not secret (G3).
+   b. **Inside a room, nothing belongs to its author.** A participant can
+      still rewrite or delete another participant's reply, take back a
+      revealed item, cancel the room's call for help, and rename the team.
+      Nor are the contents of five of them sealed (the team name must be a
+      text and the roleplay round a number; the other five accept fields
+      beyond the expected ones), and one expected field of a reply has no
+      length limit (measured: 200,000 characters accepted). Both are tracked,
+      for both rule trees at once.
+   c. **It does not repair a session that already carries a visitor's entry,
+      and nothing in the database tells one from a participant's** — the
+      author field is free text. The production database was not examined.
+      The retention periods bound how long such an entry remains: 30 days
+      after a session is closed, 90 days after it is created; longer in the
+      backup and the research copy (R7). **[CONTROLLER TO DECIDE: whether
+      research data from sessions held before the deployment date below needs
+      a caveat on authorship.]**
+   d. **The call for help is not bound to one room — DECIDED on 2026-10-14.**
+      The application can show a participant a room their claim does not
+      name: one who presses Leave and joins again in the same browser keeps
+      their account and its room claim, but is placed afresh, and may be
+      placed in another room (measured on 2026-10-08: twice out of two, with
+      two rooms). Such a participant was already unable to save an answer
+      there, and is not told — the application reports the answer as written.
+      The call-for-help button was the one control that still worked for
+      them, and the first version of this correction, which required a claim
+      on the room itself, took it away; the independent review of that
+      version held it to be a regression. **The decision: the call for help
+      asks for a room claim anywhere in the session.** No participant who
+      holds a room claim loses the button, and a visitor who has not joined
+      is refused. Two limits. A participant with no room claim at all — the
+      confirmation of their place itself failed — is still refused the call,
+      where before this change it was recorded; no route through the
+      application into that state has been shown, and the application tells
+      such a participant that their place could not be confirmed. And for the
+      participant placed in another room, the call is recorded but the entry
+      the application makes for it in that room's event log is refused (read
+      from the application and the rule; not run).
+      **What is accepted in exchange: a person who has joined the session can
+      raise or cancel a call for help in a room other than their own** — run
+      on the emulator, and held by a test. [CONTROLLER — the decision was
+      relayed to the author of this change by the session coordinating the
+      repository's work, as the operator's; confirm it here: ____ ] The
+      placement itself is not corrected (an application change): until it is,
+      that participant remains in a room where none of their work is saved.
+
+   [CONTROLLER — DATE THE SEVEN ROOM RULES WERE DEPLOYED: ____ ]
+
+   The repository's tests list every write in a session that some way
+   through its rule leaves open, so that the list cannot grow unnoticed. There
+   are 16 in each rule tree (23 before the seven were corrected): the five
+   creation writes; the deletion of the former password-reset node, which any
+   signed-in visitor may do — and which, once the rules that moved the reset
+   record are released (Annex II §3), removes at most a leftover, since no rule
+   reads that node and no client writes it; until then it cancels a reset in
+   progress; and ten
    that are open for a browser identity nobody has claimed yet — the
    participant list and the poll, and the eight room writes Annex II §2 names.
    **What is on record for the ten is less than the rules allow, and no
@@ -4692,9 +4813,9 @@ application itself was not changed.
    only closed sessions are exported, and all ten writes are refused once a
    session is closed, so such a row has to be written while the session is
    open.
-   Correcting the seven changes none of this. Until both are settled, R3's "a
-   participant with developer tools" understates who can do this: it is anyone
-   with the code, in the session or not. **[CONTROLLER TO DECIDE: accept the
+   Correcting the seven changed none of this. Until the ten are settled, R3's
+   "a participant with developer tools" understates who can do this: it is
+   anyone with the code, in the session or not. **[CONTROLLER TO DECIDE: accept the
    ten as they are, with R3 reworded to say what they allow, or have them
    bound to a claimed identity; and whether the export should keep a row that
    belongs to no consenting entry.]**

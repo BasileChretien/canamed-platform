@@ -196,11 +196,13 @@ const UNCLAIMED_CLIENT_ID =
   "Annex VI R3 — as a narrow window, which understates it: until then any signed-in visitor who " +
   "knows the code can write it under an id of their own making, and an invented id is never " +
   "claimed (DPA Annex VI G14, item 5: no decision recorded on the difference)";
-const ROOM_GATE =
-  "NOT FIXED — any signed-in visitor who knows the code can write this in any room of an open " +
-  "session, joined or not (run on the emulator 2026-10-08: ALLOWED). A different defect from the " +
-  "one this file is about; listed so that another cannot join it unnoticed, not because it is " +
-  "acceptable";
+/* Seven room writes stood here until 2026-10-14 under a third reason — "NOT
+   FIXED: any signed-in visitor who knows the code can write this in any room":
+   events, teamName, roleplayRound, callForHelp, the two `revealed` paths and
+   answerReplies. Each now names its writer on every way through (a claim on
+   that room, or the facilitator's title), so each left this list — the test
+   below fails on an entry whose rule has been closed. Their text and the
+   reasons for it are in tests/room-writes-room-bound.test.js. */
 
 const OPEN = {
   "/created": CREATING,
@@ -222,13 +224,6 @@ const OPEN = {
   "/rooms/$roomId/tests/$cid/pre": UNCLAIMED_CLIENT_ID,
   "/rooms/$roomId/tests/$cid/post": UNCLAIMED_CLIENT_ID,
   "/rooms/$roomId/survey/$cid": UNCLAIMED_CLIENT_ID,
-  "/rooms/$roomId/events/$pushId": ROOM_GATE,
-  "/rooms/$roomId/teamName": ROOM_GATE,
-  "/rooms/$roomId/roleplayRound": ROOM_GATE,
-  "/rooms/$roomId/callForHelp": ROOM_GATE,
-  "/rooms/$roomId/sections/$slot/revealed/$itemId": ROOM_GATE,
-  "/rooms/$roomId/moduleA/revealed/$itemId": ROOM_GATE,
-  "/rooms/$roomId/answerReplies/$entryId/$replyId": ROOM_GATE,
 };
 
 test("the reader takes a rule apart correctly (anti-vacuity)", () => {
