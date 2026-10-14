@@ -2547,6 +2547,8 @@ body.locked > footer { display: none !important; }
     "masthead masthead"
     "about    card";
   background: var(--bg);
+  /* The least a column is of the viewport: caps the two display texts below. */
+  --splash-col: 38vw;
 }
 .splash-masthead {
   grid-area: masthead;
@@ -2571,6 +2573,7 @@ body.locked > footer { display: none !important; }
       "masthead"
       "card"
       "about";
+    --splash-col: 86vw;
   }
 }
 .splash-card {
@@ -2606,10 +2609,12 @@ body.locked > footer { display: none !important; }
 .splash-mark .arc-c { stroke: var(--caen-500, #e08a1e); }
 .splash-mark .heart { fill: var(--n-700, #38434f); }
 /* the wordmark: letterspaced all-caps SERIF — a university-press signature,
-   not a tech logo. Weight/tracking tuned for Source Serif 4 at display size. */
+   not a tech logo. Weight/tracking tuned for Source Serif 4 at display size.
+   Capped to its column: the word is 5.94em and cannot break; 80px is the
+   card's 480px. */
 .splash-title {
   margin: 0 0 8px;
-  font-size: clamp(var(--fs-7), 6vw, calc(var(--fs-7) * 1.28));
+  font-size: min(clamp(var(--fs-7), 6vw, calc(var(--fs-7) * 1.28)), calc(var(--splash-col) / 5.94), 80px);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.12em;
   color: var(--ink);
@@ -2908,11 +2913,7 @@ body.locked > footer { display: none !important; }
 .splash-section-row .splash-section-up { margin-left: var(--s-2); }
 .splash-section-row .splash-section-remove { margin-left: var(--s-1); }
 .splash-section-row .splash-link[disabled] { opacity: 0.35; cursor: default; }
-/* NB (2026-09-07): no CSS on these selects prevents phone overflow in WebKit —
-   it counts a <select>'s longest OPTION TEXT toward the document's scroll
-   width whatever the box is sized to (overflow:hidden on the container does
-   not help either; measured). Keep option text short: section-picker.js groups
-   the flat list with <optgroup> for that reason. */
+/* Keep option text short all the same: section-picker.js groups with <optgroup>. */
 .splash-case-add { display: grid; gap: var(--s-2); margin-top: var(--s-2); }
 .splash-case-add select { min-width: 0; }
 .splash-case-parts { display: grid; gap: var(--s-1); }
@@ -3149,6 +3150,9 @@ body.locked > footer { display: none !important; }
   border-radius: var(--r-sm);
   outline: none;
   cursor: pointer;
+  /* WebKit counts a <select>'s longest option toward its ancestors' scroll
+     width, whatever sizing the select is given. Paint containment stops that. */
+  contain: paint;
   transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
               box-shadow var(--dur-base, .18s) var(--ease-out, ease);
 }
@@ -3685,10 +3689,6 @@ body.session-ended-shown { overflow: hidden; }
      which pushed the profile form out of a phone-width dialog. */
   min-width: 0;
 }
-/* WebKit counts a <select>'s longest option toward its ancestors' scroll width
-   even once the box fits, whatever sizing the select is given. Paint
-   containment stops that; without it Safari still scrolls below ~347px. */
-.account-fieldset select { contain: paint; }
 .account-fieldset legend {
   padding: 0 6px;
   font-weight: 700;
@@ -3755,6 +3755,8 @@ body.session-ended-shown { overflow: hidden; }
   gap: var(--s-1) var(--s-3);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
+  /* An authored name, or one word of the button label, can be too wide. */
+  overflow-wrap: anywhere;
 }
 .account-history-row:last-child { border-bottom: none; }
 .account-history-code {
@@ -3769,8 +3771,6 @@ body.session-ended-shown { overflow: hidden; }
      wraps to the next line instead. At 0 enlarged text left a 25px column, and
      at 12ch a long name still ran to nine lines. */
   flex: 1 1 20ch;
-  /* A scenario name is authored text, up to 80 characters of anything. */
-  overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.84rem;
 }
@@ -4020,7 +4020,8 @@ body.session-ended-shown { overflow: hidden; }
 .splash-mission {
   margin: 0 0 var(--s-4);
   font-family: var(--font-serif);
-  font-size: clamp(var(--fs-6), 3.4vw, calc(var(--fs-7) * 1.15));
+  /* Capped like the wordmark; longest word 6.16em. */
+  font-size: min(clamp(var(--fs-6), 3.4vw, calc(var(--fs-7) * 1.15)), calc(var(--splash-col) / 6.4));
   font-weight: var(--fw-semibold);
   letter-spacing: -0.01em;
   line-height: var(--lh-tight);
