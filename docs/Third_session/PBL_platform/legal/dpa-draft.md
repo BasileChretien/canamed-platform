@@ -4572,7 +4572,12 @@ application itself was not changed.
       session asks for the code and nothing else. Such a person can join and
       then do everything listed above — in the one room they joined (and, for
       the call for help, in any room: see d), and as an entry in the
-      facilitator's list of participants (measured). The change
+      facilitator's list of participants at the time they join (measured).
+      That entry does not have to stay: its owner may delete it afterwards
+      and keep the room claim, which is written once, so an account that is no
+      longer on the facilitator's list can go on doing all of this (read from
+      the rules; not run). The claim itself still records the account. The
+      change
       binds a writer to a room; it is not a control on who may be in the
       session. That control is the session code, which is not secret (G3).
    b. **Inside a room, nothing belongs to its author.** A participant can
@@ -4602,8 +4607,16 @@ application itself was not changed.
       them, and the first version of this correction, which required a claim
       on the room itself, took it away; the independent review of that
       version held it to be a regression. **The decision: the call for help
-      asks for a room claim anywhere in the session.** No participant of a
-      session loses the button, and a visitor who has not joined is refused.
+      asks for a room claim anywhere in the session.** No participant who
+      holds a room claim loses the button, and a visitor who has not joined
+      is refused. Two limits. A participant with no room claim at all — the
+      confirmation of their place itself failed — is still refused the call,
+      where before this change it was recorded; no route through the
+      application into that state has been shown, and the application tells
+      such a participant that their place could not be confirmed. And for the
+      participant placed in another room, the call is recorded but the entry
+      the application makes for it in that room's event log is refused (read
+      from the application and the rule; not run).
       **What is accepted in exchange: a person who has joined the session can
       raise or cancel a call for help in a room other than their own** — run
       on the emulator, and held by a test. [CONTROLLER — the decision was

@@ -65,9 +65,11 @@
  * WHAT IT DOES NOT DO, and one test below exists to say so. Joining a session
  * takes three writes and asks for nothing but the code. Somebody who has the
  * code can therefore still do all of the above — as a participant: in ONE
- * room, the one they joined, and listed in the facilitator's waiting room like
- * anybody else. This binds a writer to a room. It is not a boundary against a
- * person who has the code.
+ * room, the one they joined, and listed in the facilitator's waiting room
+ * WHEN THEY JOIN. (Not for good: the pool entry's owner can delete it and the
+ * write-once claim stays. Read from the rules; no test here runs it.) This
+ * binds a writer to a room. It is not a boundary against a person who has the
+ * code.
  *
  * AND WHO IT REFUSES THAT IS NOT A STRANGER. A participant shown a room their
  * claim does not name. There is a way into that state through the product,
@@ -80,8 +82,12 @@
  * help and their reveals were not. Their reveals now are — and their call for
  * help is NOT, by decision: it asks for a claim on any room, so that this
  * participant keeps the one control that still worked for them (the last
- * test). The `neighbour` below is that participant as far as the rules can
- * tell. The repair is in the client (place a returning participant in the
+ * test). The call lands; the `help` entry the button also writes to the
+ * room's event log does not, since `events` still asks for a claim on the
+ * room itself. And a participant with NO claim at all is still refused the
+ * call, where on the old rules it landed: no route through the product into
+ * that state has been shown. The `neighbour` below is the misplaced
+ * participant as far as the rules can tell. The repair is in the client (place a returning participant in the
  * room they hold), not here.
  *
  * ── A denial here is never left to stand alone ──────────────────────────

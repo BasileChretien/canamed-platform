@@ -2022,7 +2022,10 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   well — the review's blocking finding. AFTER, as merged: the reveal is
   refused (with the team name, the replies and the round); **the call for
   help lands**, because it asks for a claim on any room (run: the spec's last
-  test drives Leave, the rejoin and the button). The repair of the placement
+  test drives Leave, the rejoin and the button) — though the `help` entry the
+  button also writes to that room's event log is refused, since `events`
+  still asks for a claim on the room itself (read from `initCallProf()` and
+  the rule; not run). The repair of the placement
   itself is in the client — put a returning participant back in the room they
   hold — and is not made here; until it is, that participant is still in a
   room where none of their work is saved.
@@ -2041,17 +2044,29 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   None of this is new code: it is what each control does on ANY failed write,
   a dropped connection included. The two call rows now apply only to a
   participant with NO claim in the session at all (the claim write failed);
-  one whose claim names another room keeps the button. Not changed here — it
+  one whose claim names another room keeps the button. ⚠️ So "no participant
+  loses the call for help" is NOT what this change can say: one with no claim
+  at all is still refused it, where on the rules as they were the call
+  landed. No route through the product into that state has been shown — the
+  one that was shown, Leave-and-rejoin, leaves a claim — and the client tells
+  that participant their place could not be confirmed. If a route is found,
+  it is a regression of the kind the review blocked. Not changed here — it
   is a client change (shell bump, and the eager budget has under 1 KB).
 - ⚠️ **What it does not do.**
   (a) **It is not a boundary against somebody who has the code.** Joining is
   three writes (`clientMapping`, `pool`, `roomOf`) and asks for nothing else.
   Measured: refused before; allowed in the room joined; refused in the other;
   and present in the facilitator's waiting list. Everything in the first table
-  can still be done by such a person — in ONE room, as a listed participant;
-  and, having joined, they can raise or cancel a call for help in ANY room
-  (the decision above). The spec has a test whose only purpose is to record
-  this.
+  can still be done by such a person — in ONE room, as a participant who is
+  on the facilitator's list WHEN THEY JOIN; and, having joined, they can raise
+  or cancel a call for help in ANY room (the decision above). "Listed" does
+  not last: the claim needs a pool entry only at the moment it is written, the
+  entry's owner may then delete it (`leaveAndReload()` does), and the
+  write-once claim remains — an account no longer on the dashboard's list,
+  still holding everything above. Read from the two rules, not run; the
+  claim itself still records the account and the client id, and the
+  facilitator can read it. The spec has a test whose only purpose is to
+  record the first half of this.
   (b) **No ownership inside a room.** A roommate can still rewrite or delete
   another's reply (the G9 emulator case now records that instead of the
   missing gate), take back a reveal, cancel a call, rename the team.
