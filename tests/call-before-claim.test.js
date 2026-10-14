@@ -90,3 +90,18 @@ test("startRoom settles the claim on every outcome, and after ten seconds regard
   assert.match(claim, /_notConfirmed\)\.then\(_settle, _settle\);/);
   assert.match(claim, /_notConfirmed\(\);\n\s*_settle\(\);/);
 });
+
+test("a reveal and a team-name save wait for the claim too", () => {
+  /* Both need a claim on THIS room (#457) and raced it the same way: measured
+     on the emulator (the second and third tests of call-before-claim.spec.js,
+     red before this change). reveal() is also what the LLM chat's unlocks
+     call. */
+  const reveal = code(bodyOf(SCRIPT, "reveal"));
+  assert.match(reveal, /refRevealed\.child\(id\)\.transaction\(/, "reveal() no longer writes by transaction");
+  assert.deepStrictEqual(writesOutside(reveal, /refRevealed\.child\(id\)\.transaction\(|logEvent\(myRoom, "reveal"/g), [],
+    "reveal() writes before the room claim has settled");
+  const team = code(bodyOf(SCRIPT, "initTeamName"));
+  assert.match(team, /refTeamName\.set\(v\)/, "initTeamName() no longer sets the name");
+  assert.deepStrictEqual(writesOutside(team, /refTeamName\.(set|update|remove|transaction)\(/g), [],
+    "the team-name save writes before the room claim has settled");
+});

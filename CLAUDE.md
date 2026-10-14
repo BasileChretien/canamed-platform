@@ -2256,11 +2256,16 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   claim and after 10 s regardless. Reproduced, not inferred: the emulator
   spec holds the claim's WebSocket frame in transit (`page.routeWebSocket`)
   and asserts the hold happened; red before the fix, green after.
+  **A workup reveal and the team name raced it the same way** — measured the
+  same way, red before (a reveal wrote nothing after its toast had shown the
+  answer; "Save name" said "Could not save the team name"). `reveal()` (which
+  the LLM chat's unlocks also call) and the team-name save now wait too;
+  "Save name" shows "Saving…" while it waits.
   ⚠️ **Not fixed:** the other room writes a participant can make in that
-  first moment — a workup reveal, the team name, a reply — need a claim on
-  the room too and race it the same way. Not measured.
+  first moment — a reply to an answer, the roleplay round — need a claim on
+  the room too and presumably race it the same way. Not measured.
   `Verify:` `node --test tests/call-before-claim.test.js`; `PORT=8791 npm run
-  test:e2e:rules -- call-before-claim`.
+  test:e2e:rules -- call-before-claim` (three tests: call, reveal, team name).
 - **Why nothing caught it.** As in #452: every hardening pass worked from a
   list somebody had thought of. Two tests pinned the open shape —
   `tests/rules.test.js` required the `events` rule NOT to contain
