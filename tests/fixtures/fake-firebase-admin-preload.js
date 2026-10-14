@@ -17,7 +17,7 @@
  *
  *   FAKE_DB_TREE        JSON for the whole database
  *   FAKE_DB_THROW_ON    optional path whose read rejects (PERMISSION_DENIED)
- *   FAKE_DB_WRITES_OUT  file that receives { exitCode, writes } at exit
+ *   FAKE_DB_WRITES_OUT  file that receives { exitCode, writes, reads } at exit
  *   FAKE_DB_NOW         optional epoch ms: the script's Date.now() returns this
  *                       for the whole run. A retention job is a function of the
  *                       date, and "the same database, five years later" is a
@@ -50,11 +50,18 @@ const at = (p) => (p ? p.split("/") : []).reduce(
    tried to write, and a script that re-read its own deletes would be a
    different script. `path` is "" for a root-level ref(). */
 const writes = [];
+/* Reads are recorded too, as { via, path }: `once` returns a node's VALUE, the
+   whole subtree; `shallow` returns its keys and nothing under them. What a
+   scheduled job reads is a published commitment (the participant notice lists
+   it), so "this change reads nothing new" has to be something a test can
+   show rather than something a comment says. */
+const reads = [];
 const db = {
   ref(p) {
     const where = p || "";
     return {
       async once() {
+        reads.push({ via: "once", path: where });
         if (throwOn && where === throwOn) {
           throw Object.assign(new Error("fake read failure"), { code: "PERMISSION_DENIED" });
         }
@@ -83,6 +90,7 @@ Module._load = function (request) {
    KEYS of a node and never its values. Answer the same way. */
 globalThis.fetch = async (url) => {
   const p = String(url).replace(/^https:\/\/[^/]+\//, "").replace(/\.json\?shallow=true$/, "");
+  reads.push({ via: "shallow", path: p });
   const node = at(p);
   const keys = node && typeof node === "object"
     ? Object.fromEntries(Object.keys(node).map((k) => [k, true]))
@@ -98,5 +106,5 @@ globalThis.fetch = async (url) => {
 setInterval(() => {}, 2 ** 30);
 
 process.on("exit", (exitCode) => {
-  fs.writeFileSync(OUT, JSON.stringify({ exitCode, writes }));
+  fs.writeFileSync(OUT, JSON.stringify({ exitCode, writes, reads }));
 });

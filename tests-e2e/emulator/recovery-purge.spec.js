@@ -19,7 +19,7 @@
  *      the rest of it have landed: the facilitator is told to check their
  *      connection, and a session with no password hash is left behind.
  *   2. THE OLD CODE IS THE RECOVERY CODE OF WHATEVER IS CREATED THERE NEXT.
- *      `_superadminReset` is allowed when its `code` equals `recovery/…/code`,
+ *      The reset flag is accepted when its `code` equals `recovery/…/code`,
  *      and the record at that path is still the old one. Since PR #447 the
  *      reset also needs the session to have a password
  *      (reset-needs-a-password.spec.js), so the old code no longer opens it on
@@ -147,7 +147,11 @@ async function createSettled(page) {
   }, { timeout: 30_000 });
 }
 
-const resetPayload = (who, code, uid) => ({ requestedAt: Date.now(), by: who, code, uid });
+/* The reset flag: adminSecrets/…/reset/<the writer's own uid>, where no client
+   can read it. (Until 2026-10 it was sessions/<code>/_superadminReset, which
+   every member of the session could read — reset-flag-unreadable.spec.js.) */
+const flagPath = (loc, uid) => loc.adminSecretPath + "/reset/" + uid;
+const flag = (code) => ({ requestedAt: Date.now(), code });
 const OLD = "oldd-code-kept";
 const HASH = "v2$100000$1111111111111111";
 const MARKER = "v2$100000$aaaaaaaaaaaaaaaa";
@@ -189,15 +193,17 @@ test("default tree: a recovery code left behind blocks its session code and stil
   // 2. The old code, and the session that now sits at its session code.
   //    a. While that session has no password the reset is refused — there is
   //       nothing to reset (reset-needs-a-password.spec.js).
-  expect(String(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid))),
+  expect(String(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD))),
     "a reset on a session with no password").toMatch(/permission_denied/i);
   //    b. Its creator gives it one, by hand: the first hash is the creator's.
   expect(await tryWrite(page, loc.adminSecretPath + "/hash", HASH)).toBe("ALLOWED");
   expect(await tryWrite(page, loc.path + "/adminPasswordHash", MARKER)).toBe("ALLOWED");
   //    c. And now the SAME payload from the same user goes through: the stale
   //       record is this session's recovery record, and its code resets a
-  //       password its holder never set. (The ALLOW leg for a. and for 2'.)
-  expect(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid)),
+  //       password its holder never set. (The ALLOW leg for a., and for the
+  //       refusal of this same payload, on this same path, on the session
+  //       created after the purge.)
+  expect(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD)),
     "while the stale node stands, its code is the recovery code of the session at that code")
     .toBe("ALLOWED");
 
@@ -232,9 +238,9 @@ test("default tree: a recovery code left behind blocks its session code and stil
   // On the NEW session the old code is refused and the session's OWN code
   // works for whoever holds it — the reset path is intact, it is only the
   // stale credential that is gone.
-  expect(String(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid))),
+  expect(String(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD))),
     "the old code on the session created after the purge").toMatch(/permission_denied/i);
-  expect(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", stored, holder.uid)))
+  expect(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(stored)))
     .toBe("ALLOWED");
 
   await holder.ctx.close();
@@ -274,10 +280,10 @@ test("org tree: the same, at recovery/orgs/<slug>/sessions/<id>", async ({ page,
   expect(String(await tryWrite(page, loc.recoveryPath, { code: MINE })),
     "write-once: a new session cannot store its own code over the stale one")
     .toMatch(/permission_denied/i);
-  expect(String(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid))),
+  expect(String(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD))),
     "no session, so no password: nothing to reset").toMatch(/permission_denied/i);
   await establish();
-  expect(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid)),
+  expect(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD)),
     "the stale record is now the recovery record of the session at its code").toBe("ALLOWED");
 
   /* ── the purge ── */
@@ -289,9 +295,9 @@ test("org tree: the same, at recovery/orgs/<slug>/sessions/<id>", async ({ page,
   expect(await tryWrite(page, loc.recoveryPath, { code: MINE })).toBe("ALLOWED");
   expect((await dbReadAsOwner(loc.recoveryPath)).code).toBe(MINE);
   await establish();
-  expect(String(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", OLD, holder.uid))),
+  expect(String(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(OLD))),
     "the old code on the session created after the purge").toMatch(/permission_denied/i);
-  expect(await tryWrite(holder.page, loc.path + "/_superadminReset", resetPayload("Holder", MINE, holder.uid)),
+  expect(await tryWrite(holder.page, flagPath(loc, holder.uid), flag(MINE)),
     "the session's own code, by whoever holds it").toBe("ALLOWED");
 
   await holder.ctx.close();

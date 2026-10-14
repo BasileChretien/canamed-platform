@@ -439,11 +439,15 @@ test("the placeholder stays where it was: nothing else hands the database an obj
 const RULES = JSON.parse(read("database.rules.json")).rules;
 
 /* Every field a rule compares with the server's clock: the last child() of the
-   operand, or the node the rule sits on when the operand is the node itself. */
+   operand, or the node the rule sits on when the operand is the node itself.
+   A child() takes a quoted name, a $wildcard, or `auth.uid` — the last since
+   the password-reset flag is kept per user (`…child('reset').child(auth.uid)
+   .child('requestedAt')`), which this pattern did not read at first: merged
+   with that change it accounted for 177 of 185 mentions of `now`. */
 function datedFields() {
   const fields = new Map();   // name -> number of bounds
   let upperFiveSeconds = 0;
-  const cmp = /(?:newData|data|root)((?:\.child\((?:'[^']+'|\$[A-Za-z]+)\))*)\.val\(\)\s*(<=|>=)\s*now\s*([+-])\s*(\d+)/g;
+  const cmp = /(?:newData|data|root)((?:\.child\((?:'[^']+'|\$[A-Za-z]+|auth\.uid)\))*)\.val\(\)\s*(<=|>=)\s*now\s*([+-])\s*(\d+)/g;
   (function walk(node, key) {
     if (node === null || typeof node !== "object") return;
     for (const k of Object.keys(node)) {
