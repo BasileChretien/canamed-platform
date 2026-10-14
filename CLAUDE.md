@@ -2188,8 +2188,9 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
      inside a room; it is a `remove()` on the parent `revealed` node, which has
      no write rule. Silent.
   3. ~~**A dashboard stops updating once its facilitator has opened a room and
-     come back.**~~ **✅ FIXED IN CODE 2026-10-14 (shell v193)** — it reaches
-     a browser when that browser loads v193. `teardownRoom()` called
+     come back.**~~ **✅ FIXED IN CODE 2026-10-14** — it reaches a browser
+     when that browser loads the shell carrying it (the version is assigned
+     at merge: read `SHELL_VERSION` in `sw.js`). `teardownRoom()` called
      `refLeaderboard.off()`, and that ref is the SAME location as the
      dashboard's `refRooms` — `off()` with no arguments drops every listener
      there, whichever Reference attached it. Measured: after one visit the
