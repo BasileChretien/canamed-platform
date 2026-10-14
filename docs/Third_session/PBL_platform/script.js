@@ -4543,7 +4543,6 @@ function maybeSelfAssign() {
 function wireRoomUI() {
   buildButtons();
   initAnswers();
-  initReset();
   initStageNav();
   initCallProf();
   initLeave();
@@ -4914,7 +4913,6 @@ function enterRoom(roomName, asAdmin) {
   el("call-prof-btn").classList.toggle("hidden", asAdmin);
   // admins navigate via the sidebar's "Full dashboard"; no duplicate leave button
   el("leave-btn").classList.toggle("hidden", asAdmin);
-  el("reset-btn").classList.toggle("hidden", !asAdmin);
 
   if (!asAdmin) saveResume(roomName);
   if (!wired) { wireRoomUI(); wired = true; }
@@ -9448,13 +9446,6 @@ function initTeamName() {
   };
   btn.addEventListener("click", save);
   inp.addEventListener("keydown", e => { if (e.key === "Enter") save(); });
-}
-function initReset() {
-  el("reset-btn").addEventListener("click", () => {
-    if (!refRevealed) return;
-    if (!confirm("Clear this room's case findings for everyone?")) return;
-    refRevealed.remove();
-  });
 }
 
 /* ===================== ROOM VIEW: PRESENCE ===================== */

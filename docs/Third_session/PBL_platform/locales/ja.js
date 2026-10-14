@@ -753,8 +753,6 @@
   "prompts.next.last": "保存して終了 →",
   "prompts.done.msg": "✓ <strong>すべてのディスカッション設問を完了しました。</strong> 次はチームの要点を記録しましょう。",
   "prompts.done.cta": "グループ回答を開く →",
-  "prompts.review": "← 設問を見直す",
-  "reset.btn": "このルームの症例をリセット",
-  "reset.btn-title": "このルームの所見を消去します"
+  "prompts.review": "← 設問を見直す"
 };
 });

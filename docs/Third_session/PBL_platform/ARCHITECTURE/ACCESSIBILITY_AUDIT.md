@@ -40,7 +40,7 @@ cohort:
 - **Voice control**: Voice Control (macOS), Dragon NaturallySpeaking
   (Windows). Most action affordances are `<button>`s with visible
   text labels, which is the prerequisite, but the actual flows
-  ("click Reveal", "click Reset this room") need confirmation.
+  ("click Reveal", "click Call a facilitator") need confirmation.
 - **Magnification at 200%+**: Browser zoom up to 200% is required by
   WCAG 1.4.4. Empirically the layout is responsive and reflows
   correctly, but text-only zoom (Firefox setting) and OS-level

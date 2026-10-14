@@ -117,10 +117,16 @@ const SEVEN = [
   /* append-only */
   ["events/$pushId", (p) => "auth != null && " + closedOf(p) + " && !data.exists()"],
   /* one call at a time: none standing, or the last one answered, or a cancel,
-     or thirty seconds later */
-  ["callForHelp", (p) => "auth != null && " + closedOf(p) +
+     or thirty seconds later, or — since the acknowledgement was repaired — the
+     facilitator answering the call that stands (tests/call-for-help-ack.test.js
+     pins that branch; it is rebuilt here so that this pin stays whole) */
+  ["callForHelp", (p, node) => "auth != null && " + closedOf(p) +
     " && (!data.exists() || data.child('ack').val() == true || newData.val() == null || " +
-    "newData.child('at').val() >= data.child('at').val() + 30000)", whoInSession],
+    "newData.child('at').val() >= data.child('at').val() + 30000 || " +
+    "((" + facilitatorOf(node, p) + ") && newData.child('ack').val() == true && " +
+    "newData.child('at').val() == data.child('at').val() && " +
+    "newData.child('by').val() == data.child('by').val() && " +
+    "(!newData.child('msg').exists() || newData.child('msg').val() == data.child('msg').val())))", whoInSession],
 ];
 const at = (node, p) => p.split("/").reduce((a, k) => a && a[k], node.rooms.$roomId);
 
@@ -139,7 +145,7 @@ test("each of the seven carries what it had, and then: this room's participant (
       const n = at(node, where);
       assert.ok(n && typeof n[".write"] === "string",
         `${label}/rooms/$roomId/${where}: no write rule — the node would fail closed`);
-      assert.strictEqual(n[".write"], had(p) + " && " + (clause || who)(node, p), `${label}/rooms/$roomId/${where}`);
+      assert.strictEqual(n[".write"], had(p, node) + " && " + (clause || who)(node, p), `${label}/rooms/$roomId/${where}`);
     }
   }
   /* Exactly one of the seven asks for the weaker claim, and it is the call for
@@ -222,10 +228,10 @@ test("the facilitator writes a room's event log from the dashboard, with no clai
 test("the facilitator clears a call for help from inside the room, whichever room it is", () => {
   /* "Resolve call": the same button the room calls with, in the facilitator's
      hands — a delete, and the write the facilitator half of this rule is for.
-     (openRoomAsAdmin() also tries to ACKNOWLEDGE a call. That write is refused
-     by the one-call-at-a-time clause for every facilitator, before and after
-     this change — run on the emulator — so nothing here rests on it and it is
-     not pinned: whoever repairs or removes it should not meet this test.) */
+     (openRoomAsAdmin() also ACKNOWLEDGES a call. That write was refused by the
+     one-call-at-a-time clause for every facilitator until the clause gained a
+     branch of its own for it; tests/call-for-help-ack.test.js pins the client
+     fact it rests on, so it is not pinned again here.) */
   assert.match(code(bodyOf(SCRIPT, "initCallProf")), /if \(isRoomAdmin\) \{ refCallForHelp\.remove\(\); return; \}/,
     "the facilitator's Resolve call is no longer a remove() on the room's callForHelp");
 });

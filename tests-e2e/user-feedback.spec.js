@@ -188,7 +188,7 @@ test.describe("Bug 2a — global language switcher is always visible", () => {
 });
 
 test.describe("Bug 2b — Module A right-column labels (English-canonical UI)", () => {
-  test("findings, prompts, reset, and tab labels render English even under fr/ja (Phase 3)",
+  test("findings, prompts and tab labels render English even under fr/ja (Phase 3)",
        async ({ page }) => {
     // Phase 3 — English-canonical UI: these Module A chrome strings are NOT
     // consent/safety, so t() returns the canonical English for everyone. We
@@ -202,7 +202,9 @@ test.describe("Bug 2b — Module A right-column labels (English-canonical UI)", 
       "rcol.tab.decisions",
       "findings.title",
       "prompts.title",
-      "reset.btn"
+      // was "reset.btn", whose control was removed 2026-10-14; this one has a
+      // French and a Japanese translation on file, which t() must not use
+      "rcol.tab.reference"
     ];
     const t = (k) => page.evaluate((key) => window.t(key), k);
 
