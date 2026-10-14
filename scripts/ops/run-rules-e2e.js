@@ -83,11 +83,16 @@ const os = require("os");
 
 const ports = require("./emulator-ports.js");
 const processLineage = require("./process-lineage.js");
+const webPort = require("./web-port.js");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const DB_PORT = parseInt(process.env.SIM_DB_PORT || "9000", 10);
 const AUTH_PORT = parseInt(process.env.SIM_AUTH_PORT || "9099", 10);
-const WEB_PORT = parseInt(process.env.PORT || "8765", 10);
+/* PORT is read by web-port.js, the same way the sim launcher reads it. Until
+   2026-10-08 this was a bare parseInt, and the two disagreed about which
+   values are a port (see that file). */
+const WEB = webPort.read(process.env.PORT, { db: DB_PORT, auth: AUTH_PORT });
+const WEB_PORT = WEB.port;
 const EMU_PORTS = [DB_PORT, AUTH_PORT];
 /* How often the emulator ports are looked at while the child runs. FAST until
    each port's listener has a verdict: lineage can only be shown while the
@@ -134,6 +139,13 @@ function fatal(msg) {
   console.error(msg);
   process.exit(1);
 }
+
+/* ── 0. A PORT that cannot work ───────────────────────────────────── */
+/* Refused here, before the preflight looks at any port. For THIS script that
+   is consistency with the sim launcher rather than a safety fix: a NaN port
+   used to get as far as Playwright and fail there, late and obscurely, with
+   nothing unsafe following (traced in the review of PR #444). */
+if (WEB.problem) fatal("rules-e2e: FATAL — " + webPort.refusal(WEB, "npm run test:e2e:rules"));
 
 /* ── 1. Preflight ─────────────────────────────────────────────────── */
 let held;

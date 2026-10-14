@@ -52,6 +52,24 @@
   var auth = firebase.auth();
   var db   = firebase.database();
 
+  // The server's clock minus this device's, as the database publishes it. A
+  // save is dated with it: the rules refuse `updatedAt` more than 5 s ahead of
+  // the server, so a device clock a minute fast could not save at all. (This
+  // page does not load lib.js, which holds the main app's serverNow().)
+  // Subscribed by the first save, NOT at page load: touching the database is
+  // what opens the realtime connection, and an editor tab left open would
+  // then hold one of the plan's simultaneous connections for nothing.
+  var serverOffset = 0;
+  var offsetWatched = false;
+  function watchServerOffset() {
+    if (offsetWatched) return;
+    offsetWatched = true;
+    db.ref(".info/serverTimeOffset").on("value", function (snap) {
+      var v = snap.val();
+      if (typeof v === "number" && isFinite(v)) serverOffset = v;
+    });
+  }
+
   // ---- DOM helpers -------------------------------------------------------
   function el(tag, attrs, children) {
     var n = document.createElement(tag);
@@ -218,8 +236,11 @@
     var uid = user.uid;
     var path = "scenarios/" + uid + "/" + id;
     setStatus("", share ? "Saving & sharing…" : "Saving…");
+    // Before the read: the offset arrives with the connection, and the read
+    // cannot resolve until that is up.
+    watchServerOffset();
     db.ref(path + "/meta/createdAt").once("value").then(function (snap) {
-      var now = Date.now();
+      var now = Date.now() + serverOffset;
       var createdAt = snap.val() || now;
       var nameStr = (typeof body.name === "string"
         ? body.name

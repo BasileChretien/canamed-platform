@@ -243,6 +243,47 @@ test("sim-with-emulator preflights the emulator ports (waitForPort cannot)", () 
     "the check must precede the emulator spawn");
 });
 
+test("a PORT that cannot work is refused before either script has anything to undo", () => {
+  /* The sim launcher says it refuses "before the handlers exist", and only its
+     place in the file makes that so. With the refusal moved below the three
+     process.on(…) lines the real-run scenario still passes (found in the
+     second review of PR #444) — and the exit would then run cleanup(), which
+     kills nothing there but unlinks the generated *.emulator.json files:
+     another run's, since a run refused at that point built none. */
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  const refusedAt = SIM.indexOf("if (WEB.problem) {");
+  assert.ok(refusedAt > 0, "locator stale: the launcher's PORT refusal was not found");
+  assert.match(SIM.slice(refusedAt, refusedAt + 200),
+    /^if \(WEB\.problem\) \{\r?\n\s*console\.error\([^\n]*\r?\n\s*process\.exit\(1\);\r?\n\}/,
+    "the refusal must say why and exit — nothing else");
+  for (const handler of ['process.on("SIGINT"', 'process.on("SIGTERM"', 'process.on("exit"']) {
+    const at = SIM.indexOf(handler);
+    assert.ok(at > 0, "locator stale: the launcher's " + handler + " handler was not found");
+    assert.ok(refusedAt < at,
+      "the launcher's PORT refusal must come BEFORE " + handler + ", …): from " +
+      "there on an exit runs cleanup(), and cleanup() unlinks the generated " +
+      "emulator rule files");
+  }
+
+  /* The runner has no such handlers; there it is the preflight and the spawn
+     that the refusal must come before. */
+  const refusedByRunnerAt = RUNNER.indexOf("if (WEB.problem) fatal(");
+  assert.ok(refusedByRunnerAt > 0, "locator stale: the runner's PORT refusal was not found");
+  const surveyAt = RUNNER.indexOf("ports.survey([...EMU_PORTS, WEB_PORT])");
+  assert.ok(surveyAt > 0, "locator stale: the runner's preflight was not found");
+  assert.ok(refusedByRunnerAt < surveyAt,
+    "the runner must refuse a bad PORT before it looks at any port");
+
+  /* And both read PORT through the one function, so they cannot disagree. */
+  for (const [name, src] of [["run-rules-e2e", RUNNER], ["sim-with-emulator", SIM]]) {
+    assert.match(src, /webPort\.read\(process\.env\.PORT, \{ db: DB_PORT, auth: AUTH_PORT \}\)/,
+      name + " must read PORT with ops/web-port.js");
+    assert.doesNotMatch(src, /parseInt\(process\.env\.PORT/,
+      name + " reads PORT with a bare parseInt again: \"8771abc\" is then 8771, " +
+      "\"abc\" is NaN, and an emulator's own port is taken");
+  }
+});
+
 test("sim-with-emulator sweeps by port after its tree-kill", () => {
   const SIM = read("scripts", "sim", "sim-with-emulator.js");
   const at = SIM.indexOf("function cleanup()");
@@ -509,6 +550,34 @@ test("every message that offers to clear a port says first that it may be a live
   }
 });
 
+/* Every name that is CALLED in a piece of source: `name(` and `a.b.name(`,
+   with comments and string literals taken out first (the runner's messages are
+   full of parentheses). Control keywords are not calls. Deliberately simple —
+   it reads code written in this file's plain style, and a call spelled so as
+   to dodge it (`[spawnSync][0](…)`) is not what it is for. */
+function calleesOf(source) {
+  const code = source
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/(^|\s)\/\/[^\n]*/g, "$1")
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, "\"\"");
+  const names = [];
+  const call = /([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\(/g;
+  for (let m = call.exec(code); m; m = call.exec(code)) {
+    if (!["if", "for", "while", "switch", "catch", "function", "return"].includes(m[1])) {
+      names.push(m[1]);
+    }
+  }
+  return names;
+}
+
+test("calleesOf() sees a call however it is reached, and not what only looks like one", () => {
+  /* The check on stop() below is only as good as this reading. */
+  assert.deepStrictEqual(calleesOf(
+    "  if (x) { a(); b.c (1); /* d() */ e(\"f(\"); } // g()\n" +
+    "  try { runNow(process.argv[0]); } catch (err) { h.i.j(() => k()); }\n"),
+    ["a", "b.c", "e", "runNow", "h.i.j", "k"]);
+});
+
 test("a signal to the runner forwards to the child, and sweeps only after it", () => {
   /* Sweeping straight away would force-kill the emulator ports while
      emulators:exec was still running against them.
@@ -569,6 +638,28 @@ test("a signal to the runner forwards to the child, and sweeps only after it", (
     "stop() may make exactly one synchronous child call");
   assert.match(body, /spawnSync\("taskkill", \["\/F", "\/T", "\/PID", String\(child\.pid\)\]/,
     "and it is the tree-kill of the child, on Windows");
+  /* …and may call NOTHING that is not on a list. Counting three names sees
+     only direct calls by those names. Four delays placed before the wait got
+     past it (found in the second review of PR #444): a helper wrapping the ten
+     second spawnSync; an alias, `const runNow = spawnSync`; a call to
+     observeListeners(), which is two synchronous netstat; and a call to
+     processLineage.processTable(), seconds of PowerShell. The last two get
+     past the POSIX wall-clock assertion as well — they take milliseconds
+     there. A list of what may be called turns "the delays we thought of" into
+     "the calls we allowed": whatever is added to stop() has to be added here,
+     by someone who has asked whether it can block. */
+  const STOP_MAY_CALL = [
+    "console.log", "console.warn", "Date.now", "String",
+    "spawnSync",                 // once, the tree-kill: pinned just above
+    "clearTimeout", "child.kill", "setTimeout",
+    "sweep", "process.exit"      // inside the timer only: pinned just below
+  ];
+  const strangers = [...new Set(calleesOf(body.slice(body.indexOf("{") + 1)))]
+    .filter((name) => !STOP_MAY_CALL.includes(name));
+  assert.deepStrictEqual(strangers, [],
+    "stop() calls something that is not on its list. It must return at once " +
+    "for the child's exit to be seen: anything added to it may be a synchronous " +
+    "delay in front of the wait, which the Windows scenarios cannot see");
   /* After the wait: the only sweep in stop() is the one inside the timer. */
   const sweepAt = body.indexOf("sweep(");
   assert.ok(sweepAt > timerAt,

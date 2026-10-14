@@ -1241,7 +1241,10 @@ the database the tool deletes the whole `users/<uid>` even with `--session`;
 get a marker, so once the strict rule is on its participants are refused in
 the product for good and told to "try again"** — a decision that is taken
 when an operator confirms the backfill, and that nobody has taken yet;
-a device clock more than 5 s fast is still refused; and **a session whose
+a device clock more than 5 s fast was refused its withdrawal until the client
+began sending the server's time (2026-10-08 — the `created.at` entry under
+"Round-3 — TRACKED hardening"; a browser on an older shell still is); and
+**a session whose
 `created/at` or `closed/at` was dated in the future was never purged** — found
 by running the purge, and corrected by a SEPARATE change (#438:
 `scripts/lib/session-retention.js` plus a bound on both dates in the rules).
@@ -1426,7 +1429,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
 
 ## Known security follow-ups (code, tracked)
 - **A session's recovery code is purged with it (2026-10-07) — ⛔ the backlog
-  sweep has NOT been run, and a weakness in the reset rule is OPEN.**
+  sweep has only been DRY-RUN (34 records to delete); #447 makes a password
+  reset need a password to reset, IN THE RULES (live only once a deploy has
+  released them); and the takeover route through the reset — the recovery
+  code readable by every session member while a reset was in progress — is
+  CLOSED IN CODE by #451, ⛔ live only once its rules AND its
+  shell have shipped, with one deliberate residual (its entry is the last
+  sub-bullet below).**
   `createSession()` writes `recovery/sessions/<code>` (org:
   `recovery/orgs/<slug>/sessions/<id>` — the ROSTER's shape, not adminSecrets')
   and from 2026-05-25 until the fix of 2026-10-07 nothing deleted it: the purge
@@ -1474,50 +1483,206 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     reader encoded them again — `My%2520Code` for the key `My Code`, a null,
     and "no members to protect" in a job that deletes nightly. Encoding twice
     is a different node, not a no-op; each caller encodes once.
-    **Not run yet.** `Verify:`
+    **DRY-RUN ONLY so far.** Run 37665330573 (2026-10-07, on main at b8133a0):
+    6 sessions, 40 recovery records, 6 with a session, **34 with none** (all in
+    the default tree), no empty tree. Nothing was deleted; the confirmed run
+    is the operator's, and until it happens those 34 records each still block
+    their session code. `Verify:`
     `gh run list --workflow sweep-orphaned-recovery.yml` lists the runs; for the
     confirmed one, `gh run view <id> --log | grep -E "Mode: +LIVE|Summary:"`
     prints `Mode:        LIVE — deletions WILL happen` and
     `Summary: <n> deleted, 0 left.` A dry run after it ends in
     `Summary: nothing to sweep.`
-  - **⚠️ OPEN — the reset does not require a password to exist** (measured
-    2026-10-07 with a throwaway emulator probe that is NOT in the repository;
-    the committed spec stops at the reset write, so the hash writes and the
-    restored-session case below rest on that probe and on the rule text).
-    `_superadminReset` asks only for a matching `recovery/…/code`
-    and a session that is not closed, and the hash rules' reset branch has no
-    `data.exists()`. So on a session with NO hash: (1) whoever holds its
-    recovery code sets the FIRST hash, whatever `creatorUid` says — this is how
-    a stale code took over a half-created session; (2) if it has no recovery
-    node either, ANY signed-in user writes one and then does the same (that
-    rule asks for no node and no hash — and, while `facilitatorGate` is
-    enforced, a writer on its allowlist). State (2) is exactly a session restored
-    by `restore-sessions.js`: the archive is the session body only, with
-    `adminPasswordHash` stripped, no `adminSecrets` and no `recovery`. A
-    restored CLOSED session is safe (the reset is refused once `closed`
-    exists); an OPEN one can be claimed by anyone who knows its code. Under an
-    enforced `facilitatorGate` the stale-code path also yields an admin hash and
-    proof at a code with no session (`created` stays gated, so the stock client
-    still treats it as non-existent).
-    **Proposed, not done here** — a rules change on the reset path, in TWO
-    halves, and the first alone is not enough:
-    (a) require `adminPasswordHash.exists()` in `_superadminReset`'s write. A
-    reset needs something to reset. It stops the immediate takeover in (1), (2)
-    and the gate case and leaves legitimate recovery alone.
-    (b) It does NOT close (2) by itself: a stranger can still PLANT a recovery
-    code on a hashless session and wait — once the creator keys the session,
-    the planted code opens the reset. So either the recovery write is bound to
-    the creator as well (`!creatorUid.exists() || creatorUid == auth.uid`, as
-    the hash's first write already is), or a restore writes a fresh recovery
-    node for every session it brings back.
-    Both halves are reasoned from the rules — (a) twice, here and in the
-    independent review of #443, which is where (b) comes from — and NEITHER
-    has been run on the emulator. Until they land, do not restore open sessions
-    without re-keying them; and a restored session's old recovery code is dead
-    in any case, because the node is not in the archive.
-    ⚠️ This change removes one accidental mitigation: a session purged BY
-    MISTAKE and then restored used to come back beside its old recovery node,
-    which blocked (2). It no longer does.
+  - **✅ CLOSED IN THE RULES BY #447 — a reset needs a password, and a
+    recovery code is its creator's to write. Two predicates, both trees.
+    ⛔ LIVE ONLY ONCE A DEPLOY HAS RELEASED THE RULES [released: ____ ] — they
+    ship in a `continue-on-error` step, see `Verify:`. #447 left four things
+    open. The first, a takeover route, has its own fix (#451) and its own entry
+    directly below this one; THREE stay open and are listed here.** Before
+    #447 the reset flag (then `sessions/<code>/_superadminReset`) asked only
+    for a
+    matching `recovery/…/code` and a session that was not closed, and the
+    recovery node could be written by any signed-in user wherever there was no
+    node and no password (plus the allowlist, while `facilitatorGate` is
+    enforced). The hash rules' reset branch has no `data.exists()`, so a reset
+    could also set a FIRST hash — round the creator binding on that rule.
+    **Measured on the emulator before the change, identically in both trees**
+    (`tests-e2e/emulator/reset-needs-a-password.spec.js`; its tables carry the
+    BEFORE column, and it is that run, not a recollection):
+    - *no password, somebody else's old recovery record* — the half-created
+      session a code collision leaves: the holder of the old code opened the
+      reset and set the first hash; the creator's own first-hash write was
+      then refused.
+    - *no password, no recovery record, a `creatorUid`* — exactly a session
+      restored by `restore-sessions.js` (the archive is the session body only:
+      marker stripped, no `adminSecrets`, no `recovery`): a stranger wrote a
+      code of their own, opened the reset, set the first hash. Refused only
+      where the session was closed.
+    - *a recovery record with no session at all, under an enforced
+      `facilitatorGate`*: a user off the allowlist opened the reset and set a
+      hash there (`created` stayed gated).
+    **(a)** the reset flag's write requires the session's
+    `adminPasswordHash` to exist — a reset needs something to reset. (The flag
+    has since moved — next entry — and the requirement moved with it.)
+    **(b)** the recovery write requires `!creatorUid.exists() || creatorUid ==
+    auth.uid`, the binding the hash rules' first write already had.
+    **(a) ALONE IS NOT ENOUGH — measured, not argued.** With the rules carrying
+    (a) and not (b), the stranger still PLANTED a code on the restored session
+    (allowed), was refused the reset while there was no password, and reset it
+    as soon as the creator had set one. (b) is what stops the plant. (b) came
+    out of the independent review of #443; my first proposal was (a) alone.
+    **No client change.** Both reset call sites read the marker and issue a
+    reset only when it exists; `createSession()` writes the recovery code in
+    the same batch as `creatorUid`, so it lands before it (none yet) or after
+    it (the writer's own). `tests/reset-needs-a-password.test.js` pins both,
+    and the exact shape of the rules, and that the org rules are the default
+    ones re-prefixed.
+    **⚠️ STILL OPEN — three, each pinned as OPEN in the spec, not implied
+    closed.** (The fourth — the recovery code being readable by every member
+    while a reset was in progress — is the next entry.)
+    - **No `creatorUid`** (a hand-made node, or a session older than the
+      field): the hash rule opens its first password to anyone, so (b) adds
+      nothing there.
+    - **A stale recovery record still resets the session at its code** once
+      that session has a password. No rule can tell a stale record from a
+      fresh one; the purge and the sweep remove them — which is why the 34 the
+      dry run found matter.
+    - **A restored session has no password and no recovery record.** By the
+      rules only its creator can give it one again (measured) — the same
+      account, or for an anonymous creator the same browser. The stock client
+      does offer it: the "set or recover the password" panel on the admin join
+      works without a super-admin key, and with no marker it takes the
+      first-write branch (read from `joinSuperAdmin()`; the rule verdicts are
+      measured, that UI path was not driven). It writes NO recovery record, so
+      a session re-keyed that way has no recovery code. A facilitator who is
+      not that account —
+      another device, or someone who only knew the password — cannot, and
+      needs the operator and the Admin SDK. The recovery code they wrote down
+      works again only if its record is still in the database: the archive
+      does not hold it, and the purge deletes it with the session.
+      (This line used to say the old code "is dead in any case". Not so: a
+      session restored while its record still stands gets its old code back as
+      soon as it has a password.)
+    `Verify:` `node --test tests/reset-needs-a-password.test.js`; and on the
+    emulator, the three cases of `reset-needs-a-password.spec.js`
+    (`PORT=8771 npm run test:e2e:rules -- reset-needs-a-password`). Those test
+    the REPO. For the live system, on the first NON-SKIPPED Deploy run whose
+    commit contains the merge (a skipped run has no log, and a run on an
+    earlier commit prints the same string for the rules it shipped):
+    `gh run view <deploy run> --log | grep -F 'released successfully'` — the
+    only string that means the rules shipped (the step is `continue-on-error`,
+    and `Database rules deployed` is echoed by every run, success or not).
+    Until that has been seen, production still has the old rules and all of
+    the BEFORE column.
+    ⚠️ #443 had already removed one accidental mitigation of all this: a
+    session purged BY MISTAKE and then restored used to come back beside its
+    old recovery record, which blocked the stranger's write. (b) now blocks it
+    on purpose.
+  - **✅ CLOSED IN CODE BY #451 — THE RECOVERY CODE WAS READABLE BY EVERY SESSION
+    MEMBER WHILE A RESET WAS IN PROGRESS (found by the independent review of
+    #447). ⛔ LIVE ONLY ONCE BOTH HALVES HAVE SHIPPED — the rules AND the
+    shell [rules released: ____ · shell: v___ ]. ⚠️ ONE RESIDUAL, DELIBERATE:
+    a code that leaked before then stays valid while its session is open.**
+    A reset is opened by writing a flag that carries the session's recovery
+    code IN CLEAR — the rule compares it. The flag used to be
+    `sessions/<code>/_superadminReset`. That node had no `.read` of its own,
+    so it inherited the session's, which any member has, and membership is
+    self-claimed (`members/<own uid>`). So anyone signed in who knew a session
+    code joined, listened on that node, and was handed the code the next time
+    a facilitator used "forgot password"; from then on, while the session was
+    open, they could open a reset themselves, overwrite the hash and write
+    their own proof — which is all the creator-or-proof predicates ask for.
+    The record is write-once, so a code that has leaked cannot be replaced.
+    **Measured on the emulator before the change, identically in both trees**
+    (`tests-e2e/emulator/reset-flag-unreadable.spec.js`; its table carries the
+    BEFORE column, from a run of the then-current client against #447's
+    rules): the watcher's listener received the real recovery code from the
+    REAL client's reset panel, and a flag in the old node naming a user
+    opened the hash for that user. One more thing was measured by the
+    throwaway probe that preceded the spec, the same day and under the same
+    rules, and is not in that column: a user who had not even joined deleted
+    the facilitator's flag, and the facilitator's hash write was then refused.
+    (The spec now shows the reverse on the new node: a stranger can neither
+    delete nor overwrite another user's flag.)
+    **No predicate could fix it** — a read that cascades cannot be revoked at
+    a deeper path, so nothing under `sessions/` would do. What changed:
+    - **Rules.** The flag is `adminSecrets/<code>/reset/<uid>` (org:
+      `adminSecrets/orgs/<slug>/<id>/reset/<uid>`) — a tree with no `.read`
+      anywhere — and holds `{ requestedAt, code }` only: the facilitator's
+      display name and the `uid` field are gone, the uid is the KEY. Every
+      write to it, a delete included, must be by that uid, so nobody can
+      remove or replace another user's flag. The four hash rules read
+      `reset/<auth.uid>`: only the user who opened a reset can use it (the R3
+      recovery-race binding, now structural rather than a field to compare).
+      The old node accepts a delete and nothing else, and no rule reads it.
+    - **Client.** Both call sites: `joinSuperAdmin()` in script.js and the
+      change-password handler in the lazy script-admin.js. No UI change.
+    - **Ops, for a flag that a failed removal left in the OLD node** (it holds
+      a code): the backup strips it, the restore withholds it (an archive
+      taken earlier may hold one for its 90 days), and the purge writes a null
+      there for every session it keeps. BLIND, in an update of its own after
+      the purge: the PURGE may read, per session, the identifiers and the two
+      dates and nothing else (`tests/ops-transfer-notice.test.js`; the backup
+      and the export are disclosed full copies, a different matter), so it
+      does not look first — `tests/reset-flag-unreadable.test.js` RECORDS its
+      reads and fails on a third. Its log line counts paths written, not
+      leftovers found. A dry run writes nothing; a run the backup gate refuses
+      clears nothing. The facilitator's own archive download
+      (script-admin.js) strips it too — it stripped only the password marker.
+      The backup, the restore and the purge take the node's name from
+      `scripts/lib/reset-flag.js`, whose header also says WHEN ALL THIS CAN BE
+      REMOVED: the purge's null and the backup's strip once a let-through
+      purge run after the rules release has logged `cleared`; the restore's
+      withholding 90 days after this change reached main, when the last
+      archive taken before it has expired. A state to check, not a date to
+      wait for.
+    **⚠️ NOT CLOSED, by decision and not by oversight (user, 2026-10-08): no
+    rotation.** A code somebody obtained before both halves were live resets
+    that session for as long as it is open — a reset does not issue a new
+    code, and the record is still write-once. Closing the session stops any
+    NEW reset being opened (measured: refused); one opened in the seconds
+    before the close keeps its 30 s, because the hash rules look at the flag
+    and not at `closed` — as they always have. The exposure empties on
+    the retention clock: it is over once every session that existed before the
+    RULES were released has been purged — a state, not a date. (Not "before
+    the deploy": a session created after the site is published and before the
+    rules step succeeds can still have its code exposed by a browser on the
+    old shell.)
+    **⚠️ TWO HALVES. A BROWSER THAT HAS ONE OF THEM IS REFUSED RATHER THAN
+    LEAKING — BUT ONLY THE RULES RELEASE ENDS NEW EXPOSURE**
+    (the two mixed states measured as raw writes — cells 3 and 4 of the
+    spec's table; the third bullet is `main` as it was):
+    - *new rules, a browser still on the old shell* — it writes the code to
+      the old node, is DENIED, and nothing is stored or delivered to a
+      listener. The panel then says "That recovery code doesn't match this
+      session", which is false and is the only message it has. **If a
+      facilitator reports that a correct recovery code is refused just after
+      this ships, have them reload twice before anything else** (runbook §10,
+      rewritten in the same change — it still said a super-admin key was
+      required and described an audit trail that never existed).
+    - *new shell, old rules* (the gap between Hosting and the rules release,
+      or a rules step that failed — it is `continue-on-error`): the old rules
+      declare nothing at `adminSecrets/<code>/reset`, so the write is denied.
+    - *old shell, old rules* — NOT refused. A browser still on its cached
+      shell, in that same gap, completes its reset through the old node and
+      hands the code to a listener exactly as before. The new shell stops
+      nothing for such a browser, and every deploy passes through this state
+      (Hosting first). "Either half alone refuses" was true per browser and
+      false per deployment (found in review): do not date the exposure as
+      ended from the Hosting deploy — only from `released successfully`.
+    `Verify:` `node --test tests/reset-flag-unreadable.test.js`; on the
+    emulator `PORT=8771 npm run test:e2e:rules -- reset-flag-unreadable` (four
+    cases: both trees, the real client's reset panel, and the purge's update
+    sent by the real Admin SDK). Those test the REPO. For the LIVE system,
+    three separate things: **rules** — on the first non-skipped Deploy run
+    whose commit contains the merge,
+    `gh run view <deploy run> --log | grep -F 'released successfully'`;
+    **client** — `curl -s https://canamed-69785.web.app/script.js | grep -c
+    _superadminReset` prints **0** (the shipped client no longer names the old
+    node; on 2026-10-08, before this shipped, it printed 4 — judge it by the
+    number, `grep -c` exits 1 on a zero); **purge** — the first nightly run
+    after the merge logs `Leftover reset flags: cleared <n> path(s)`
+    (`gh run view <cleanup run> --log | grep -F 'Leftover reset flags'`).
 - **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
   default).** A top-level admin-only node (`.read:false`, `.write:false` — set
   only via the Console/admin-SDK) that can restrict who may create sessions.
@@ -1531,15 +1696,19 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   == true` now sits on the first-write of `created`, `creatorUid`,
   `adminPasswordHash` (initial-set), `adminSecrets` hash (initial-set), **and the
   `recovery/…/<sessionId>` code write** — in **both** the `sessions/$id` and
-  `orgs/$slug/sessions/$id` trees (**10 rules**). The recovery-code write is
+  `orgs/$slug/sessions/$id` trees (**10 rules**; 16 since 2026-10-08, when
+  `controller`, `workshopLabel` and `sections` took the recovery record's rule —
+  see "A session's configuration is its creator's to write" below). The recovery-code write is
   itself a bootstrap field (written once at creation, before any hash), so gating
-  it closes the recovery-bootstrap bypass. The `_superadminReset` write and the
-  hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
+  it closes the recovery-bootstrap bypass. The reset flag's write (now
+  `adminSecrets/…/reset/<uid>`; it was `_superadminReset` under the session)
+  and the hash rules' **recovery branch** stay deliberately ungated —
   they act on already-established sessions (whose recovery code was written by
   their allowlisted creator) and must keep working under enforcement.
-  (⚠️ "already-established" is the INTENT, not what the rules enforce — measured
-  2026-10-07: the reset also runs on a session with no password and on a code
-  with no session. See the recovery bullet above.) **Default
+  (Until #447 "already-established" was the INTENT and not what the rules
+  enforced: the reset also ran on a session with no password and on a code with
+  no session. It now requires the session to have a password — see the
+  recovery bullet above.) **Default
   (node absent) → `enforce.val()` is null → creation unchanged** for every
   existing facilitator; nothing is gated until an operator flips it on. To
   soft-launch to a vetted allowlist: set `facilitatorGate/enforce = true` and
@@ -1553,7 +1722,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `tests-e2e/emulator/rules-smoke.spec.js` (functional: open by default,
   allowlisted uid creates, non-allowlisted uid denied on `created`/`creatorUid`/
   `adminPasswordHash`/`adminSecrets` hash/**recovery code** in **both** trees, and
-  an established session's `_superadminReset`→hash-overwrite recovery chain still
+  an established session's reset-flag→hash-overwrite recovery chain still
   succeeds under enforcement).
 - **Shared-library moderation primitive (Phase 4d, rules — client wiring PENDING).**
   Three top-level nodes support reporting + takedown of `sharedScenarios` without
@@ -1685,7 +1854,7 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   - **Stale-proof hardening (PR #223 review):** all admin predicates check
     `adminSecrets/<code>/proof/<uid>.val() == …/hash.val()` (proof equals the
     CURRENT hash), not `.exists()` — so a proof written against an old password
-    auto-invalidates when `_superadminReset` rotates the hash. Fixed on the
+    auto-invalidates when a password reset rotates the hash. Fixed on the
     `closed` rule too (it previously used `.exists()`).
 - Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
   points, requires uidMembers membership). A teammate with dev tools can
@@ -1699,6 +1868,155 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   server-side. Until then accepted: Module A is formative, so the incentive
   to self-award is near-zero.
 
+### A session's configuration is its creator's to write (2026-10-08) — fixed in the rules; confirm the deploy before calling it live
+
+Eight nodes under `sessions/$sessionId` (and the org mirror) are written once,
+when a session is created: `controller`, `workshopLabel`, `scenarioId`,
+`sections`, `sectionBodies/$slot`, `modules`, `scenarioCustomJson`,
+`scenarioRef`. The rule on each was `auth != null && !data.exists()` — once, by
+ANYONE signed in, at any time. Whatever the creator left unset belonged to the
+first visitor who knew the code, and write-once then stopped the creator from
+undoing it.
+
+- **What the create form leaves unset** (run, not read): it always writes
+  `controller` and `sections`, and `workshopLabel` only when one is typed. So
+  on a session created by the current form `scenarioId`, `modules`,
+  `scenarioCustomJson` and `scenarioRef` were open, and the label when blank.
+  A session created by a shell from before 2026-09-03 has no `controller`; one
+  from before the section picker (end of July 2026) has no `sections`.
+- **What a stranger's write did — measured on the emulator on 2026-10-08**,
+  real create form, a second browser CONTEXT that knew only the code, a
+  participant already in the room at the PBL stage. (The probes are not in the
+  repository; the committed spec holds the denials.)
+
+  | written by the stranger | participant who reloads, or joins after |
+  | --- | --- |
+  | `modules` | nothing — the section pick takes precedence |
+  | `scenarioId` (another built-in) | nothing visible; the other case's cast is ambient until a section is on screen |
+  | `scenarioCustomJson` with `format:"branched"` | the PBL stage loses its left column, vignette and patient chat |
+  | `scenarioCustomJson` with a malformed `case` | page error; left on Welcome while the room is on stage 1 |
+  | `scenarioRef` to a scenario the stranger shared | as `scenarioCustomJson` — and the stranger can keep editing it |
+  | `controller`, session with none | join screen: "‹string›, the data controller for this session, collects…" |
+  | `sections` + `sectionBodies/1`, session with no pick | join screen announces the stranger's section; the stage flow becomes that one section |
+
+  A participant who did NOT reload saw nothing in any of them: the
+  configuration is read once, at load. And AT THE PBL STAGE of a session that
+  has a pick, the model's persona stayed the section's own — the stranger's
+  `characters` were not in the prompt (the request was captured). That was not
+  measured at Welcome or Wrap-up, where the ambient cast is what the chat
+  holds (the hazard recorded under "Scenario characters").
+- **The rules now — two of them, both trees.** All eight: once, and only while
+  the session has no password.
+  - `controller`, `workshopLabel`, `sections` — **the recovery record's rule,
+    word for word**: `!adminPasswordHash.exists() && (!creatorUid.exists() ||
+    creatorUid == auth.uid) && <creation gate>`. The creator; or, while the
+    session has no creator yet, whoever may create one.
+  - `scenarioId`, `modules`, `scenarioCustomJson`, `scenarioRef`,
+    `sectionBodies/$slot` — `creatorUid == auth.uid &&
+    !adminPasswordHash.exists()`. The creator and nobody else.
+- ⚠️ **Why two, and why script.js was NOT changed.** `createSession()` issues
+  `created`, `recovery`, `creatorUid` and the form's configuration in ONE
+  `Promise.all`. A rule requiring the claim to have LANDED first holds only if
+  the database applies one client's writes in the order it issued them. That
+  is almost certainly so, and the emulator bears it out — but it cannot be
+  shown on production before the rules are live, they deploy at once, and a
+  wrong guess is every facilitator unable to create a session (the #438
+  lesson: list what a REFUSAL does). So the three fields that ride the batch
+  do not depend on it. The other five can be creator-only with no such bet:
+  the only caller passes null for four of them, and the authored bodies are
+  chained after the batch has been acknowledged.
+  `tests/session-config-creator-bound.test.js` pins both facts. **Bring a
+  scenario back into the create batch and that test fails** — give the field
+  the in-batch rule, or chain it; do not delete the assertion.
+- **What a session with NO creator gets — decided, not left over.** No creator
+  and no password is a code nobody has claimed: the three in-batch fields are
+  the first writer's (that is what creating a session is, and the creation
+  gate applies), the five others are refused to everybody until somebody holds
+  the claim. No creator but a password — the shape from before `creatorUid`
+  (2026-05-27) — is closed to everyone while the password marker stands. (A
+  holder of that session's recovery code could remove the marker through the
+  reset branch, and the code would then be anyone's to claim. Read from the
+  rules; no such session should have outlived the 90-day purge.)
+- **No password-proof branch, unlike the Phase 4a nodes.** Those are written
+  while a session runs; these are written before it has a password, when no
+  proof can exist. Nothing in the product writes them later, and
+  `ARCHITECTURE/data-model.md` describes them as "not changeable by admin
+  mid-session". One exception, and it is the creator's: whoever holds the
+  recovery code can remove the password marker through the reset branch
+  (`.validate` does not run on a delete), which reopens the window for the
+  creator alone. Read from the rules, not run.
+- **Why nothing caught it.** Three unit tests compared the rule with the exact
+  string `auth != null && !data.exists()` — green on the defect, red on the
+  fix. And every hardening pass since Phase 4a worked from a list of nodes
+  somebody had thought of; "write-once" read as "safe". The unit test now
+  DERIVES the list: it parses each `.write` (and the `.validate` beside it)
+  into its `&&` / `||` structure and asks whether there is a way through that
+  never mentions `auth.uid`. **23 writes per tree have one**, each listed in
+  that file's `OPEN` map with its reason:
+  - 5 that are creating a session (`created`, `adminPasswordHash`'s first
+    write, and the three in-batch fields);
+  - 10 that are open for a client id nobody has claimed yet (`pool`, `poll`,
+    `presence`, `typing`, `ballots`, `observers`, `roleChoices`, `tests` ×2,
+    `survey`) — the tolerant first-write branch. ⚠️ **What is on record as
+    accepted is narrower than what the rules allow** (found in the review of
+    this change). "Accepted by design" and DPA R3 describe a brief window
+    before the join chain commits the mapping. But an id the writer INVENTS
+    is never claimed, so these stay open for as long as the session does, to
+    anyone signed in who has the code — and the eight under `rooms/` name no
+    room, so in any room: a pool entry with a consent record, a ballot the
+    client counts, `tests` and `survey` rows the research export reads. Read
+    from the rules, not run. Nobody has decided to accept THAT; DPA G14
+    item 5 puts the question to the controller;
+  - `_superadminReset`, whose DELETE branch names nobody: any signed-in
+    visitor can remove a reset in progress on an open session. Not this
+    change's;
+  - and the 7 below.
+
+  It answers "does every way through name the writer", not "is the tie
+  enough": a first version matched ties by regex and counted the ten
+  client-id nodes as bound (found in review).
+- ⚠️ **NOT FIXED, found by that derivation — a different defect.** Seven room
+  writes name nobody at all: `teamName`, `roleplayRound`, `callForHelp`,
+  `sections/$slot/revealed/$itemId`, `moduleA/revealed/$itemId`,
+  `events/$pushId` and `answerReplies/…` (the last was already recorded). Run
+  on the emulator on 2026-10-08: a visitor who never joined wrote all seven
+  into a room of an open session — ALLOWED each time. The `roomOf` gate their
+  neighbours have would bind a writer to the ONE room they joined; it would
+  not keep out somebody who has the code, because joining is three writes.
+  Each has a client call site to check first.
+- ⚠️ **What the fix does not do.**
+  (a) It does not repair a session that already carries a stranger's value,
+  and nothing can tell one from the creator's — these nodes record no author.
+  Production was not queried. The purge bounds it: 30 days after closing, 90
+  after creation.
+  (b) **Seeding an unclaimed code is narrowed, not closed.** On a code with no
+  creator and no password, a visitor can still write `controller`,
+  `workshopLabel` or `sections`. A facilitator whose creation then draws that
+  code is refused at their own write of the same field and sees "Could not
+  create the session"; a field their client does NOT write — a blank label,
+  or the controller from a shell older than 2026-09-03 — would be carried
+  into the session. The odds are the number of seeded codes over 31^6
+  (887,503,681), and the nightly purge removes a session with no dates. The
+  five content fields cannot be seeded at all.
+  (c) A session restored by `restore-sessions.js` comes back with its
+  `creatorUid` and without its password, so its original creator can write
+  its unset configuration again until it is re-keyed. Nobody else can.
+  (d) The session body goes to the nightly backup whole, and the research
+  export passes all eight through as written — except `ownerUid` inside
+  `scenarioRef`, which the transform removes from version 2 (run on the
+  transform, not on the job) — so a value written before the fix travels
+  with its session.
+- **Four older emulator tests wrote `modules` / `sections` / `sectionBodies`
+  on a code nobody had claimed.** They now claim it first. A rules test that
+  seeds a session by hand must write `creatorUid` before the five creator-only
+  nodes, and every one of the eight before the password.
+
+`Verify:` `node --test tests/session-config-creator-bound.test.js`, and on the
+emulator `PORT=8791 npm run test:e2e:rules -- session-config-creator-bound`.
+Those test the REPOSITORY. For the live rules: the deploy step is best-effort,
+so read its log — `gh run view <deploy run> --log | grep -F 'released
+successfully'` — and do not take a green Deploy as proof.
+
 ### 2026-05-30 multi-agent security review — outcomes
 
 **Fixed (committed + tested):**
@@ -1708,6 +2026,135 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   the pure, unit-tested `scripts/lib/pseudonymise.js` (drops chat + facilitator
   transient fields, redacts unknown names, collision-safe, buckets university).
   Also `cleanup-stale-sessions.js` redacts `e.message` in `CLEANUP_QUIET` mode.
+  - ⚠️ **"Closed" was wrong: the export still carried REAL NAMES, account uids
+    and (where a session had any) e-mail addresses — ✅ fixed in the transform
+    2026-10-08 (version 2); ⛔ the files already written are NOT changed; and
+    two things it still exports are decisions nobody has taken.** Found by
+    RUNNING the transform and then the real export job — nothing had ever read
+    the file the job writes.
+    - **(a) Names, inside a string — the big one, and the 2026-05-30 review
+      missed it.** `logEvent()` writes a room event as
+      `{kind, by, at, payload: JSON.stringify({by: myName, university, len…})}`
+      for every answer, edit, deletion and hypothesis, and for a manual score
+      with the FACILITATOR's name. The walker rewrote the `by` beside it and
+      never opened the string: `"by":"Student-A"` next to
+      `"payload":"{\"by\":\"Ann Dupont\",…}"`. Every contributor's real name
+      and university, **decliners included**, in every export since the first.
+    - **(b) Auth uids outside the two mapping tables:** `creatorUid` (the
+      facilitator), `scenarioRef.ownerUid` (the scenario's author; few sessions
+      — the client stopped writing `scenarioRef` on 2026-07-31) and the key of
+      every `roomOf/<uid>` entry (a participant's, with their clientId inside:
+      the join `clientMapping` was dropped to withhold, the other way round).
+      `roomOf` entered the rules 2026-08-03 (#268), after `UID_KEYED` was
+      written; the erasure planner listed it (`BY_UID`), the pseudonymiser
+      did not.
+    - **(c) A node the rules no longer declare:** `sessions/<code>/mail/<id>`
+      `{to, subject, text}`, the queue of the mail function removed
+      2026-09-24. A rule being deleted does not delete what it guarded.
+    - **Fix (`TRANSFORM_VERSION = 2`):** a `payload` is parsed, scrubbed by the
+      same walk, re-serialised — and REMOVED if it is not what a client
+      writes: over 500 chars (the client's own cut), not JSON, or JSON that is
+      not an object (an array is not one). ⚠️ The first version parsed any
+      length and let `walk()` throw: `events/$pushId` validates its own
+      `payload` to 500 chars and nothing else, so a visitor with the code
+      could write `z: { payload: "[[[[…" }` nested thousands deep, and the
+      RangeError stopped the export of EVERY session, nightly (found in
+      review 2026-10-14, run, fixed before it shipped). **Opening a string
+      gives a walker depth the database never could (RTDB stops at 32
+      levels): bound it, and never let it throw past the session.**
+      ONLY `payload` is opened: `scenarioCustomJson` / `sectionBodies` are JSON
+      strings too and their `name` keys are the case's characters.
+      `creatorUid`, `ownerUid`, `roomOf` dropped; `mail` dropped at the ROOT
+      only (a content id may be called "mail"). `roomOf` is dropped, NOT
+      rekeyed like `members`: two students on one browser are two pool rows
+      under ONE uid, `roomOf` is written once per uid, and rekeying put one
+      student's pseudonym on the other's row — the first version of this fix
+      did exactly that. `pool/<cid>/room` already says who was in which room.
+      The walk now also continues beneath a rekeyed `members`.
+    - **The file says which transform wrote it** (`transformVersion`; absent =
+      version 1). **Never date this boundary by the calendar:** the job runs
+      nightly on whatever `main` holds, so the day a fix is written, the day
+      it merges and the day a file is first written by it are three days. The
+      first draft of the note said "exports written before 2026-10-08" while
+      the PR was still open at that day's run time.
+    - **Why no test caught any of it, and what the new ones cannot see.**
+      (1) Nothing RAN the job: `tests/pseudonymise-export-run.test.js` now
+      does, against the in-memory database, and reads the file. (2) Every
+      fixture filled `payload` with nothing or with a marker. **Fill a field
+      with what the CLIENT writes there** — my own "run every field" pass put
+      an opaque marker in `payload`, filed it under free text and reported the
+      job clean; an independent reviewer reading `script.js` found the names.
+      (3) `tests/pseudonymise.test.js` pinned the uid list AS IT THEN WAS.
+      `tests/pseudonymise-uid-coverage.test.js` now DERIVES uid positions from
+      the rules (a `$uid` key or any wildcard compared with `auth.uid`, a
+      value compared with `auth.uid`, a field named `uid` / `…Uid`) and runs
+      the function on each. It NARROWS the gap: it cannot see a field no rule
+      names, a node that has left the rules, a uid under a name that says
+      nothing, or a name inside a string — (a) and (c) are exactly those.
+    - ⛔ **The stored exports are untouched, they hold names, and that is not
+      code.** Run list: 37 successful runs to Scaleway (2026-09-02 → 10-07;
+      the newest held 4 sessions, 5 participants), 85 to the Google bucket
+      (2026-05-30 → 08-26). Whether the Scaleway bucket really has the 90-day
+      lifecycle rule, and whether the Google bucket still exists, is NOT
+      established from the repo. Deleting, rewriting or leaving them, and
+      whether this is to be assessed as a breach, is the operator's decision
+      as controller of the export — DPA Annex VI **R10** item 1. No tool
+      rewrites a stored export.
+    - ⚠️ **A participant who DECLINED research use is NOT erased from the
+      export, and that is NOT fixed.** Their pool row and the nodes KEYED by
+      the ids the session records as theirs go; what they wrote into the shared lists (answers, replies,
+      hypotheses, deleted answers) is exported under `REDACTED-NAME` with
+      their `cid`. DPA G1 said "erased"; it now carries the correction and a
+      `[TO DECIDE]`. The export-run test pins the present behaviour AS OPEN —
+      if it goes red because the entry is gone, the decision was taken: update
+      G1 and R10. Same family, closed before version 2 shipped: a decliner's
+      ballot was removed only via `stableIdMapping`; it now also goes by the
+      `stableId` in their own pool row. ⚠️ **Two wrong versions of that fix
+      were caught in review, both run:** (1) the row's stableId was added to
+      the keys deleted at EVERY depth — `pool/<cid>/stableId` is validated
+      by no rule, so `"rooms"` or a consenting participant's clientId took
+      that tree with it; (2) the row was believed only when the table did not
+      tie the stableId to another account — and the table is first-come, so
+      a decliner's ballot stayed. Now: stableIds are removed UNDER `ballots`
+      ONLY (the one node the client keys by stableId), and the row is
+      believed unconditionally; the cost — a declining row naming another's
+      stableId removes ALL of that participant's ballots, every vote in every
+      room — is pinned by a test. **A key deleted at
+      every depth must come from a source nobody else can write.** The
+      clientId and uid keys still are deleted at every depth, and a
+      consent-less pool row keyed `rooms` still removes the rooms tree (on
+      `main` too; for the consent-scope change).
+    - ⚠️ **`stableId` is still exported as written — do NOT describe this
+      export as free of cross-session identifiers, and do NOT repeat that the
+      join needs it.** For a signed-in participant it IS the auth uid. I first
+      wrote that rewriting it "breaks the pre ↔ post ↔ questionnaire join";
+      the review showed that is false: `tests/<cid>/{pre,post}` and
+      `survey/<cid>` are in ONE session, so a stand-in per distinct stableId
+      per session keeps them all (prototyped on the output: one signed-in
+      participant, two tabs → one stand-in everywhere, no uid left). The only
+      join it would break is the PLANNED one to an external questionnaire via
+      a printed code (`study_protocol_SAP.md` §9, unticked in §15) that the
+      client does not show. Not changed: it is the study's join key, so it is
+      Basile's call (R8, R10 item 3). The coverage test lists every place it
+      is carried so the list cannot grow unnoticed.
+    - ⚠️ **NOT fixed, separate change: the dashboard's "Pseudonymise names in
+      export"** (`pseudonymiseTree()` in `lib.js`) has the SAME name leak in
+      event payloads and removes no uid at all (run). Its comment says it
+      matches the nightly export; it stopped matching 2026-05-30. `lib.js` is
+      a shell asset, so that fix carries a shell bump.
+    - **Also seen, not changed:** `members` is keyed by a uid's LAST pool
+      row's pseudonym while names keep the FIRST, so one account behind two
+      rows with one name is `Student-A` in the pool and `Student-B` in
+      `members` (run). Free text that passes is longer than DPA R7 listed; R7
+      now has the measured list, the three links included.
+    - `Verify:` `node --test tests/pseudonymise.test.js
+      tests/pseudonymise-uid-coverage.test.js
+      tests/pseudonymise-export-run.test.js`. That tests the REPO. The live
+      job checks out `main` when it runs:
+      `gh run list --workflow pseudonymise-export.yml --limit 1 --json headSha,conclusion,createdAt`
+      — `headSha` at or after the merge commit means that run's file is
+      version 2. The file itself is the authority: `"transformVersion": 2`
+      near its top.
 - **Per-room write gating (P1)** — added the `uidMembers` gate to
   `score/auto`, `score/penalties`, `moduleA/hypotheses`, `moduleA/promptReplies`,
   `moduleB/exchangeReplies`, `votes/committed` (sessions + orgs) so a member of
@@ -2286,12 +2733,109 @@ observed — LOCAL mode models no rules — so these are static findings:**
     downloading the archive again, and the session STAYS OPEN: participants
     never see it end, it takes the 90-day path, and it never reaches the
     research export, which takes closed sessions only. All of that now needs a
-    clock more than 12 h wrong. **If a facilitator reports "can't create a
-    session" or "can't close", check their clock first.** The real fix is
-    `ServerValue.TIMESTAMP` for these two writes (the R3-D1 pattern already
-    used for `_superadminReset`) — a client change, shell bump, LOCAL mode must
-    not be handed the sentinel object, and it does not help a browser still on
-    a cached shell, which is why the window was widened first.
+    clock more than 12 h wrong — **and, since the client fix below, a browser
+    still running a shell from before it.** If a facilitator reports "can't
+    create a session" or "can't close", have them reload first, then check
+    their clock.
+  - **✅ THE CLIENT NOW SENDS THE SERVER'S TIME — fixed in code 2026-10-08,
+    for EVERY date it stores, not only these two.** "In code" is the claim: it
+    reaches a browser when that browser loads the shell carrying it (the
+    version is assigned at merge — read `SHELL_VERSION` in `sw.js`, not this
+    line), and a browser on an older shell sends its device clock exactly as
+    before. **That is why the ±12 h window stays. Do not narrow it on the
+    strength of this change.**
+    - **The defect was much wider than create and close.** The rules compare
+      a client-supplied date with `now` 185 times; 92 of those allow five
+      seconds of lead and no more, most with a floor as well (2 min for
+      `members` and `pool`, 30 min for an answer, ±5 s for `stageAt`). The
+      client sent `Date.now()`. So a participant whose laptop was a minute
+      fast could not JOIN: `members` and `pool` were refused, the waiting
+      screen showed anyway, and a `permission_denied` in the console was the
+      only trace. Answers, votes, chat turns, stage timers and withdrawals
+      went the same way. Reproduced on the emulator before any code changed,
+      with the page's clock moved: at ±1 h `created` landed an hour wrong; at
+      ±13 h the create form and "Sessions you created → Close" both failed.
+    - **How.** `serverNow()` in `lib.js` is `Date.now()` plus the offset the
+      SDK publishes at `.info/serverTimeOffset` (subscribed in `dbInit()`,
+      shared mode only; the scenario editor is a separate page and keeps its
+      own, subscribed by its first save and NOT at page load — touching the
+      database is what opens the realtime connection, and an editor tab left
+      open would hold one of the plan's simultaneous connections for
+      nothing). A NUMBER, deliberately not `ServerValue.TIMESTAMP`: the
+      placeholder is an object until the server replaces it, LocalDB would
+      store that object as the date, and some sixty sites read back, sort by
+      or subtract what they wrote. The placeholder stays where it already was
+      (the password-reset flag, R3-D1). A stored date is also COMPARED on the
+      server's clock now — minutes on a stage, the "facilitator may be
+      offline" banner, whether a chat reply is new. And the certificate PDF
+      prints that clock's day. On the FIRST download that is the day its
+      published record carries and `verify.html` shows; the record is
+      write-once, so a later download prints its own day and the record
+      keeps the first — as before this change, which fixed the clock and
+      not which day.
+    - **To fake a device clock in a test, replace `Date` itself**, not
+      `Date.now()`: the SDK measures its offset with `new Date().getTime()`,
+      so overriding `Date.now()` alone builds a device that cannot exist — the
+      page sees a wrong clock, the SDK an honest one, and every write is
+      refused for a reason no real device has. And a callback passed to
+      `.on("value")` runs SYNCHRONOUSLY when the value is cached, before the
+      handle `.on()` returns can be assigned: the first version of the control
+      test hung on exactly that, and read as "the SDK is broken on a slow
+      clock".
+    - **Offset not known = device clock.** It arrives with the connection
+      handshake, before any read can resolve, and every flow that stores a
+      date reads first (the code probe, the uniqueness check, the head-count
+      before a close). That is an observation about today's flows, not
+      something a test enforces: a write composed before any read is dated by
+      the device. A device whose clock is CHANGED mid-session keeps the old
+      offset until its socket reconnects.
+    - **Every lazy chunk that dates a write carries a one-line fallback**
+      (`if (typeof serverNow !== "function") window.serverNow = …`). After a
+      deploy, a page already past the splash is not reloaded, and it asks for
+      its lazy chunks from the network: NEW chunk, OLD `lib.js`. Without the
+      line, the dashboard on such a page could not close the session and the
+      chat would not start. **Any new global a lazy chunk takes from the
+      eager shell needs the same thought** — `sw.js` matches cache entries
+      with `ignoreSearch: false`, so a precached chunk is never what answers
+      a `?v=` request.
+    - **The helper is in `lib.js`, not `pure-utils.js`**, because
+      `pure-utils.js` is also the verify page's and carries that page's own
+      version marker: touching it forces a second bump. For the same reason
+      `minsSince()` there was left alone and now has no caller in the app;
+      the dashboard uses `minsSinceStored()`.
+    - **The two close messages** no longer blame the connection, or tell a
+      facilitator to run `firebase deploy`, when the SERVER refused the write
+      (`code === "PERMISSION_DENIED"`); they say it refused and what to do.
+      **A refusal has more than one cause, so the list checks before it
+      speaks:** a session ended from elsewhere since the list was drawn is
+      refused too (`closed` is write-once), and is reported as already
+      closed and pruned — the first version told its facilitator to open it
+      with the password and end it from the dashboard.
+    - **Still open — proposed on the PR, not done:** a refused `created` still
+      leaves a partial session, because the create batch issues its writes
+      together. Awaiting `created` before the rest would stop that; it changes
+      the ordering every session creation passes through. The create form's
+      own message belongs with it: it still says "check your connection" for
+      any failure, a rules refusal included. And the dashboard still
+      downloads the archive again on every retry of a failed close.
+    - `Verify:` `node --test tests/server-time.test.js` — the helper; an
+      INVENTORY of the device-clock reads left in the client, so a new one
+      fails until someone says what it is for; and the dated fields, derived
+      from the rules. **The inventory is a TEXT check, and sees what is
+      spelled:** `Date.now`, and any `new Date` with no argument that is not
+      formatted on the spot. Its first version listed the ways of turning a
+      Date into a number instead, and a review put `(new Date()).getTime()`,
+      `new Date() - 0` and `Date.parse(new Date())` into `createSession()`
+      with the suite still green. It flags the source now, not the
+      conversion. A clock reached through something that does not spell it —
+      an alias beyond the plainest, a helper in another file, a Date object
+      handed in — still gets past, and always will. For the fields it
+      exercises, the emulator spec is what holds: there the date is read
+      back from the database. `tests-e2e/emulator/device-clock.spec.js`
+      — the real client with its clock ±1 h and ±13 h creates, joins,
+      advances, writes and closes, every refusal paired with an allow. Those
+      test the REPO. Live: set a device's clock an hour ahead, join a session
+      and read `pool/<clientId>/at`. Not done here — it needs a session.
   - **Purge (the half that closes it — a rule cannot reach a session already in
     the database):** `scripts/lib/session-retention.js` treats a date more than
     24 h ahead as impossible and the session as due. The tolerance is a day on
@@ -2320,7 +2864,9 @@ observed — LOCAL mode models no rules — so these are static findings:**
       otherwise queried.
   - **Still unbounded, and NOT read by any deletion job today:** `summary.at`,
     `pool/$cid/consent/at`, `users/$uid/history/$code/joinedAt`. Bound one
-    before a retention job starts reading it, not after.
+    before a retention job starts reading it, not after. (The client dates all
+    three from the server's clock since 2026-10-08; the RULES still accept any
+    number, and it is the rules a retention job would be relying on.)
 - `answers/.../edits/$editId` has no explicit owner check (possible
   collaborative-edit by design — decide + document).
 
@@ -2344,7 +2890,12 @@ observed — LOCAL mode models no rules — so these are static findings:**
 **Round-4 review (2026-05-30) — verification pass on R3 + two residuals fixed:**
 - The R3 recovery-race fix was confirmed **correct + complete** (uid binding on
   all 4 hash rules, code-gate intact, no forge path; supply-chain, eval removal,
-  retentionUntil all re-verified). Two residuals found and fixed:
+  retentionUntil all re-verified). ⚠️ **"Code-gate intact, no forge path" did
+  not hold, and the reviews of that day did not see why:** the gate compares a code the
+  client has to PRESENT, and until 2026-10 it presented it in a node every
+  member of the session could read. Nobody needed to forge a code they could
+  read. See "THE RECOVERY CODE WAS READABLE BY EVERY SESSION MEMBER" under
+  Known security follow-ups. Two residuals found and fixed:
   - **Initial-set race (MEDIUM)**: the `!data.exists()` branch of the four hash
     rules wasn't uid-bound — an attacker could race the create-flow gap to set
     the admin hash first. Now guarded by `creatorUid == auth.uid` (creatorUid is

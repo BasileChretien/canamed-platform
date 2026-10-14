@@ -800,6 +800,42 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     This is the reclaim the entries above call owed, in its cheapest form:
 //     it buys room and makes nothing lazy. Moving the account UI out of the
 //     eager file is still the structural answer, and still not done.
+//   2026-10-08 (fifth entry): CAP UNCHANGED (326). #448: on the front page the
+//     wordmark and the tagline are capped to their column, so a larger default
+//     font size no longer scrolls the page sideways; the selects carry paint
+//     containment; a history row may break its label. Same method, against
+//     main at v188: style.css +4 B, first-party 325.03 -> 325.03 KB (+5 B).
+//     The cap costs about 116 B; a comment block it made untrue, and shorter
+//     wording, paid for it. MARGIN ~0.97 KB.
+//   2026-10-08 (sixth entry): CAP UNCHANGED (326). #449: every stored date a
+//     rule bounds is read from the server's clock (`serverNow()` in lib.js —
+//     the device clock plus the offset the SDK measures), so a device with a
+//     wrong clock can join, write and close; and "Close" says so when the
+//     server refuses it. Same method, against main at v189: lib.js +160 B,
+//     script.js +39 B, i18n.js +34 B (one new string), first-party
+//     325.03 -> 325.26 KB (+233 B). None of it can be lazy: the helper is
+//     called by the join, create and close paths of the eager file.
+//     MARGIN ~0.74 KB, and no reclaim in this change — the one queued
+//     behind it moves the account screens out of the eager file.
+//   2026-10-14 (seventh entry): CAP UNCHANGED (326). #451: the password-reset
+//     flag, which carries the session's recovery code for the seconds a reset
+//     takes, is written where no client can read it instead of under the
+//     session. The two call sites change a path; the comments that explained
+//     the old node went with it. Same method, against main at v190:
+//     script.js -41 B, first-party 325.26 -> 325.22 KB (-41 B).
+//     MARGIN ~0.78 KB.
+//   2026-10-14 (eighth entry): CAP UNCHANGED (326). #450: the account screens
+//     load on first use. Thirteen functions — the three sign-in routes, the
+//     profile-setup save, the account dialog with its session list, the
+//     delete entry — move, text unchanged, into the lazy account-ui.js;
+//     accountUI() in script.js is the one way in, and the file is asked for
+//     neither by the front page nor by code -> join -> room
+//     (tests-e2e/account-ui-lazy.spec.js). Same method, against main at v191:
+//     script.js -4,780 B, script-loader.js +351 B, first-party
+//     325.22 -> 320.89 KB (-4,429 B). MARGIN ~5.1 KB.
+//     This is the structural reclaim the entries above call owed. The cap
+//     stays where it is: the margin is what the next eager change spends,
+//     and a cap set to the measured number is a test that fails on a comment.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

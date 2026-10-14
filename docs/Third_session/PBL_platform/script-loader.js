@@ -112,7 +112,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v188";
+  var SHELL_VERSION = "v192";
   // ROOT-ABSOLUTE, and the leading "/" is load-bearing (2026-08-06).
   // firebase.json rewrites `/o/**` -> /index.html for the multi-tenant org
   // entry point, so on a page served at /o/<slug>/ a BARE filename resolves to
@@ -225,9 +225,10 @@
   function ensureDataRights() { return loadScript(v("data-rights.js")); }
   /* account-ui.js — the sign-in view, the account dialog and the profile-setup
      save, behind accountUI() in script.js. A fetch that failed, or that brought
-     something else than the file (a captive portal's page "loads" too), is
-     forgotten and its <script> taken out, so the next click really asks again:
-     loadScript() would otherwise answer from what it kept. */
+     something else than the file, is forgotten and its <script> taken out, so
+     the PAGE asks again on the next click. Under the service worker a 200 that
+     was not the file is already in its cache and answers that retry (sw.js
+     stores any ok response — true of every ?v= file; not fixed here). */
   function ensureAccountUI() {
     var src = v("account-ui.js");
     return loadScript(src).then(function () {

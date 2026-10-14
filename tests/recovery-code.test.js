@@ -2,7 +2,7 @@
  *
  * Unit tests for lib.generateRecoveryCode() — the D21 per-session recovery
  * secret. The recovery code is the security boundary for resetting a
- * forgotten admin password (it gates _superadminReset in the RTDB rules,
+ * forgotten admin password (it gates the reset flag in the RTDB rules,
  * which gates the adminPasswordHash overwrite), so its shape, charset,
  * length and non-determinism are pinned here.
  *

@@ -35,9 +35,14 @@
  *     malformed consent (including sessions predating the field) = excluded.
  *     Consent must be affirmative and demonstrable (GDPR Art. 7), so silence
  *     can never be read as agreement.
- *   - A non-consenting participant's `pool` entry is removed, every node keyed
- *     by their clientId is removed, and every node keyed by a stableId that
- *     resolves to their uid is removed (`votes/ballots` is stableId-keyed).
+ *   - A non-consenting participant's `pool` entry is removed; so is every
+ *     node keyed by their clientId or by an account uid `clientMapping` ties
+ *     to them — except under `members` / `uidMembers`, where an account that
+ *     ALSO stands behind a consenting row (two tabs of one browser) keeps its
+ *     entry, under that row's pseudonym; and, under every `ballots` node, the
+ *     entry keyed by the stableId in their own row or by one the mapping
+ *     table ties to their account. A ballot under a stableId neither records
+ *     stays.
  *   - Their name is never entered into the pseudonym map, so the existing
  *     unknown-name path redacts it to REDACTED-NAME everywhere it appears, and
  *     they get no linkage-table entry (nothing to re-identify them with).
@@ -48,9 +53,101 @@
  *     analyst re-link "Student-A" in one session to "Student-C" in another,
  *     defeating the per-session pseudonymisation. They are read for the
  *     stableId join first, then discarded.
+ *
+ * TRANSFORM VERSION 2 (in code 2026-10-08) — IDENTIFIERS VERSION 1 LET THROUGH.
+ *   Found by running this function on sessions shaped like real ones, and by an
+ *   independent review of that work. Every file written by version 1 carries
+ *   them; a file says which version wrote it (`transformVersion`, below).
+ *
+ *   Real NAMES, inside a string:
+ *   - `rooms/<room>/events/<id>/payload`. The client writes a room event as
+ *     { kind, by, at, payload: JSON.stringify({ by: <display name>,
+ *     university, len, … }) } for every answer, edit, deletion and hypothesis,
+ *     and for a manual score with the FACILITATOR's name. The walker rewrote
+ *     the `by` beside the payload and never opened the string, so the real
+ *     name and university of everyone who contributed — participants who had
+ *     DECLINED research use included — went out in every export since the
+ *     first. A `payload` is now parsed, scrubbed by the same walk as the rest
+ *     of the tree, and written back; one that is not what a client writes —
+ *     longer than the 500 characters the client cuts it at, not JSON, or JSON
+ *     that is not an object (an array is not one) — is removed, because what
+ *     cannot be opened cannot be scrubbed. ONLY keys
+ *     named `payload` are opened: an authored scenario is JSON in a string
+ *     too, and its `name` keys are the case's characters.
+ *
+ *   E-mail addresses, in a node the rules no longer declare:
+ *   - `mail/<id>` = { to, subject, text } at the session's root: the queue of
+ *     the mail function removed on 2026-09-24. A rule being deleted does not
+ *     delete what it guarded, so a session created before that date can still
+ *     hold one. Dropped at the root only — a content id may be called "mail".
+ *
+ *   Firebase auth uids, outside the two mapping tables:
+ *   - `creatorUid` — the facilitator's account. DROPPED, not replaced by a
+ *     pseudonym: a session has exactly one creator, so a stand-in would be the
+ *     same constant in every session and say nothing, and the one thing it
+ *     could say — which pool participant, if any, the creator also was — picks
+ *     the facilitator out among the participants. Uid-keyed maps likewise drop
+ *     a facilitator's entry rather than give it a stand-in.
+ *   - `ownerUid` (in `scenarioRef`) — the account that authored the scenario;
+ *     for a shared scenario, somebody who was never in the session. DROPPED,
+ *     whatever it holds: the rules validate it as a string, not as a uid.
+ *     `scenarioId` and `source` stay — which scenario ran is research content.
+ *   - `roomOf/<uid>` — a participant's account, as a key, next to their
+ *     clientId: the join `clientMapping` was dropped to withhold, the other way
+ *     round. In the rules since 2026-08-03, after the list below was written.
+ *     DROPPED, not rekeyed like `members`: one account can stand behind two
+ *     pool rows (two students on one browser), `roomOf` is written once per
+ *     account, and "the account's pseudonym" then puts one student's name on
+ *     the other's row. Nothing is lost: `pool/<clientId>/room` says who was in
+ *     which room.
+ *   - Under a rekeyed map. The walker stopped at `members` once it had
+ *     rekeyed it, so a name or uid its owner had written beneath their own
+ *     entry passed as written. It now walks what it rekeyed.
+ *
+ *   tests/pseudonymise-uid-coverage.test.js derives from database.rules.json
+ *   the positions that hold an account identifier and runs this function on
+ *   each, so that MOST uids the rules gain later fail a test. It cannot see a
+ *   field no rule names, a node the rules no longer declare, a uid under a
+ *   name that says nothing, or a name inside a string — which is two of the
+ *   defects listed above. Read its header before relying on it.
+ *
+ * WHAT IS STILL CARRIED — `stableId`, AND IT IS NOT SETTLED THAT IT SHOULD BE:
+ *   The study's join key, left exactly as written: in `pool`, `tests`,
+ *   `survey`, `poll` (older sessions), and as the key of each ballot. For a
+ *   participant who is SIGNED IN it is their auth uid, the same in every
+ *   session. For an anonymous one it is a random value kept in the browser,
+ *   carried into the next session unless they left through Leave, "use a
+ *   different session" or "forget this session", which clear it. So this
+ *   export is NOT free of cross-session identifiers and must not be described
+ *   as if it were.
+ *   It does not have to be carried raw for the joins made INSIDE the platform:
+ *   pre-test, post-test and wrap-up questionnaire sit in one session, so a
+ *   stand-in per distinct stableId per session would keep them all. The join
+ *   that needs the raw value is the one the protocol PLANS to a questionnaire
+ *   outside the platform, through a printed code the client does not yet
+ *   show. That is a decision about the study, put to the controller in
+ *   legal/dpa-draft.md (Annex VI R8, R10) — not taken here.
+ *
+ * WHAT THIS MODULE DOES NOT DO, so that nobody reads it as more:
+ *   - A participant who declined is not ERASED from the output. Their pool
+ *     row and the nodes keyed by the identifiers the session records as
+ *     theirs go (which ones: the RESEARCH CONSENT block above); what they wrote into
+ *     the room's shared lists (answers, replies, hypotheses, deleted answers)
+ *     stays, with the name redacted and their per-tab clientId as `cid`.
+ *   - Free text is exported as written (R7 in the DPA draft).
  */
 
 const REDACTED_NAME = "REDACTED-NAME";
+
+/* Which transform wrote a file. The export stamps it on the payload, because a
+ * DATE cannot say it: the job runs once a night on whatever `main` holds, so
+ * the day a fix is written, the day it merges and the day a file is first
+ * written by it are three different days.
+ *   (absent) / 1  everything before version 2
+ *   2             names inside event payloads, the legacy mail queue,
+ *                 creatorUid, ownerUid and roomOf are removed (header above)
+ * Raise it with every change to what this module lets through. */
+const TRANSFORM_VERSION = 2;
 
 // Keys whose ENTIRE value/subtree is removed from the export.
 const DROP_KEYS = new Set([
@@ -59,8 +156,20 @@ const DROP_KEYS = new Set([
   "_superadminReset",  // facilitator name + recovery code (transient)
   "chat",              // free-text LLM turns: a name embedded in prose can't be exact-matched
   "clientMapping",     // clientId -> auth uid: a CROSS-SESSION identifier (see header)
-  "stableIdMapping"    // stableId -> auth uid: ditto
+  "stableIdMapping",   // stableId -> auth uid: ditto
+  "creatorUid",        // the facilitator's auth uid (see header: dropped, not pseudonymised)
+  "ownerUid",          // scenarioRef.ownerUid: the scenario author's auth uid
+  "roomOf"             // uid -> { room, cid }: see header for why it is not rekeyed
 ]);
+
+// Dropped ONLY at the session's root. Legacy nodes the rules no longer declare;
+// the name is too ordinary to remove at every depth (see header).
+const ROOT_DROP_KEYS = ["mail"];
+
+// The longest `payload` a client writes: logEvent() cuts the serialised object
+// at this length, and the rule on an event's own `payload` caps it there. A
+// longer one sits under a key the rules do not validate, and is not opened.
+const PAYLOAD_MAX_CHARS = 500;
 
 // Nodes whose CHILD KEYS are Firebase auth uids. Their keys are rewritten to
 // per-session pseudonyms so the map keeps its shape (and its research value)
@@ -167,14 +276,15 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
     return ta - tb;
   });
 
-  // Research-consent split. Only opted-in participants reach the export; the
-  // rest are erased from it (see the RESEARCH CONSENT block in the header).
+  // Research-consent split. Only opted-in participants keep a row; the rest
+  // lose theirs and the keyed nodes the header's RESEARCH CONSENT block lists,
+  // and are NOT erased: what they authored stays (see both header blocks).
   const cids = allCids.filter(cid => hasResearchConsent(pool[cid]));
   const excludedCids = allCids.filter(cid => !hasResearchConsent(pool[cid]));
 
-  // Keys to delete wherever they appear: the excluded participants' clientIds,
-  // plus the stableIds/uids that resolve to them. `votes/ballots` is keyed by
-  // stableId and `uidMembers`/`members` by uid, so clientId alone misses them.
+  // Keys to delete wherever they appear: the excluded participants' clientIds
+  // and the account uids `clientMapping` ties to them (`uidMembers` / `members`
+  // are keyed by uid, so clientId alone misses them).
   const clientMapping = sess.clientMapping || {};
   const stableIdMapping = sess.stableIdMapping || {};
   const excludedUids = new Set(
@@ -182,8 +292,31 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   );
   const excludedKeys = new Set(excludedCids);
   excludedUids.forEach(u => excludedKeys.add(u));
+
+  // stableIds, removed under `ballots` AND NOWHERE ELSE. A ballot is the one
+  // node the client keys by stableId (ballotKey() in script.js). Two sources:
+  //   - a stableId the mapping table ties to an excluded participant's account;
+  //   - the stableId an excluded participant's OWN row records. That table row
+  //     is written once, by the join chain, and can be missing; without this
+  //     their ballot stayed in the file.
+  // Why not delete them at every depth, as the first two versions did:
+  // `pool/<clientId>/stableId` is validated by no rule and a mapping row is
+  // first-come, so either can hold ANY string — "rooms", or a consenting
+  // participant's clientId — and a key deleted everywhere takes that tree with
+  // it. Why the row is not checked against the table: the table can equally
+  // tie a decliner's stableId to an account the session does not tie to them
+  // (no `clientMapping` row; or somebody claimed it first), and the ballot
+  // would stay. The price is recorded in the tests: a declining row that
+  // names somebody else's stableId removes that participant's BALLOTS — every
+  // vote, in every room. Between keeping ballots a person declined to give
+  // and losing a consenting participant's, the export loses them.
+  const excludedBallotKeys = new Set();
   Object.keys(stableIdMapping).forEach(sid => {
-    if (excludedUids.has(stableIdMapping[sid])) excludedKeys.add(sid);
+    if (excludedUids.has(stableIdMapping[sid])) excludedBallotKeys.add(sid);
+  });
+  excludedCids.forEach(cid => {
+    const sid = pool[cid] && pool[cid].stableId;
+    if (typeof sid === "string" && sid.length > 0) excludedBallotKeys.add(sid);
   });
 
   // uid -> pseudonym, so uid-keyed membership maps keep their shape (and their
@@ -255,6 +388,28 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   }
 
   const out = JSON.parse(JSON.stringify(sess));
+  for (const k of ROOT_DROP_KEYS) delete out[k];
+
+  // A `payload` is a JSON object in a string (logEvent / logAdminAction in the
+  // client). Returns it scrubbed and re-serialised, or null when it is not
+  // what a client writes — the caller then removes it rather than pass it
+  // through. Not what a client writes: longer than the client's own cut; not
+  // JSON; JSON that is not an object (an array is not one — its strings are
+  // only replaced when one IS a known name); or anything the walk cannot get
+  // through. The database stops a tree at 32 levels; a parsed string stops
+  // nowhere, and one nested a few thousand deep overflowed the walk and took
+  // the whole export down with it (found in review, 2026-10-14).
+  function scrubPayload(s) {
+    if (s.length > PAYLOAD_MAX_CHARS) return null;
+    try {
+      const parsed = JSON.parse(s);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+      walk(parsed);
+      return JSON.stringify(parsed);
+    } catch (e) {
+      return null;
+    }
+  }
 
   function walk(node) {
     if (!node || typeof node !== "object") return;
@@ -273,12 +428,20 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
     }
     for (const k of Object.keys(node)) {
       if (DROP_KEYS.has(k)) { delete node[k]; continue; }
-      // Non-consenting participant: erase the node keyed by their clientId /
-      // stableId / uid, wherever in the tree it sits.
+      // Non-consenting participant: remove the node keyed by their clientId or
+      // account uid, wherever in the tree it sits.
       if (excludedKeys.has(k)) { delete node[k]; continue; }
       const v = node[k];
+      // …and the ballot keyed by their stableId, under `ballots` only.
+      if (k === "ballots" && v && typeof v === "object" && !Array.isArray(v)) {
+        for (const b of Object.keys(v)) if (excludedBallotKeys.has(b)) delete v[b];
+      }
       if (UID_KEYED.has(k) && v && typeof v === "object" && !Array.isArray(v)) {
         node[k] = rekeyByUid(v);
+        walk(node[k]);
+      } else if (k === "payload" && typeof v === "string") {
+        const scrubbed = scrubPayload(v);
+        if (scrubbed === null) delete node[k]; else node[k] = scrubbed;
       } else if (k === "name" || k === "by") {
         node[k] = redactName(v);
       } else if (k === "university") {
@@ -304,6 +467,8 @@ module.exports = {
   hasResearchConsent,
   sessionHasConsent,
   REDACTED_NAME,
+  TRANSFORM_VERSION,
   DROP_KEYS,
+  ROOT_DROP_KEYS,
   UID_KEYED
 };

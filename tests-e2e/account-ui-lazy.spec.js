@@ -420,10 +420,15 @@ test.describe("while the chunk is on its way, or cannot come", () => {
     expect(users.u_local.profile, "and nothing of the first account's submit").toBeUndefined();
   });
 
-  test("a file that arrives and is not the chunk says so, and the next click fetches it again", async ({ page }) => {
-    /* A captive portal or an intercepting proxy answers 200 with a page of its
-       own. `load` fires, nothing is declared, and the message says "try again"
-       — which asked the network for nothing until the page was reloaded. */
+  test("a file that arrives and is not the chunk says so, and the next click fetches it again — where no service worker answers for it", async ({ page }) => {
+    /* An intercepting proxy answers 200 with a page of its own. `load` fires,
+       nothing is declared, and the message says "try again" — which asked the
+       network for nothing until the page was reloaded.
+       THIS BLOCK BLOCKS SERVICE WORKERS, and that is the limit of what it
+       shows: under a controlling worker, sw.js has already stored that 200 and
+       answers the retry from it, so "try again" is not true there until the
+       next shell version (run in review; the worker's caching is on main and
+       covers every versioned file — its own fix, not this test's). */
     const seen = watch(page);
     let portal = true;
     await page.route(CHUNK, (route) => {

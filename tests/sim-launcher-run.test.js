@@ -59,8 +59,15 @@ const SCENARIO_TIMEOUT_MS = 240000;
    ignores its emulator's exit sits there. */
 const REACH_MS = 90000;
 
-/* The stand-in firebase CLI is in place: its PID. */
-function cliStarted(ctx) {
+/* The stand-in firebase CLI is in place: its PID. A launcher that has ENDED
+   instead is the finding, made at once and with what it said — not after the
+   whole bound (one that refused a PORT it should have taken was waited on for
+   90 s before this looked). */
+async function cliStarted(ctx, run) {
+  await until("the stand-in firebase CLI to start",
+    () => ctx.exists("started") || run.endedAt() !== null, REACH_MS);
+  assert.ok(ctx.exists("started"),
+    "the launcher ended without starting its emulator CLI\n" + run.output());
   return ctx.pid("started", REACH_MS);
 }
 
@@ -156,13 +163,18 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
            nothing anyone else is using.) */
         [ctx.ports.spare + "abc", /that is not a port/],
         [String(ctx.ports.db), /that is the database emulator's port/],
-        [String(ctx.ports.auth), /that is the auth emulator's port/]
+        [String(ctx.ports.auth), /that is the auth emulator's port/],
+        /* With the space cmd.exe leaves on `set PORT=9000 && …`. It is an
+           emulator's port all the same, and must be refused as THAT: the
+           first version of this check tested for digits before trimming, and
+           called it "not a port". */
+        [ctx.ports.db + " ", /that is the database emulator's port/]
       ];
       for (const [port, why] of cases) {
         const run = ctx.run({ PORT: port, FAKE_EXEC_MODE: "serve" });
         const { code, out } = await ended(run);
         assert.strictEqual(code, 1, "PORT=" + port + "\n" + out);
-        assert.ok(out.includes("FATAL: PORT=\"" + port + "\" cannot be the platform server's port"),
+        assert.ok(out.includes("FATAL: PORT=\"" + port.trim() + "\" cannot be the platform server's port"),
           "PORT=" + port + " must be refused by name\n" + out);
         assert.match(out, why, "and the reason given must be the right one\n" + out);
         assert.doesNotMatch(out, /pre-flight checks|starting static platform server|ANOTHER RUN/,
@@ -174,8 +186,12 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
 
   it("runs the sim against its own emulator, then leaves nothing behind (the allow leg)",
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
-      const run = ctx.run({ FAKE_EXEC_MODE: "serve" });
-      const cli = await cliStarted(ctx);
+      /* PORT with a space after it: what cmd.exe passes for `set PORT=8771 &&
+         npm run sim:emulator`. A port all the same — the first PORT check
+         refused it (found in review), which would have made this the scenario
+         where the sim never runs. Every other scenario here passes it bare. */
+      const run = ctx.run({ FAKE_EXEC_MODE: "serve", PORT: ctx.ports.web + " " });
+      const cli = await cliStarted(ctx, run);
       await simRunning(ctx, run);
       const sim = await ctx.pid("sim.pid");
       assert.ok(await isListening(ctx.ports.web),
@@ -211,7 +227,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
          mean failing on the first hiccup — or the fix for A would trade a sim
          that runs against a stranger for a sim that seldom runs at all. */
       const run = ctx.run({ FAKE_EXEC_MODE: "serve", FAKE_PS: "fail-once" });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       await until("the sim to start, or the launcher to give up",
         () => ctx.exists("sim-spawned") || run.endedAt() !== null, REACH_MS);
       assert.ok(ctx.exists("sim-spawned"),
@@ -229,7 +245,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
          alive (the real one takes seconds to notice "port taken"), so nothing
          but the readiness check stands between the sim and their database. */
       const run = ctx.run({ FAKE_EXEC_MODE: "port-taken" });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       const theirs = await theirEmulator(ctx);
       const { code, out } = await endedWithoutSim(ctx, run);
 
@@ -247,7 +263,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
          nothing can be shown about them either way. Before the fix the sim
          was started here. */
       const run = ctx.run({ FAKE_EXEC_MODE: "port-taken", FAKE_PS: "fail" });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       const theirs = await theirEmulator(ctx);
       const { code, out } = await endedWithoutSim(ctx, run);
 
@@ -285,7 +301,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
          its full 120 s — and, with another session's emulator on the port,
          walks straight on to the sim. */
       const run = ctx.run({ FAKE_EXEC_MODE: "port-taken" });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       ctx.release();                      // the CLI fails and exits; nothing listens
       const releasedAt = Date.now();
       const { code, out } = await endedWithoutSim(ctx, run);
@@ -301,7 +317,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
          first depends on timing — the CLI's exit, or the readiness check —
          and either must do. */
       const run = ctx.run({ FAKE_EXEC_MODE: "port-taken" });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       const theirs = await theirEmulator(ctx);
       ctx.release();                      // "Could not start Database Emulator, port taken."
       const { code, out } = await endedWithoutSim(ctx, run);
@@ -344,7 +360,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
         FAKE_SLOW_READ_AFTER_CLI_EXIT_MS: String(SLOW_MS),
         FAKE_SIM_BYSTANDER_PORT: String(ctx.ports.spare)
       });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       await simRunning(ctx, run, "bystander.pid");
       const sim = await ctx.pid("sim.pid");
 
@@ -394,7 +410,7 @@ describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
         () => Date.now() - theirs.startedAt > 3500, 10000);
 
       const run = ctx.run({ FAKE_EXEC_MODE: "serve", FAKE_HOLD_READ_AFTER_CLI_EXIT: "1" });
-      await cliStarted(ctx);
+      await cliStarted(ctx, run);
       await simRunning(ctx, run);
 
       ctx.release();                      // this run's emulator goes
