@@ -78,6 +78,7 @@ const {
   hadSessionTimestamp,
   safeLabel
 } = require("./lib/session-trees");
+const { legacyResetFlagPath } = require("./lib/reset-flag");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { sessionRetentionVerdict, FUTURE_DATE_TOLERANCE_MS } = require("./lib/session-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
@@ -341,6 +342,9 @@ async function purgeSessions(db, locations) {
   let futureDated = 0;
   let kept = 0, purged = 0, errors = 0;
   let requestsKept = 0;
+  /* One path per session that is KEPT, each set to null — see the write after
+     the loop. */
+  const legacyResetFlags = {};
 
   /* Something under `sessions/orgs`. That key is the organisation subtree's
      name in every tree outside `sessions/`, so the enumerator builds no
@@ -504,7 +508,10 @@ async function purgeSessions(db, locations) {
         requestsKept += records.keptUids.length;
       }
       if (verdict === "PURGE") purged++;
-      else kept++;
+      else {
+        kept++;
+        legacyResetFlags[legacyResetFlagPath(loc)] = null;
+      }
     } catch (e) {
       errors++;
       // In QUIET mode (public-repo logs are world-readable) avoid printing the
@@ -525,6 +532,51 @@ async function purgeSessions(db, locations) {
       `more than ${FUTURE_DATE_TOLERANCE_MS / (60 * 60 * 1000)}h ahead of this run. No session can ` +
       `have one, so each was treated as due and ${CONFIRM ? "purged" : "would be purged"} ` +
       "(counted in the summary below).");
+  }
+
+  /* LEFTOVER RESET FLAGS — deleted BLIND, and that is the design.
+   *
+   * Until the flag moved to the unreadable adminSecrets tree, opening a
+   * password reset wrote the session's RECOVERY CODE, in clear, to a node
+   * inside the session — one every member of the session can read — and
+   * removed it a moment later (lib/reset-flag.js has the whole story). A
+   * removal that failed left the code lying there. The rules no longer let
+   * any client write that node, so whatever is in it is a leftover BY
+   * DEFINITION, and no date is needed to decide: a null is written to that
+   * path for every session this run kept (a purged one has lost its whole
+   * subtree already).
+   *
+   * A run the backup gate refuses does not get here — the whole session pass
+   * is skipped — so it clears nothing; the next run that is let through does.
+   *
+   * NOTHING IS READ. The participant notice says what the scheduled jobs read
+   * per session — the identifiers, and the two dates that decide when it is
+   * deleted — and a third value read here would make that sentence incomplete
+   * (tests/ops-transfer-notice.test.js derives its obligations from what these
+   * scripts read). So the count below is of paths WRITTEN, one per kept
+   * session. How many held a flag is not known, and is not meant to be.
+   *
+   * Its OWN update, after the loop, so that a failure here cannot stop or undo
+   * a purge. A dry run writes nothing. A null for a path that does not exist is
+   * a no-op the database accepts. */
+  const legacyPaths = Object.keys(legacyResetFlags);
+  if (legacyPaths.length > 0) {
+    let cleared = false;
+    if (CONFIRM) {
+      try {
+        await db.ref().update(legacyResetFlags);
+        cleared = true;
+      } catch (e) {
+        errors++;
+        // The code only: the message can embed a path, and the path is a session code.
+        console.error("ERROR    leftover reset flags were not cleared: " + (e && e.code ? e.code : "error"));
+      }
+    }
+    if (cleared || !CONFIRM) {
+      console.log("");
+      console.log(`Leftover reset flags: ${CONFIRM ? "cleared" : "would clear"} ${legacyPaths.length} ` +
+        "path(s), one per session kept — written blind, nothing read.");
+    }
   }
 
   if (requestsKept > 0) {

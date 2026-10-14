@@ -30,16 +30,24 @@ const INDEX = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const LOADER = fs.readFileSync(path.join(ROOT, "script-loader.js"), "utf8");
 
 // =============================================================
-// D21 — super-admin password reset writes _superadminReset before
+// D21 — super-admin password reset writes its reset flag before
 // overwriting an existing adminPasswordHash.
 // =============================================================
-test("script: joinSuperAdmin writes _superadminReset before overwriting hash", () => {
+test("script: joinSuperAdmin writes its reset flag before overwriting hash", () => {
   // The fix gates an overwrite on a fresh reset flag (the rules also
   // enforce this; the client must cooperate by writing the flag first).
-  // We look for the literal node name in script.js so a future rename
-  // here breaks loudly.
-  assert.match(SCRIPT, /_superadminReset/,
-    "joinSuperAdmin must reference _superadminReset to satisfy the new rule");
+  // The flag lives in the unreadable adminSecrets tree, under the writer's
+  // own uid. It was sessions/<code>/_superadminReset until 2026-10, where
+  // every member of the session could read the recovery code off it — so
+  // the old node's name must NOT come back into this file.
+  assert.match(SCRIPT, /db\.ref\(adminSecretPath\(sessionNum, "reset\/" \+ \(currentUser && currentUser\.uid\)\)\)/,
+    "joinSuperAdmin must write its reset flag at adminSecrets/…/reset/<own uid>");
+  // script.js ALONE: `SCRIPT` above is script.js + script-admin.js, and the
+  // latter names the node once on purpose (the archive download strips a
+  // leftover — the next test pins that it is the only mention there).
+  assert.doesNotMatch(fs.readFileSync(path.join(ROOT, "script.js"), "utf8"), /_superadminReset/,
+    "script.js names the old reset node again. A flag written there is readable " +
+    "by every member of the session, and it carries the recovery code.");
   // The write order matters: refReset.set(...).then(() => refSecret.set(h)).
   // (FINDING-07 renamed the hash ref to refSecret — on the legacy path it
   // points at the unreadable adminSecrets/<code>/hash; the reset-flag-first
@@ -50,16 +58,24 @@ test("script: joinSuperAdmin writes _superadminReset before overwriting hash", (
 });
 
 test("script: change-pass-btn dashboard handler also uses the reset-flow", () => {
-  // The super-admin dashboard's "change password" button shares the
-  // same overwrite constraint and must use the same flag pattern.
-  // We look for the literal _superadminReset reference inside the
-  // change-pass-btn handler scope (we just assert two distinct
-  // references exist in the file — one for joinSuperAdmin and one for
-  // the dashboard handler).
-  const occurrences = SCRIPT.split("_superadminReset").length - 1;
-  assert.ok(occurrences >= 3,
-    "Expected at least 3 references to _superadminReset (rationale comment + " +
-    "joinSuperAdmin write + dashboard change-pass-btn write); got " + occurrences);
+  // The super-admin dashboard's "change password" button shares the same
+  // overwrite constraint and must use the same flag pattern. That handler
+  // moved to the lazy script-admin.js with the dashboard (#285), which is
+  // where it is looked for — this test counted mentions of the old node's
+  // name in script.js, and went on passing on the rationale comments alone
+  // after the handler had left the file.
+  const ADMIN = fs.readFileSync(path.join(ROOT, "script-admin.js"), "utf8");
+  assert.match(ADMIN, /db\.ref\(adminSecretPath\(targetSession, "reset\/" \+ \(currentUser && currentUser\.uid\)\)\)/,
+    "the dashboard handler must write its reset flag at adminSecrets/…/reset/<own uid>");
+  assert.match(ADMIN, /refReset\.set\([^)]*\)[\s\S]*?\.then\(\(\) => refSecret\.set\(h\)\)/,
+    "and set it BEFORE writing the new hash");
+  /* ONE mention is meant: the archive download deletes a leftover of the old
+     node from the copy it saves. Anything else is the old write coming back. */
+  assert.deepStrictEqual(
+    ADMIN.split("\n").filter((line) => line.includes("_superadminReset")).map((line) => line.trim()),
+    ["delete tree._superadminReset;"],
+    "script-admin.js names the old, member-readable reset node somewhere other than " +
+    "the archive download's strip");
 });
 
 // =============================================================

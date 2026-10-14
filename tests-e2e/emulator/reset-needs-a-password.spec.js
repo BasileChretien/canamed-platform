@@ -3,9 +3,11 @@
  * The password RESET, and the RECOVERY CODE it rests on, on sessions that have
  * no password — the states the reset was never meant for and used to work in.
  *
- * `_superadminReset` is the "forgotten admin password" path: write it with the
+ * The RESET FLAG is the "forgotten admin password" path: write it with the
  * session's recovery code and, for 30 seconds, you may overwrite the admin
- * hash. Until PR #447 its rule asked for a matching `recovery/…/code` and a
+ * hash. (The flag lives at adminSecrets/…/reset/<own uid>; when this file was
+ * first written it was sessions/<code>/_superadminReset — see flagPath below.)
+ * Until PR #447 its rule asked for a matching `recovery/…/code` and a
  * session that was not closed, and NOTHING ELSE about the session; and the
  * recovery node itself could be written by any signed-in user (any allowlisted
  * one, while the creation gate is enforced) as long as the node and the
@@ -22,7 +24,7 @@
  * Both were measured here before the rules changed (the BEFORE column of the
  * tables below is that run, not a recollection). Two predicates close them:
  *
- *   (a) `_superadminReset` requires the session to HAVE a password
+ *   (a) the reset flag requires the session to HAVE a password
  *       (`adminPasswordHash` exists). A reset needs something to reset.
  *   (b) the recovery node may be written only where the session has no
  *       `creatorUid` yet, or by that creator.
@@ -51,6 +53,12 @@
  *   - A STALE recovery record at a session's code still resets that session
  *     once it has a password. What removes stale records is the purge and the
  *     sweep (tests-e2e/emulator/recovery-purge.spec.js), not these rules.
+ * A THIRD thing was open when this file was written and is in neither item: a
+ * session's members could READ the recovery code while a reset was in
+ * progress, off the flag itself. It has its own change and its own committed
+ * test — tests-e2e/emulator/reset-flag-unreadable.spec.js — which is also why
+ * the resets below are opened at adminSecrets/…/reset/<uid> and no longer
+ * under the session.
  *
  * Seeding is done as the emulator owner — the Admin SDK, which is what a
  * restore or a purge is. No allow/deny verdict is settled with the owner token.
@@ -117,7 +125,11 @@ const MARKER = "v2$100000$aaaaaaaaaaaaaaaa";
 const OLD = "oldd-code-kept";       // a recovery code from a session long gone
 const PLANT = "plnt-code-mine";     // a code the writer chose
 
-const reset = (code, uid) => ({ requestedAt: Date.now(), by: "Emu", code, uid });
+/* The reset flag: adminSecrets/…/reset/<the writer's own uid>, where no client
+   can read it. (Until 2026-10 it was sessions/<code>/_superadminReset, which
+   every member of the session could read — reset-flag-unreadable.spec.js.) */
+const flagPath = (loc, uid) => loc.adminSecretPath + "/reset/" + uid;
+const flag = (code) => ({ requestedAt: Date.now(), code });
 /* What the archive holds for a session: its body. `creatorUid` is in it; the
    password marker is stripped by the backup, and neither `adminSecrets` nor
    `recovery` is archived at all. */
@@ -150,7 +162,7 @@ for (const tree of ["default", "org"]) {
     await step("restored: a stranger writes a recovery code", stranger, r.recoveryPath, { code: PLANT });
     await step("restored: THE CREATOR writes the same recovery code", creator, r.recoveryPath, { code: PLANT });
     await step("restored: a stranger opens a reset before any password exists", stranger,
-      r.path + "/_superadminReset", reset(PLANT, stranger.uid));
+      flagPath(r, stranger.uid), flag(PLANT));
     await step("restored: a stranger sets the first hash", stranger, r.adminSecretPath + "/hash", HASH_1);
     await step("restored: THE CREATOR sets the first hash", creator, r.adminSecretPath + "/hash", HASH_1);
     await step("restored: the creator writes the password marker", creator, r.path + "/adminPasswordHash", MARKER);
@@ -158,13 +170,13 @@ for (const tree of ["default", "org"]) {
        creator wrote. From here the reset is what it was built to be: whoever
        holds that code may use it — the creator on another device, typically. */
     await step("restored, now keyed: the SAME reset by the same user is the recovery path", stranger,
-      r.path + "/_superadminReset", reset(PLANT, stranger.uid));
+      flagPath(r, stranger.uid), flag(PLANT));
     await step("restored, now keyed: and overwrites the hash", stranger, r.adminSecretPath + "/hash", HASH_2);
     /* …and once the session is closed, the very same write is refused. (Closed
        by the owner token: closing is not what is under test.) */
     await ownerPut(r.path + "/closed", { by: "Original Facilitator", at: Date.now() });
     await step("restored, keyed, then CLOSED: the same reset by the same user is refused", stranger,
-      r.path + "/_superadminReset", reset(PLANT, stranger.uid));
+      flagPath(r, stranger.uid), flag(PLANT));
 
     /* ── ROW 2: half-created — what the client leaves when it draws a code
        whose recovery record outlived an earlier session: `created`, a
@@ -173,13 +185,13 @@ for (const tree of ["default", "org"]) {
     await ownerPut(h.path, { created: { by: "Facilitator", at: Date.now() }, creatorUid: creator.uid });
     await ownerPut(h.recoveryPath, { code: OLD });
     await step("half-created: the holder of the OLD code opens a reset", stranger,
-      h.path + "/_superadminReset", reset(OLD, stranger.uid));
+      flagPath(h, stranger.uid), flag(OLD));
     await step("half-created: and sets the first hash", stranger, h.adminSecretPath + "/hash", HASH_1);
     await step("half-created: THE CREATOR sets the first hash", creator, h.adminSecretPath + "/hash", HASH_1);
     await step("half-created: the creator writes the password marker", creator, h.path + "/adminPasswordHash", MARKER);
     /* STILL OPEN, by these rules: a stale record's code is a recovery code. */
     await step("half-created, now keyed: the OLD code resets it (STILL OPEN — the purge's job)", stranger,
-      h.path + "/_superadminReset", reset(OLD, stranger.uid));
+      flagPath(h, stranger.uid), flag(OLD));
 
     /* ── ROW 3: restored, CLOSED. */
     const c = locFor(tree);
@@ -193,7 +205,7 @@ for (const tree of ["default", "org"]) {
        Its pair is "restored, now keyed" above — the same payload shape, allowed
        there until that session was closed. */
     await step("closed from the start: not resettable even by its creator, password or not", creator,
-      c.path + "/_superadminReset", reset(PLANT, creator.uid));
+      flagPath(c, creator.uid), flag(PLANT));
 
     /* ── ROW 4: NO creatorUid — hand-made, or older than the field. The hash
        rule opens the first password to anyone here, so this state is open by
@@ -202,12 +214,12 @@ for (const tree of ["default", "org"]) {
     await ownerPut(n.path, restoredBody(null));
     await step("no creator: a stranger writes a recovery code (OPEN BY DESIGN)", stranger, n.recoveryPath, { code: PLANT });
     await step("no creator: but cannot reset before a password exists", stranger,
-      n.path + "/_superadminReset", reset(PLANT, stranger.uid));
+      flagPath(n, stranger.uid), flag(PLANT));
     await step("no creator: a stranger sets the first hash directly (OPEN BY DESIGN)", stranger,
       n.adminSecretPath + "/hash", HASH_1);
     await step("no creator: …and the password marker (OPEN BY DESIGN)", stranger, n.path + "/adminPasswordHash", MARKER);
     await step("no creator, now keyed: the SAME reset by the same user goes through", stranger,
-      n.path + "/_superadminReset", reset(PLANT, stranger.uid));
+      flagPath(n, stranger.uid), flag(PLANT));
 
     /* ── CREATING A SESSION, in both orders the first batch can arrive in.
        createSession() issues `created`, the recovery code and `creatorUid`
@@ -287,7 +299,7 @@ test("under an enforced creation gate: an old recovery code opens nothing at a c
       await ownerPut(o.recoveryPath, { code: OLD });
       await step(`${tree}: an outsider cannot begin a session (the gate)`, outsider, o.path + "/created", { by: "O", at: Date.now() });
       await step(`${tree}: an outsider with the OLD code opens a reset where there is no session`, outsider,
-        o.path + "/_superadminReset", reset(OLD, outsider.uid));
+        flagPath(o, outsider.uid), flag(OLD));
       await step(`${tree}: and sets a hash there`, outsider, o.adminSecretPath + "/hash", HASH_1);
       /* The same three paths, once the ALLOWLISTED user has put a session with
          a password there. The first is the pair of the gate's refusal. The
@@ -300,7 +312,7 @@ test("under an enforced creation gate: an old recovery code opens nothing at a c
       await step(`${tree}: …its first hash`, allowed, o.adminSecretPath + "/hash", HASH_2);
       await step(`${tree}: …its password marker`, allowed, o.path + "/adminPasswordHash", MARKER);
       await step(`${tree}: with a password there, the outsider's SAME reset goes through (STILL OPEN)`, outsider,
-        o.path + "/_superadminReset", reset(OLD, outsider.uid));
+        flagPath(o, outsider.uid), flag(OLD));
       await step(`${tree}: and the SAME hash write`, outsider, o.adminSecretPath + "/hash", HASH_1);
 
       /* A session established by the allowlisted user, in the client's order. */
@@ -313,7 +325,7 @@ test("under an enforced creation gate: an old recovery code opens nothing at a c
       /* Recovery under enforcement, by someone who is NOT on the allowlist and
          holds the session's code: the same payload shape as the refusal above. */
       await step(`${tree}: an outsider WITH THE SESSION'S CODE resets an established session`, outsider,
-        e.path + "/_superadminReset", reset(PLANT, outsider.uid));
+        flagPath(e, outsider.uid), flag(PLANT));
       await step(`${tree}: and overwrites its hash`, outsider, e.adminSecretPath + "/hash", HASH_2);
     }
   } finally {
