@@ -635,15 +635,55 @@ test("a participant who declined leaves no ballot under the stableId their own r
   assert.deepStrictEqual(ballots["S-ANN"], { choice: 1, at: 30 }, "the consenting participant's stays");
 });
 
-test("a declining row cannot remove a consenting participant's ballot by naming their stableId", () => {
-  /* `pool/<clientId>/stableId` is whatever its writer put there. Where the
-     mapping table ties that stableId to SOMEBODY ELSE's account, the table —
-     written once, by that account — is believed, not the row. */
+/* Found 2026-10-14 by the review of the fix above, each run before it was
+   corrected. That fix put the row's stableId among the keys deleted at EVERY
+   depth, and believed the mapping table over the row. Both were wrong. */
+
+test("a stableId is removed under `ballots` and nowhere else", () => {
+  /* `pool/<clientId>/stableId` is validated by no rule: it is whatever its
+     writer put there, and a row under an unclaimed clientId is anyone's to
+     write. Deleted as a key at every depth, "c1" took a consenting
+     participant's row with it and "rooms" took every room. Ballots are the
+     one node the client keys by stableId (ballotKey()). */
+  for (const planted of ["c1", "rooms", "pool", "Room 1", "votes"]) {
+    const viaRow = ballotSession();
+    viaRow.pool.c2.stableId = planted;
+    const viaTable = ballotSession();
+    viaTable.stableIdMapping = { [planted]: DECLINER_UID };
+    for (const [how, sess] of [["a row's stableId", viaRow], ["a mapping row", viaTable]]) {
+      const out = pseudonymiseSession(sess, "S1", {});
+      assert.ok(out.pool && out.pool.c1, `${how} of "${planted}" removed the consenting participant's row`);
+      assert.deepStrictEqual(out.rooms["Room 1"].votes.v1.ballots["S-ANN"], { choice: 1, at: 30 },
+        `${how} of "${planted}" removed a tree`);
+    }
+  }
+});
+
+test("a decliner's ballot goes whatever the mapping table says about their stableId", () => {
+  /* The first version kept the ballot when the table tied the stableId to an
+     account the session did not tie to the decliner — which is the missing-row
+     state the fix was for (no `clientMapping` row either), and one write for
+     anyone else: `stableIdMapping/<their stableId>` is first-come. The note
+     said the ballot was removed. */
+  const sess = ballotSession();
+  sess.clientMapping = { c1: STUDENT_UID };            // no row for c2
+  sess.stableIdMapping = { "S-BEN": "SomeOtherUid0000000000000000" };
+  const ballots = pseudonymiseSession(sess, "S1", {}).rooms["Room 1"].votes.v1.ballots;
+  assert.ok(!("S-BEN" in ballots));
+  assert.deepStrictEqual(ballots["S-ANN"], { choice: 1, at: 30 });
+});
+
+test("the cost of that, recorded: a declining row that names another's stableId removes that ballot", () => {
+  /* Nothing in a session can tell a row that records its own stableId from
+     one that records somebody else's. Between keeping a ballot the person
+     declined to give and losing one a declining row pointed at, the export
+     loses the ballot. Only the ballot: see the test above. */
   const sess = ballotSession();
   sess.pool.c2.stableId = "S-ANN";
   sess.stableIdMapping = { "S-ANN": STUDENT_UID };
-  const ballots = pseudonymiseSession(sess, "S1", {}).rooms["Room 1"].votes.v1.ballots;
-  assert.deepStrictEqual(ballots["S-ANN"], { choice: 1, at: 30 });
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.ok(!("S-ANN" in out.rooms["Room 1"].votes.v1.ballots));
+  assert.ok(out.pool.c1, "and nothing else of the consenting participant's");
 });
 
 test("only `payload` is opened: an authored scenario is JSON in a string too, and is left alone", () => {

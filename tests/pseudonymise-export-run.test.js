@@ -163,8 +163,8 @@ test("the note does not promise what the file does not deliver", () => {
 });
 
 test("what a declining participant wrote IS in the file — recorded, not endorsed", () => {
-  /* The note above says so; this shows it. Their pool row and every node keyed
-     by their identifiers are gone, and what they wrote into a shared list is
+  /* The note above says so; this shows it. Their pool row and the nodes keyed
+     by the identifiers the session records as theirs are gone, and what they wrote into a shared list is
      still there under REDACTED-NAME, with their per-tab clientId. Whether that
      is what "you may decline research use" should mean is not this job's to
      decide — legal/dpa-draft.md, Annex VI G1 and R10. If this test goes red

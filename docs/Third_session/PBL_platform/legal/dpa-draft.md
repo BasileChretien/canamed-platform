@@ -1880,11 +1880,14 @@ that could not be confirmed from the code is marked.*
   the boundary. See Annex VI, R10.
 - **What it does NOT do — stated plainly.**
   - **It does not erase a participant who declined research use.** Their pool
-    row is removed, and so is every node keyed by an identifier the session
-    records as theirs: their clientId, the stableId in their own row, and an
-    account UID or stableId the mapping tables tie to them. A node keyed by an
-    identifier the session ties to nobody — a ballot under a stableId that no
-    row and no table records — stays (run). What they wrote
+    row is removed; so is every node keyed by their clientId or by an account
+    UID the `clientMapping` table ties to them; and, among ballots only, the
+    one keyed by the stableId in their own row or by a stableId the mapping
+    table ties to their account. A ballot under a stableId that neither
+    records stays (run). The choice has a cost, also run: a declining row
+    that records somebody else's stableId removes that person's ballot — a
+    row is its writer's word, and between keeping a ballot a person declined
+    to give and losing one, the export loses one. What they wrote
     into a room's shared lists — answers, replies, hypotheses, deleted answers
     — stays, with the name redacted. See Annex VI, G1 (corrected) and R10.
   - **It does not remove `stableId`**, the study's join key. For a signed-in
@@ -2926,9 +2929,10 @@ a different lawful basis. The original finding follows.
 
 > ⚠️ **"Erased from the pseudonymised file" overstates it — found 2026-10-08 by
 > running the job, and NOT corrected in code.** What is removed for a
-> participant who declined is their pool row, their linkage entry, and every
-> node *keyed* by one of their identifiers (their poll answer, test and
-> questionnaire records, presence, ballot, membership). What they **wrote into
+> participant who declined is their pool row, their linkage entry, and the
+> nodes *keyed* by an identifier the session records as theirs — their poll
+> answer, test and questionnaire records, presence and membership, and their
+> ballot (Annex II §1 says exactly which identifiers). What they **wrote into
 > a room's shared lists is still exported**: those lists are keyed by a
 > generated id, not by the author, so an answer, a reply, a hypothesis or a
 > deleted answer written by a decliner comes out with `REDACTED-NAME` in place
@@ -2944,10 +2948,13 @@ a different lawful basis. The original finding follows.
 > but whether a contribution made in a shared room discussion is the
 > decliner's to withhold from the research copy, and what an answer that
 > *replies* to theirs then means, is a question about the study and not about
-> the code. One further gap of the same kind: a decliner's **ballot** is
-> removed only through the `stableIdMapping` table, which the client writes on
-> a best-effort basis; run without that row, the ballot stayed in the file
-> under the decliner's `stableId`. **[CONTROLLER / DPO TO
+> the code. One further gap of the same kind, **closed in transform version
+> 2 before it shipped**: a decliner's ballot was removed only through the
+> `stableIdMapping` table, which the client writes on a best-effort basis;
+> run without that row, the ballot stayed in the file under the decliner's
+> `stableId`. It is now removed through the stableId in their own row as
+> well (run); what is left is a ballot under a stableId that neither their
+> row nor the table records. **[CONTROLLER / DPO TO
 > DECIDE: whether "you may decline research use" must mean that nothing the
 > participant wrote reaches the research copy. Until decided, this item is
 > not closed in the sense its heading gives.]**

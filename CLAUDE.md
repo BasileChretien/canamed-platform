@@ -2014,14 +2014,28 @@ successfully'` — and do not take a green Deploy as proof.
       as controller of the export — DPA Annex VI **R10** item 1. No tool
       rewrites a stored export.
     - ⚠️ **A participant who DECLINED research use is NOT erased from the
-      export, and that is NOT fixed.** Their pool row and every node KEYED by
-      their ids go; what they wrote into the shared lists (answers, replies,
+      export, and that is NOT fixed.** Their pool row and the nodes KEYED by
+      the ids the session records as theirs go; what they wrote into the shared lists (answers, replies,
       hypotheses, deleted answers) is exported under `REDACTED-NAME` with
       their `cid`. DPA G1 said "erased"; it now carries the correction and a
       `[TO DECIDE]`. The export-run test pins the present behaviour AS OPEN —
       if it goes red because the entry is gone, the decision was taken: update
-      G1 and R10. Same family: a decliner's ballot is removed only via
-      `stableIdMapping`; without that row it stays (run).
+      G1 and R10. Same family, closed before version 2 shipped: a decliner's
+      ballot was removed only via `stableIdMapping`; it now also goes by the
+      `stableId` in their own pool row. ⚠️ **Two wrong versions of that fix
+      were caught in review, both run:** (1) the row's stableId was added to
+      the keys deleted at EVERY depth — `pool/<cid>/stableId` is validated
+      by no rule, so `"rooms"` or a consenting participant's clientId took
+      that tree with it; (2) the row was believed only when the table did not
+      tie the stableId to another account — and the table is first-come, so
+      a decliner's ballot stayed. Now: stableIds are removed UNDER `ballots`
+      ONLY (the one node the client keys by stableId), and the row is
+      believed unconditionally; the cost — a declining row naming another's
+      stableId removes that ballot — is pinned by a test. **A key deleted at
+      every depth must come from a source nobody else can write.** The
+      clientId and uid keys still are deleted at every depth, and a
+      consent-less pool row keyed `rooms` still removes the rooms tree (on
+      `main` too; for the consent-scope change).
     - ⚠️ **`stableId` is still exported as written — do NOT describe this
       export as free of cross-session identifiers, and do NOT repeat that the
       join needs it.** For a signed-in participant it IS the auth uid. I first

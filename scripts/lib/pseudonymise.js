@@ -35,9 +35,11 @@
  *     malformed consent (including sessions predating the field) = excluded.
  *     Consent must be affirmative and demonstrable (GDPR Art. 7), so silence
  *     can never be read as agreement.
- *   - A non-consenting participant's `pool` entry is removed, every node keyed
- *     by their clientId is removed, and every node keyed by a stableId that
- *     resolves to their uid is removed (`votes/ballots` is stableId-keyed).
+ *   - A non-consenting participant's `pool` entry is removed; so is every
+ *     node keyed by their clientId or by an account uid `clientMapping` ties
+ *     to them; and, under `ballots` only, the entry keyed by the stableId in
+ *     their own row or by one the mapping table ties to their account. A
+ *     ballot under a stableId neither records stays.
  *   - Their name is never entered into the pseudonym map, so the existing
  *     unknown-name path redacts it to REDACTED-NAME everywhere it appears, and
  *     they get no linkage-table entry (nothing to re-identify them with).
@@ -125,7 +127,8 @@
  *
  * WHAT THIS MODULE DOES NOT DO, so that nobody reads it as more:
  *   - A participant who declined is not ERASED from the output. Their pool
- *     row and every node keyed by their identifiers go; what they wrote into
+ *     row and the nodes keyed by the identifiers the session records as
+ *     theirs go (which ones: the RESEARCH CONSENT block above); what they wrote into
  *     the room's shared lists (answers, replies, hypotheses, deleted answers)
  *     stays, with the name redacted and their per-tab clientId as `cid`.
  *   - Free text is exported as written (R7 in the DPA draft).
@@ -270,14 +273,15 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
     return ta - tb;
   });
 
-  // Research-consent split. Only opted-in participants reach the export; the
-  // rest are erased from it (see the RESEARCH CONSENT block in the header).
+  // Research-consent split. Only opted-in participants keep a row; the rest
+  // lose theirs and the nodes keyed by their identifiers, and are NOT erased:
+  // what they authored stays (see the two blocks in the header).
   const cids = allCids.filter(cid => hasResearchConsent(pool[cid]));
   const excludedCids = allCids.filter(cid => !hasResearchConsent(pool[cid]));
 
-  // Keys to delete wherever they appear: the excluded participants' clientIds,
-  // plus the stableIds/uids that resolve to them. `votes/ballots` is keyed by
-  // stableId and `uidMembers`/`members` by uid, so clientId alone misses them.
+  // Keys to delete wherever they appear: the excluded participants' clientIds
+  // and the account uids `clientMapping` ties to them (`uidMembers` / `members`
+  // are keyed by uid, so clientId alone misses them).
   const clientMapping = sess.clientMapping || {};
   const stableIdMapping = sess.stableIdMapping || {};
   const excludedUids = new Set(
@@ -285,20 +289,30 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   );
   const excludedKeys = new Set(excludedCids);
   excludedUids.forEach(u => excludedKeys.add(u));
+
+  // stableIds, removed under `ballots` AND NOWHERE ELSE. A ballot is the one
+  // node the client keys by stableId (ballotKey() in script.js). Two sources:
+  //   - a stableId the mapping table ties to an excluded participant's account;
+  //   - the stableId an excluded participant's OWN row records. That table row
+  //     is written once, by the join chain, and can be missing; without this
+  //     their ballot stayed in the file.
+  // Why not delete them at every depth, as the first two versions did:
+  // `pool/<clientId>/stableId` is validated by no rule and a mapping row is
+  // first-come, so either can hold ANY string — "rooms", or a consenting
+  // participant's clientId — and a key deleted everywhere takes that tree with
+  // it. Why the row is not checked against the table: the table can equally
+  // tie a decliner's stableId to an account the session does not tie to them
+  // (no `clientMapping` row; or somebody claimed it first), and the ballot
+  // would stay. The price is recorded in the tests: a declining row that
+  // names somebody else's stableId removes THAT ballot. Between keeping a
+  // ballot a person declined to give and losing one, the export loses one.
+  const excludedBallotKeys = new Set();
   Object.keys(stableIdMapping).forEach(sid => {
-    if (excludedUids.has(stableIdMapping[sid])) excludedKeys.add(sid);
+    if (excludedUids.has(stableIdMapping[sid])) excludedBallotKeys.add(sid);
   });
-  // The stableId an excluded participant's OWN row records. The mapping row
-  // above is written once, by the join chain, and can be missing; without this
-  // their ballot stayed in the file, keyed by that stableId. A row is its
-  // writer's word, so where the table ties the same stableId to somebody
-  // ELSE's account the table is believed: a declining row must not be able to
-  // remove a consenting participant's nodes by naming their stableId.
   excludedCids.forEach(cid => {
     const sid = pool[cid] && pool[cid].stableId;
-    if (typeof sid !== "string" || sid.length === 0) return;
-    const tied = hasOwn(stableIdMapping, sid);
-    if (!tied || excludedUids.has(stableIdMapping[sid])) excludedKeys.add(sid);
+    if (typeof sid === "string" && sid.length > 0) excludedBallotKeys.add(sid);
   });
 
   // uid -> pseudonym, so uid-keyed membership maps keep their shape (and their
@@ -410,10 +424,14 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
     }
     for (const k of Object.keys(node)) {
       if (DROP_KEYS.has(k)) { delete node[k]; continue; }
-      // Non-consenting participant: erase the node keyed by their clientId /
-      // stableId / uid, wherever in the tree it sits.
+      // Non-consenting participant: remove the node keyed by their clientId or
+      // account uid, wherever in the tree it sits.
       if (excludedKeys.has(k)) { delete node[k]; continue; }
       const v = node[k];
+      // …and the ballot keyed by their stableId, under `ballots` only.
+      if (k === "ballots" && v && typeof v === "object" && !Array.isArray(v)) {
+        for (const b of Object.keys(v)) if (excludedBallotKeys.has(b)) delete v[b];
+      }
       if (UID_KEYED.has(k) && v && typeof v === "object" && !Array.isArray(v)) {
         node[k] = rekeyByUid(v);
         walk(node[k]);

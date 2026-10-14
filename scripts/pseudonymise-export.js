@@ -174,8 +174,9 @@ async function main() {
 
   // RESEARCH CONSENT gate (Phase-4e compliance gap 1). Participants tick an
   // optional research box in the lobby; joining is not conditional on it. Only
-  // those who ticked it reach this export — everyone else is erased from it by
-  // pseudonymiseSession(). A session where nobody opted in is skipped outright
+  // those who ticked it keep a row in this export — everyone else loses theirs
+  // and the nodes keyed by their identifiers in pseudonymiseSession(), though
+  // not what they authored. A session where nobody opted in is skipped outright
   // rather than exported as a participant-free husk.
   const consentedCodes = closedCodes.filter(c => sessionHasConsent(sessions[c]));
   const noConsentCount = closedCodes.length - consentedCodes.length;
@@ -211,10 +212,11 @@ async function main() {
       " (the transformVersion field; scripts/lib/pseudonymise.js). " +
       "WHO IS IN IT: sessions where nobody consented to research are omitted. In the " +
       "others, only a participant with pool/<clientId>/consent.research === true has a " +
-      "pool row or a linkage entry. A node keyed by a declining participant's identifier is " +
-      "removed where the session records that identifier as theirs: their clientId, the " +
-      "stableId in their own pool row, and an account uid or stableId the mapping tables " +
-      "tie to them; one keyed by an identifier the session ties to nobody is not. A participant " +
+      "pool row or a linkage entry. For a participant who declined, what is removed is: " +
+      "any node keyed by their clientId or by an account uid the clientMapping table ties " +
+      "to them; and, among ballots only, the one keyed by the stableId in their own pool " +
+      "row or by a stableId the mapping table ties to their account. A ballot under a " +
+      "stableId that neither records is not removed. A participant " +
       "who declined, or whose record predates the consent field, is NOT erased from " +
       "the file: what they wrote into the room's shared lists (answers, replies, " +
       "hypotheses, deleted answers) is still here, with the name redacted. " +
