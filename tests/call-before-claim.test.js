@@ -97,11 +97,25 @@ test("a reveal and a team-name save wait for the claim too", () => {
      red before this change). reveal() is also what the LLM chat's unlocks
      call. */
   const reveal = code(bodyOf(SCRIPT, "reveal"));
-  assert.match(reveal, /refRevealed\.child\(id\)\.transaction\(/, "reveal() no longer writes by transaction");
-  assert.deepStrictEqual(writesOutside(reveal, /refRevealed\.child\(id\)\.transaction\(|logEvent\(myRoom, "reveal"/g), [],
+  assert.match(reveal, /revealedRef\.child\(id\)\.transaction\(/, "reveal() no longer writes by transaction");
+  assert.deepStrictEqual(writesOutside(reveal, /(refRevealed|revealedRef)\.child\(id\)\.transaction\(|logEvent\([a-zA-Z]+, "reveal"/g), [],
     "reveal() writes before the room claim has settled");
+  /* …and writes where it was CLICKED. refRevealed follows the stage, so it is
+     captured before the wait (a reveal clicked in section 1 landed in section
+     2's list when the room moved on meanwhile — red on the emulator, #464
+     review). A move to another room drops the write. */
+  const wait = reveal.indexOf("_afterClaim(");
+  const capture = reveal.indexOf("const revealedRef = refRevealed, room = myRoom;");
+  assert.ok(capture !== -1 && capture < wait, "reveal() must capture its list and room before waiting");
+  assert.match(reveal.slice(wait), /if \(myRoom !== room\) return;/);
+  assert.match(reveal.slice(wait), /logEvent\(room, "reveal"/);
   const team = code(bodyOf(SCRIPT, "initTeamName"));
   assert.match(team, /refTeamName\.set\(v\)/, "initTeamName() no longer sets the name");
   assert.deepStrictEqual(writesOutside(team, /refTeamName\.(set|update|remove|transaction)\(/g), [],
     "the team-name save writes before the room claim has settled");
+  /* The name typed in one room is not written into another after a move. */
+  const tWait = team.indexOf("_afterClaim(");
+  const tCapture = team.indexOf("const room = myRoom;");
+  assert.ok(tCapture !== -1 && tCapture < tWait, "the team-name save must capture its room before waiting");
+  assert.match(team.slice(tWait), /refTeamName && myRoom === room \? refTeamName\.set\(v\)/);
 });

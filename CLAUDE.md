@@ -2260,7 +2260,13 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   same way, red before (a reveal wrote nothing after its toast had shown the
   answer; "Save name" said "Could not save the team name"). `reveal()` (which
   the LLM chat's unlocks also call) and the team-name save now wait too;
-  "Save name" shows "Saving…" while it waits.
+  "Save name" shows "Saving…" while it waits. **Waiting moves WHEN a write
+  happens, so it must not move WHERE** (found by #464's review, then red on
+  the emulator): `refRevealed` follows the stage, and a reveal clicked in
+  section 1 landed in section 2's list when the room moved on during the
+  wait. The reveal now captures its list and room at the click and drops the
+  write after a move to another room; the team name drops it too. Any new
+  `_afterClaim` caller must capture its target before waiting.
   ⚠️ **Not fixed:** the other room writes a participant can make in that
   first moment — a reply to an answer, the roleplay round — need a claim on
   the room too and presumably race it the same way. Not measured.

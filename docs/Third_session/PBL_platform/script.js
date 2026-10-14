@@ -6936,14 +6936,17 @@ function reveal(id) {
   const entry = { by: myName, at: serverNow() };
   myPendingReveal = id;
   // undefined aborts - if someone already revealed this item, do not re-write it
+  // The list and room are the ones clicked in: refRevealed follows the stage,
+  // and the wait for the claim can outlast a stage change or a move.
+  const revealedRef = refRevealed, room = myRoom;
   _afterClaim(() => {
-    if (!refRevealed) return;
-    refRevealed.child(id).transaction(cur => (cur == null ? entry : undefined))
+    if (myRoom !== room) return;
+    revealedRef.child(id).transaction(cur => (cur == null ? entry : undefined))
       .then(res => {
         // append-only event log (Phase 1 dual-write — EVENT_SOURCING_DESIGN.md);
         // only emit when WE were the first revealer, so the event log mirrors the
         // mutable `revealed` subtree's first-wins semantics
-        if (res && res.committed) logEvent(myRoom, "reveal", { itemId: id });
+        if (res && res.committed) logEvent(room, "reveal", { itemId: id });
       });
   });
 }
@@ -9447,7 +9450,8 @@ function initTeamName() {
     btn.disabled = true;
     const origLabel = btn.textContent;
     btn.textContent = _t("room.team-name.saving", "Saving…");
-    _afterClaim(() => (refTeamName ? refTeamName.set(v) : Promise.reject(new Error("left the room"))))
+    const room = myRoom;   // not another room's name, if the wait ends in a move
+    _afterClaim(() => (refTeamName && myRoom === room ? refTeamName.set(v) : Promise.reject(new Error("left the room"))))
       .then(() => {
         btn.disabled = false;
         btn.textContent = origLabel;

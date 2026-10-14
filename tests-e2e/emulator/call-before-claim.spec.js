@@ -95,11 +95,22 @@ async function joinWithHeldClaim(browser, code, name, holdMs = HOLD_MS) {
 
 /* A session with one participant whose room claim is held: the facilitator's
    page on the dashboard, the participant in the room, the claim not landed. */
-async function heldParticipantInRoom(page, browser, label, holdMs = HOLD_MS) {
+async function heldParticipantInRoom(page, browser, label, holdMs = HOLD_MS, addSection = null) {
   page.on("dialog", d => { try { d.accept(); } catch (_) {} });
   await installModalAutoAccept(page);
   await page.goto("/");
   await page.locator("#splash-go-create").click();
+  if (addSection) {
+    /* The picker seeds the default section once the library lands; add one. */
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => {
+      const s = document.getElementById("splash-section-add");
+      return !!(s && s.options.length > 0) && document.querySelectorAll("#splash-section-list .splash-section-row").length === 1;
+    });
+    await page.selectOption("#splash-section-add", addSection);
+    await page.locator("#splash-section-add-btn").click();
+    await expect(page.locator("#splash-section-list .splash-section-row")).toHaveCount(2);
+  }
   await page.locator("#splash-create-name").fill("Emu Fac");
   await page.locator("#splash-create-label").fill(label);
   await page.locator("#splash-create-pass").fill("emu-claim-pw");
@@ -213,6 +224,44 @@ test("a team name saved before the room claim has landed is saved, without an er
   await expect(ana.page.locator("#room-score-chip")).toContainText("Team Early", { timeout: 15_000 });
   expect((await ana.page.evaluate(() => window.__toasts)).filter(t => /Could not save the team name/.test(t)),
     "no failure message").toEqual([]);
+
+  await ana.ctx.close();
+});
+
+test("a reveal clicked before the claim lands stays in the section it was clicked in, when the room moves on meanwhile", async ({ page, browser }) => {
+  /* Found by the review of #464: the reveal used to wait for the claim and
+     THEN look up the active section's list, which follows the stage — so an
+     item clicked in section 1 was written into section 2's list if the room
+     moved on during the wait. Two PBL sections; the claim held long enough
+     for the click and the move to both happen before it lands (under the
+     ten-second cap, after which the write would go ahead unclaimed). */
+  test.setTimeout(150_000);
+  const HOLD = 9_000;
+  const { base, room, ana } = await heldParticipantInRoom(page, browser, "reveal-slot-before-claim", HOLD, "jaundice-pbl");
+  const list = (slot) => `${base}/rooms/${room}/sections/${slot}/revealed/history:0`;
+
+  await page.evaluate((r) => setRoomStage(r, 0, 1), room);
+  await expect.poll(() => ana.page.evaluate(() => activeSlot), { message: "section 1 on screen", timeout: 10_000 }).toBe(1);
+  await expect.poll(() => ana.page.evaluate(() => document.querySelectorAll(".req-btn").length), { timeout: 10_000 }).toBeGreaterThan(0);
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database when clicked").toBeNull();
+  await ana.page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll(".req-btn")).find(x => x.dataset.id === "history:0");
+    if (!b) throw new Error("no workup button for history:0");
+    b.click();
+  });
+  /* The room moves on to section 2 before the claim lands. */
+  await page.evaluate((r) => setRoomStage(r, 1, 2), room);
+  await expect.poll(() => ana.page.evaluate(() => activeSlot), { message: "section 2 on screen", timeout: 10_000 }).toBe(2);
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "and still no claim: the move happened during the wait").toBeNull();
+  expect(Date.now() - ana.held[0], "clicked and moved while the claim was still held").toBeLessThan(HOLD);
+
+  await claimLands(base, ana, room);
+  /* Both sections in one read, so a failure shows where the reveal went. */
+  await expect.poll(async () => ({
+    clickedIn: ((await dbReadAsOwner(list(1))) || {}).by || null,
+    onScreenAtLanding: ((await dbReadAsOwner(list(2))) || {}).by || null,
+  }), { message: "saved in the section it was clicked in, and not in the one on screen when the claim landed", timeout: 15_000 })
+    .toEqual({ clickedIn: "Ana", onScreenAtLanding: null });
 
   await ana.ctx.close();
 });
