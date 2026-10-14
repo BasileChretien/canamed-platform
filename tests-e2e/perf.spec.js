@@ -822,7 +822,9 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     takes, is written where no client can read it instead of under the
 //     session. The two call sites change a path; the comments that explained
 //     the old node went with it. Same method, against main at v190:
-//     script.js -41 B, first-party 325.26 -> 325.22 KB (-41 B).
+//     script.js -41 B, lib.js +2 B (a comment), script-loader.js -2 B (the
+//     version string compresses differently), first-party
+//     325.26 -> 325.22 KB (-41 B).
 //     MARGIN ~0.78 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 

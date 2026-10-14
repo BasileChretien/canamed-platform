@@ -1678,8 +1678,10 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     whose commit contains the merge,
     `gh run view <deploy run> --log | grep -F 'released successfully'`;
     **client** — `curl -s https://canamed-69785.web.app/script.js | grep -c
-    _superadminReset` prints **0** (the shipped client no longer names the old
-    node; on 2026-10-08, before this shipped, it printed 4 — judge it by the
+    _superadminReset` prints **0** (`script.js` no longer names the old node —
+    `lib.js` and `script-admin.js` still do, to strip it from archives, so do
+    not extend the check to them; on 2026-10-08, before this shipped, it
+    printed 4 — judge it by the
     number, `grep -c` exits 1 on a zero); **purge** — the first nightly run
     after the merge logs `Leftover reset flags: cleared <n> path(s)`
     (`gh run view <cleanup run> --log | grep -F 'Leftover reset flags'`).
@@ -1967,9 +1969,11 @@ undoing it.
     client counts, `tests` and `survey` rows the research export reads. Read
     from the rules, not run. Nobody has decided to accept THAT; DPA G14
     item 5 puts the question to the controller;
-  - `_superadminReset`, whose DELETE branch names nobody: any signed-in
-    visitor can remove a reset in progress on an open session. Not this
-    change's;
+  - `_superadminReset`, which accepts a DELETE from anyone signed in and
+    nothing else. Harmless since the reset flag moved (#451): no rule reads
+    this node any more and no client writes it, so all there is to delete is
+    a leftover from before the move. Until that change's rules are released,
+    a delete there still cancels a reset in progress;
   - and the 7 below.
 
   It answers "does every way through name the writer", not "is the tie
