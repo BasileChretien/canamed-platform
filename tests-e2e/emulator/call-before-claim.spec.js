@@ -16,6 +16,13 @@
  * claim has settled. Nothing else changes: the rule, the payload, the
  * thirty-second throttle.
  *
+ * THE SAME RACE, AND THE SAME FIX, FOR TWO MORE WRITES (the second and third
+ * tests). A workup reveal and the team name need a claim on THIS room (#457)
+ * and were refused the same way: a reveal clicked in the first moment wrote
+ * nothing (the toast had already shown the answer), and "Save name" said
+ * "Could not save the team name". reveal() — which the LLM chat's unlocks also
+ * call — and the team-name save now wait for the claim too.
+ *
  * HOW THE RACE IS MADE CERTAIN. The participant's page routes its own
  * database WebSocket and holds the one frame that writes `roomOf/<uid>` for
  * a few seconds; everything else passes untouched. Two preconditions are
@@ -53,7 +60,7 @@ async function installModalAutoAccept(page) {
 /* A participant whose room claim reaches the server HOLD_MS late. The claim
    is the client's only `put` to a `/roomOf/` path; its READ (a listen on the
    same path) is not a put and passes. */
-async function joinWithHeldClaim(browser, code, name) {
+async function joinWithHeldClaim(browser, code, name, holdMs = HOLD_MS) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await useEmulator(page);
@@ -65,7 +72,7 @@ async function joinWithHeldClaim(browser, code, name) {
     ws.onMessage((m) => {
       if (typeof m === "string" && /"a":"p"/.test(m) && /\/roomOf\//.test(m)) {
         held.push(Date.now());
-        setTimeout(() => server.send(m), HOLD_MS);
+        setTimeout(() => server.send(m), holdMs);
       } else {
         server.send(m);
       }
@@ -86,15 +93,26 @@ async function joinWithHeldClaim(browser, code, name) {
   return { ctx, page, name, held, uid: await page.evaluate(() => firebase.auth().currentUser.uid) };
 }
 
-test("a call pressed before the room claim has landed still reaches the facilitator", async ({ page, browser }) => {
-  test.setTimeout(120_000);
+/* A session with one participant whose room claim is held: the facilitator's
+   page on the dashboard, the participant in the room, the claim not landed. */
+async function heldParticipantInRoom(page, browser, label, holdMs = HOLD_MS, addSection = null) {
   page.on("dialog", d => { try { d.accept(); } catch (_) {} });
   await installModalAutoAccept(page);
-
   await page.goto("/");
   await page.locator("#splash-go-create").click();
+  if (addSection) {
+    /* The picker seeds the default section once the library lands; add one. */
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => {
+      const s = document.getElementById("splash-section-add");
+      return !!(s && s.options.length > 0) && document.querySelectorAll("#splash-section-list .splash-section-row").length === 1;
+    });
+    await page.selectOption("#splash-section-add", addSection);
+    await page.locator("#splash-section-add-btn").click();
+    await expect(page.locator("#splash-section-list .splash-section-row")).toHaveCount(2);
+  }
   await page.locator("#splash-create-name").fill("Emu Fac");
-  await page.locator("#splash-create-label").fill("call-before-claim");
+  await page.locator("#splash-create-label").fill(label);
   await page.locator("#splash-create-pass").fill("emu-claim-pw");
   await page.locator("#splash-create-submit").click();
   const codeNode = page.locator("#splash-shown-code");
@@ -105,28 +123,36 @@ test("a call pressed before the room claim has landed still reaches the facilita
   await expect(page.locator("#admin-app")).toBeVisible({ timeout: 15_000 });
   const facUid = await page.evaluate(() => firebase.auth().currentUser.uid);
 
-  const ana = await joinWithHeldClaim(browser, code, "Ana");
+  const ana = await joinWithHeldClaim(browser, code, "Ana", holdMs);
   expect(ana.uid, "a second user, in a second context").not.toBe(facUid);
   await expect(page.locator("#prestart-count")).toHaveText("1", { timeout: 20_000 });
   await page.locator("#roomcount-input").selectOption("1");
   await page.locator("#start-session-btn").click();
-
   await expect(ana.page.locator("#app")).toBeVisible({ timeout: 25_000 });
   const room = await ana.page.evaluate(() => myRoom);
+  /* THE PRECONDITIONS: the claim's write is in transit, and the database does
+     not hold it. Each test asserts the second again at the moment it writes. */
+  await expect.poll(() => ana.held.length, { message: "the claim's write was held", timeout: 10_000 }).toBe(1);
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database yet").toBeNull();
+  return { base, room, ana };
+}
+const claimLands = (base, ana, room) => expect.poll(
+  async () => ((await dbReadAsOwner(`${base}/roomOf/${ana.uid}`)) || {}).room,
+  { message: "the claim, once released", timeout: 15_000 }).toBe(room);
+
+test("a call pressed before the room claim has landed still reaches the facilitator", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  const { base, room, ana } = await heldParticipantInRoom(page, browser, "call-before-claim");
   const call = `${base}/rooms/${room}/callForHelp`;
   const btn = ana.page.locator("#call-prof-btn");
   await expect(btn).toHaveText("Call a facilitator");
 
-  /* THE PRECONDITIONS: the claim's write is in transit, and the database does
-     not hold it when the button is pressed. */
-  await expect.poll(() => ana.held.length, { message: "the claim's write was held", timeout: 10_000 }).toBe(1);
-  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database yet").toBeNull();
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database when pressed").toBeNull();
   await btn.click();
   expect(Date.now() - ana.held[0], "pressed while the claim was still held").toBeLessThan(HOLD_MS);
 
   /* The DB first: the claim lands when released, and then the call. */
-  await expect.poll(async () => ((await dbReadAsOwner(`${base}/roomOf/${ana.uid}`)) || {}).room,
-    { message: "the claim, once released", timeout: 15_000 }).toBe(room);
+  await claimLands(base, ana, room);
   await expect.poll(async () => ((await dbReadAsOwner(call)) || {}).by,
     { message: "the call pressed before the claim must reach the database", timeout: 15_000 }).toBe("Ana");
   await expect.poll(async () => Object.values((await dbReadAsOwner(`${base}/rooms/${room}/events`)) || {})
@@ -136,6 +162,106 @@ test("a call pressed before the room claim has landed still reaches the facilita
   await expect(btn).toHaveText("Facilitator called ✓ (tap to cancel)", { timeout: 15_000 });
   await expect.poll(() => page.evaluate(() => document.querySelectorAll("#dashboard .calling").length),
     { message: "the dashboard shows the room calling", timeout: 15_000 }).toBeGreaterThan(0);
+
+  await ana.ctx.close();
+});
+
+test("a reveal clicked before the room claim has landed is saved", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  /* A longer hold: the room is moved to the case stage first, as for a
+     participant who arrives while the case is already open. */
+  const HOLD = 8_000;
+  const { base, room, ana } = await heldParticipantInRoom(page, browser, "reveal-before-claim", HOLD);
+  await page.evaluate((r) => setRoomStage(r, 0, 1), room);
+  await expect(ana.page.locator("#stage-indicator")).toContainText(/Stage 2/i, { timeout: 10_000 });
+  await expect.poll(() => ana.page.evaluate(() => document.querySelectorAll(".req-btn").length),
+    { timeout: 10_000 }).toBeGreaterThan(0);
+
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database when clicked").toBeNull();
+  /* The workup button's own handler, clicked from script: the chat-first case
+     view keeps the buttons out of the layout (as in room-writes-room-bound). */
+  await ana.page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll(".req-btn")).find(x => x.dataset.id === "history:0");
+    if (!b) throw new Error("no workup button for history:0");
+    b.click();
+  });
+  expect(Date.now() - ana.held[0], "clicked while the claim was still held").toBeLessThan(HOLD);
+
+  await claimLands(base, ana, room);
+  await expect.poll(async () => ((await dbReadAsOwner(`${base}/rooms/${room}/sections/1/revealed/history:0`)) || {}).by,
+    { message: "the reveal clicked before the claim must reach the database", timeout: 15_000 }).toBe("Ana");
+  await expect.poll(async () => Object.values((await dbReadAsOwner(`${base}/rooms/${room}/events`)) || {})
+    .filter(e => e.kind === "reveal" && e.by === "Ana").length,
+    { message: "…and its entry in the room's event log", timeout: 15_000 }).toBe(1);
+  /* Then the DOM: the button is marked done. */
+  await expect.poll(() => ana.page.evaluate(() =>
+    Array.from(document.querySelectorAll(".req-btn")).some(x => x.dataset.id === "history:0" && x.classList.contains("done"))),
+    { timeout: 15_000 }).toBe(true);
+
+  await ana.ctx.close();
+});
+
+test("a team name saved before the room claim has landed is saved, without an error", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  const { base, room, ana } = await heldParticipantInRoom(page, browser, "team-name-before-claim");
+  await ana.page.evaluate(() => {
+    window.__toasts = [];
+    const orig = window.toast;
+    window.toast = function (msg) { window.__toasts.push(String(msg)); return orig.apply(this, arguments); };
+  });
+
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database when saved").toBeNull();
+  await ana.page.evaluate(() => {
+    document.getElementById("team-name-input").value = "Team Early";
+    document.getElementById("team-name-btn").click();
+  });
+  expect(Date.now() - ana.held[0], "saved while the claim was still held").toBeLessThan(HOLD_MS);
+
+  await claimLands(base, ana, room);
+  await expect.poll(() => dbReadAsOwner(`${base}/rooms/${room}/teamName`),
+    { message: "the team name saved before the claim must reach the database", timeout: 15_000 }).toBe("Team Early");
+  /* Then the DOM: on the score chip, and no "Could not save" message. */
+  await expect(ana.page.locator("#room-score-chip")).toContainText("Team Early", { timeout: 15_000 });
+  expect((await ana.page.evaluate(() => window.__toasts)).filter(t => /Could not save the team name/.test(t)),
+    "no failure message").toEqual([]);
+
+  await ana.ctx.close();
+});
+
+test("a reveal clicked before the claim lands stays in the section it was clicked in, when the room moves on meanwhile", async ({ page, browser }) => {
+  /* Found by the review of #464: the reveal used to wait for the claim and
+     THEN look up the active section's list, which follows the stage — so an
+     item clicked in section 1 was written into section 2's list if the room
+     moved on during the wait. Two PBL sections; the claim held long enough
+     for the click and the move to both happen before it lands (under the
+     ten-second cap, after which the write would go ahead unclaimed). */
+  test.setTimeout(150_000);
+  const HOLD = 9_000;
+  const { base, room, ana } = await heldParticipantInRoom(page, browser, "reveal-slot-before-claim", HOLD, "jaundice-pbl");
+  const list = (slot) => `${base}/rooms/${room}/sections/${slot}/revealed/history:0`;
+
+  await page.evaluate((r) => setRoomStage(r, 0, 1), room);
+  await expect.poll(() => ana.page.evaluate(() => activeSlot), { message: "section 1 on screen", timeout: 10_000 }).toBe(1);
+  await expect.poll(() => ana.page.evaluate(() => document.querySelectorAll(".req-btn").length), { timeout: 10_000 }).toBeGreaterThan(0);
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "no claim in the database when clicked").toBeNull();
+  await ana.page.evaluate(() => {
+    const b = Array.from(document.querySelectorAll(".req-btn")).find(x => x.dataset.id === "history:0");
+    if (!b) throw new Error("no workup button for history:0");
+    b.click();
+  });
+  /* The room moves on to section 2 before the claim lands. */
+  await page.evaluate((r) => setRoomStage(r, 1, 2), room);
+  await expect.poll(() => ana.page.evaluate(() => activeSlot), { message: "section 2 on screen", timeout: 10_000 }).toBe(2);
+  expect(await dbReadAsOwner(`${base}/roomOf/${ana.uid}`), "and still no claim: the move happened during the wait").toBeNull();
+  expect(Date.now() - ana.held[0], "clicked and moved while the claim was still held").toBeLessThan(HOLD);
+
+  await claimLands(base, ana, room);
+  /* Both sections in one read, so a failure shows where the reveal went. */
+  await expect.poll(async () => ({
+    clickedIn: ((await dbReadAsOwner(list(1))) || {}).by || null,
+    onScreenAtLanding: ((await dbReadAsOwner(list(2))) || {}).by || null,
+  }), { message: "saved in the section it was clicked in, and not in the one on screen when the claim landed", timeout: 15_000 })
+    .toEqual({ clickedIn: "Ana", onScreenAtLanding: null });
 
   await ana.ctx.close();
 });

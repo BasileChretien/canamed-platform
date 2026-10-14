@@ -867,6 +867,11 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     _afterClaim). Same method, against main at v195: script.js +232 B,
 //     first-party 321.99 -> 322.22 KB. The button and startRoom() are eager.
 //     MARGIN ~3.8 KB.
+//   2026-10-14 (thirteenth entry): CAP UNCHANGED (326). A workup reveal and
+//     a team-name save made before the room claim landed were refused the
+//     same way; reveal() and the save now wait on _afterClaim too, writing
+//     where they were clicked. Same method, against main at v196:
+//     script.js +197 B, first-party 322.22 -> 322.41 KB. MARGIN ~3.6 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
