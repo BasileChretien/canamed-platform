@@ -855,6 +855,12 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     (+337 B). Neither can be lazy: localdb.js is the LOCAL backend dbInit()
 //     builds synchronously, teardownRoom() runs on every room change.
 //     MARGIN ~3.9 KB.
+//   2026-10-14 (eleventh entry): CAP UNCHANGED (326). #460: "Reset this
+//     room's case" is removed — its button, its handler and its two strings —
+//     because it never deleted anything (a remove() no rule grants); the
+//     facilitator's acknowledgement of a call for help is repaired in the
+//     rules alone. Same method, against main at v194: script.js -86 B,
+//     i18n.js -77 B, first-party 322.15 -> 321.99 KB (-163 B). MARGIN ~4.0 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

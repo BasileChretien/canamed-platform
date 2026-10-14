@@ -318,8 +318,9 @@ test("the real client: a facilitator who opens a room answers its call — a min
   expect(raised.ack, "a call, not yet answered").toBeUndefined();
   await expect(callButton(ana.page)).toHaveText(/tap to cancel/);
   await expect(callButton(ben.page)).toHaveText(/tap to cancel/);
-  /* The dashboard, read BEFORE the facilitator opens a room (once it has been
-     into a room and back it stops updating — a separate defect). */
+  /* The dashboard, read BEFORE the facilitator opens a room (a dashboard used
+     to stop updating once its facilitator had been into a room and back;
+     fixed in #458, and this test does not depend on either). */
   await expect.poll(() => callingRows(page), { message: "the dashboard shows the room calling", timeout: 15_000 })
     .toBeGreaterThan(0);
 
