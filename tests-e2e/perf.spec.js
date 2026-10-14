@@ -800,6 +800,13 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     This is the reclaim the entries above call owed, in its cheapest form:
 //     it buys room and makes nothing lazy. Moving the account UI out of the
 //     eager file is still the structural answer, and still not done.
+//   2026-10-08 (fifth entry): CAP UNCHANGED (326). #448: on the front page the
+//     wordmark and the tagline are capped to their column, so a larger default
+//     font size no longer scrolls the page sideways; the selects carry paint
+//     containment; a history row may break its label. Same method, against
+//     main at v188: style.css +4 B, first-party 325.03 -> 325.03 KB (+5 B).
+//     The cap costs about 116 B; a comment block it made untrue, and shorter
+//     wording, paid for it. MARGIN ~0.97 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
