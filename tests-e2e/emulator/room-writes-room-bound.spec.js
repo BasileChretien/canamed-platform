@@ -87,8 +87,12 @@
  * room itself. And a participant with NO claim at all is still refused the
  * call, where on the old rules it landed: no route through the product into
  * that state has been shown. The `neighbour` below is the misplaced
- * participant as far as the rules can tell. The repair is in the client (place a returning participant in the
- * room they hold), not here.
+ * participant as far as the rules can tell. The repair is in the client, and
+ * was made after this file: a returning participant goes back to the room
+ * they hold, and a second tab of the same browser joins it
+ * (rejoin-room-claim.spec.js). A browser on an older shell still misplaces
+ * until it updates, so the decision stands; the last test now reaches the
+ * state through the claim rule's facilitator branch.
  *
  * ── A denial here is never left to stand alone ──────────────────────────
  * Every refused write has its ALLOW: the same payload, on the same path, by a
@@ -658,16 +662,23 @@ test("the product's own writes all land — a room's participants, the facilitat
   for (const u of students.concat([s, dee])) await u.ctx.close();
 });
 
-test("a participant who leaves and joins again can still call the facilitator, from the room they are put back in — which is not always theirs", async ({ page, browser }) => {
+test("a participant whose claim names another room can still call the facilitator, from the room on screen", async ({ page, browser }) => {
   /* Why the call for help asks for a claim on ANY room of the session.
-     Leave keeps the anonymous account, and with it the write-once room claim;
-     joining again places the participant afresh (bestRoomFor(): lowest cost,
-     and on a tie the first room by name). Measured on 2026-10-08, twice out of
-     two: left "Room 2", came back in "Room 1", claim still on "Room 2", no
-     message. In that room their answers are refused (they were before any of
-     this), and with a claim on THIS room required, so was their call for
-     help — the one control that had still worked. That was the review's
-     blocking finding on the first version of this change. */
+     Leave keeps the anonymous account, and with it the write-once room claim.
+     Measured on 2026-10-08, twice out of two: joining again placed the
+     participant afresh (bestRoomFor(), on a tie the first room by name) — left
+     "Room 2", came back in "Room 1", claim still on "Room 2", no message. In
+     that room their answers were refused, and with a claim on THIS room
+     required, so was their call for help — the one control that had still
+     worked. That was the review's blocking finding on the first version of
+     this change.
+     The client no longer places anyone that way: a returning participant goes
+     back to the room they hold, and a second tab of the same browser joins it
+     (tests-e2e/emulator/rejoin-room-claim.spec.js). A browser still running an
+     older shell does, until it updates. So the state is reached here through
+     the claim rule's facilitator branch, which moves the claim and leaves the
+     participant on the room they are in — as far as the rules can tell, the
+     same participant. */
   test.setTimeout(240_000);
   page.on("dialog", d => { try { d.accept(); } catch (_) {} });
   await installModalAutoAccept(page);
@@ -699,31 +710,21 @@ test("a participant who leaves and joins again can still call the facilitator, f
   const pairRoom = ["Room 1", "Room 2"].find(r => students.filter(x => x.room === r).length === 2);
   expect(pairRoom, "three participants over two rooms: one room has two").toBeTruthy();
   const leaver = students.find(x => x.room === pairRoom);
+  const pairMate = students.find(x => x.room === pairRoom && x !== leaver);
   const stayedAlone = students.find(x => x.room !== pairRoom);
 
-  /* ── Leave (the product's own button), then join again, same browser ──── */
-  await Promise.all([
-    leaver.page.waitForEvent("load", { timeout: 20_000 }),
-    leaver.page.evaluate(() => document.getElementById("leave-btn").click())
-  ]);
-  await toLobby(leaver.page, code, leaver.name);
-  const uni = await leaver.page.locator("#uni-input option:not([disabled])").first().getAttribute("value");
-  await leaver.page.locator("#uni-input").selectOption(uni);
-  await leaver.page.locator("#consent-workshop").check();
-  await expect(leaver.page.locator("#join-btn")).toBeEnabled({ timeout: 10_000 });
-  await leaver.page.locator("#join-btn").click();
-  await expect(leaver.page.locator("#app")).toBeVisible({ timeout: 30_000 });
+  /* ── the claim moves to the other room; the participant stays on theirs ── */
+  const cid = await leaver.page.evaluate(() => clientId);
+  expect(await page.evaluate(async ([p, v]) => {
+    try { await firebase.database().ref(p).set(v); return "ALLOWED"; }
+    catch (e) { return String(e && (e.code || e.message)); }
+  }, [`${base}/roomOf/${leaver.uid}`, { room: stayedAlone.room, cid }]),
+  "the facilitator may rewrite a participant's claim").toBe("ALLOWED");
   const shown = await leaver.page.evaluate(() => myRoom);
-
-  expect(await leaver.page.evaluate(() => firebase.auth().currentUser.uid), "the same account as before").toBe(leaver.uid);
-  expect(((await dbReadAsOwner(`${base}/roomOf/${leaver.uid}`)) || {}).room, "and the same claim: it is written once").toBe(pairRoom);
-  /* THE PRECONDITION, asserted — not a condition around what follows. If this
-     fails, the participant came back to the room they hold: the placement has
-     been corrected, or assignRooms()/bestRoomFor() now break the tie another
-     way. Then this test no longer shows what it is for; the rule-level case in
-     the first test still pins the rule. Rewrite it, do not wrap it in an if. */
-  expect(shown, "the participant must have been put in a room their claim does not name").not.toBe(pairRoom);
-  expect(shown).toBe(stayedAlone.room);
+  /* THE PRECONDITION, asserted — not a condition around what follows. */
+  expect(shown, "the participant is still shown the room they were in").toBe(pairRoom);
+  expect(((await dbReadAsOwner(`${base}/roomOf/${leaver.uid}`)) || {}).room,
+    "while their claim names another room").toBe(stayedAlone.room);
   const shownRoom = `${base}/rooms/${shown}`;
 
   /* ── the call for help, through the button, from the room on screen ───── */
@@ -741,7 +742,7 @@ test("a participant who leaves and joins again can still call the facilitator, f
   expectDenied(await tryWrite(leaver.page, `${shownRoom}/teamName`, NAME),
     "teamName: by a participant whose claim names another room");
   expect(await dbReadAsOwner(`${shownRoom}/teamName`)).toBeNull();
-  expect(await tryWrite(stayedAlone.page, `${shownRoom}/teamName`, NAME),
+  expect(await tryWrite(pairMate.page, `${shownRoom}/teamName`, NAME),
     "teamName: by the participant who holds this room").toBe("ALLOWED");
 
   /* ── somebody who has joined NOTHING still cannot touch the call ──────── */

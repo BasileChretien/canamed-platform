@@ -416,9 +416,10 @@ OR null (not set yet)
   or the last one acknowledged, or a cancel, or thirty seconds after the last);
   **and**, since 2026-10-14, a participant who holds a room claim **anywhere
   in this session** (`roomOf/<uid>` exists) or the session's facilitator. Not
-  a claim on THIS room, unlike the other six: a participant the client has put
-  back in a room their claim does not name (Leave, then join again) must
-  still be able to call. The price: a participant of another room can raise
+  a claim on THIS room, unlike the other six: a participant shown a room
+  their claim does not name must still be able to call. (The client did that
+  after Leave and a rejoin until 2026-10-14, when placement began to follow
+  the claim; a browser still on an older shell does it until it updates.) The price: a participant of another room can raise
   or cancel this room's call. The room raises and cancels; the facilitator
   clears it with "Resolve call" from inside the room.
   ⚠️ The acknowledgement `openRoomAsAdmin()` sends — the same call with

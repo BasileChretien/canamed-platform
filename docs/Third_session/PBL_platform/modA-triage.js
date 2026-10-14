@@ -375,7 +375,8 @@ function _triagePenaltyPass() {
         const rpid = "declinereason_" + id;
         if (dpen[rpid]) return;
         refScore.child("penalties").child(rpid).transaction(cur =>
-          (cur == null ? { points: -pts, at: serverNow() } : undefined)
+          (cur == null ? { points: -pts, at: serverNow() } : undefined),
+          undefined, false   // toast only what the server accepted (scoreTx in script.js)
         ).then(res => {
           if (res && res.committed) logEvent(myRoom, "score.penalty", { penaltyId: rpid, points: -pts });
         }).catch(e => console.error("Decline-reason penalty write failed", e));
@@ -387,7 +388,8 @@ function _triagePenaltyPass() {
       const pid = "declinepen_" + id;
       if (dpen[pid]) return;
       refScore.child("penalties").child(pid).transaction(cur =>
-        (cur == null ? { points: DECLINE_INDICATED_PENALTY, at: serverNow() } : undefined)
+        (cur == null ? { points: DECLINE_INDICATED_PENALTY, at: serverNow() } : undefined),
+        undefined, false
       ).then(res => {
         if (res && res.committed) logEvent(myRoom, "score.penalty", { penaltyId: pid, points: DECLINE_INDICATED_PENALTY });
       }).catch(e => console.error("Decline-penalty write failed", e));
