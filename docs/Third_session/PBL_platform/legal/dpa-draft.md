@@ -4777,8 +4777,13 @@ application itself was not changed.
       on the emulator, and held by a test. [CONTROLLER — the decision was
       relayed to the author of this change by the session coordinating the
       repository's work, as the operator's; confirm it here: ____ ] The
-      placement itself is not corrected (an application change): until it is,
-      that participant remains in a room where none of their work is saved.
+      placement was corrected in the application afterwards: a participant
+      who joins again is placed in the room their claim names, and a second
+      tab of the same browser — one account, so one claim — is taken to that
+      room. A browser still running an earlier version of the application
+      keeps the old placement until it updates, so the decision above still
+      has work to do. [CONTROLLER — DATE THE PLACEMENT CORRECTION WAS
+      DEPLOYED: ____ ]
 
    [CONTROLLER — DATE THE SEVEN ROOM RULES WERE DEPLOYED: ____ ]
 
