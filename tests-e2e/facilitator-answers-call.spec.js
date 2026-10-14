@@ -116,9 +116,14 @@ test("a facilitator who opens a room answers its call; the room sees it and can 
   const btn = student.locator("#call-prof-btn");
   await expect(btn).toBeVisible();
   await expect(btn).toHaveText("Call a facilitator");
-  const calledAt = Date.now();
   await btn.click();
   await expect.poll(async () => ((await readCall(page, room)) || {}).by, { timeout: 10_000 }).toBe("E2E Student");
+  /* The client's throttle runs from the moment its click handler ran, and
+     initCallProf() stamps the call with that same moment — so this, not a
+     clock read in Node before the click, is where the thirty seconds start.
+     (On WebKit-iPhone the handler ran 1.5-2.1 s after such a Node read; the
+     first version of this test waited from the Node read and failed in CI.) */
+  const firstCallAt = (await readCall(page, room)).at;
   await expect(btn).toHaveText("Facilitator called ✓ (tap to cancel)");
 
   /* ── the facilitator opens the room ── */
@@ -143,12 +148,18 @@ test("a facilitator who opens a room answers its call; the room sees it and can 
   await expect.poll(() => student.evaluate(() => window.__alerts.join(" | ")), { timeout: 5_000 })
     .toMatch(/Please wait \d+s before re-calling a facilitator/);
   expect(((await readCall(page, room)) || {}).ack, "still the acknowledged call").toBe(true);
-  /* …and a tap after them calls again. */
-  await page.waitForTimeout(Math.max(0, calledAt + 31_000 - Date.now()));
+  /* …and a tap after them calls again. Wait on the PAGE's clock, from the
+     first call's own date. */
+  await student.waitForFunction((at) => serverNow() >= at + 30_500, firstCallAt, { timeout: 45_000 });
+  const alertsBefore = await student.evaluate(() => window.__alerts.length);
   await btn.click();
+  /* A refused tap leaves the acknowledged call in place; say whether the
+     throttle refused it, so a failure here names its cause. */
   await expect.poll(async () => {
     const c = await readCall(page, room);
-    return c ? (c.ack === true ? "acknowledged" : "fresh call") : "none";
+    const state = c ? (c.ack === true ? "acknowledged" : "fresh call") : "none";
+    const throttled = await student.evaluate((n) => window.__alerts.slice(n).join(" | "), alertsBefore);
+    return throttled ? state + " (throttled: " + throttled + ")" : state;
   }, { timeout: 10_000 }).toBe("fresh call");
   await expect(btn).toHaveText("Facilitator called ✓ (tap to cancel)");
 
