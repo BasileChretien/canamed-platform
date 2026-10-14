@@ -2733,18 +2733,36 @@ test("rules: poll, answerReplies and observers work in the org tree (G9 parity)"
   expect(await tryWrite(page, `${base}/poll/${cidA}`, { ...poll, feeling: "bad" }),
     "the owner lands the payload the peer was denied").toBe("ALLOWED");
 
-  /* ⚠️ answerReplies has NO ownership gate — `auth != null && !closed` — so a
-     peer CAN write one, in the org tree exactly as in the default tree. That is
-     asserted here rather than glossed over: the mirror is faithful, and this
-     records the real contract. It is pre-existing weakness, tracked in the DPA
-     under the "$other sentinels on participant-writable per-room nodes"
-     hardening item, and hardening it belongs in BOTH trees at once — not
-     smuggled into a parity change. */
-  expect(await tryWrite(tabB, `${base}/rooms/${room}/answerReplies/e1/r2`,
-    { text: "peer reply", by: "B", cid: "cB", at: Date.now() }),
-    "answerReplies is deliberately un-gated in BOTH trees; if this now denies, " +
-    "the node was hardened and this expectation should be updated, not deleted")
-    .toBe("ALLOWED");
+  /* answerReplies. When this parity test was written the node had no gate at
+     all — `auth != null && !closed` — and the line here asserted that a peer
+     who had joined nothing COULD write one, "rather than glossed over". Since
+     2026-10-14 it carries the room condition, or the facilitator's title, in
+     BOTH trees (room-writes-room-bound.spec.js has the whole of it). B has
+     joined nothing in this session: refused. */
+  const peerReply = { text: "peer reply", by: "B", cid: "cB", at: Date.now() };
+  const outsideReply = await tryWrite(tabB, `${base}/rooms/${room}/answerReplies/e1/r2`, peerReply);
+  expect(outsideReply, "a user with no claim on this room must not write a reply in it")
+    .not.toBe("ALLOWED");
+  expect(String(outsideReply)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+  expect(await dbReadAsOwner(`${base}/rooms/${room}/answerReplies/e1/r2`),
+    "the refused reply did not land").toBeNull();
+  // The payload B was denied is valid — A, a member of the room, lands it.
+  expect(await tryWrite(page, `${base}/rooms/${room}/answerReplies/e1/r2`, peerReply),
+    "a member of the room lands the payload the outsider was denied").toBe("ALLOWED");
+
+  /* ⚠️ What the node STILL lacks, recorded the way the first version of this
+     test recorded the missing gate: OWNERSHIP. Once B has joined the room —
+     three writes, which the session code is enough for — B can write a reply,
+     and can rewrite or delete A's. Tracked under the "$other sentinels on
+     participant-writable per-room nodes" hardening item; like this change, it
+     belongs in both trees at once. If the last two lines now deny, replies
+     have become owner-bound: update them, do not delete them. */
+  await claimRoom(tabB, base, room, uidB);
+  expect(await tryWrite(tabB, `${base}/rooms/${room}/answerReplies/e1/r3`, peerReply),
+    "the same user, now a participant of the room").toBe("ALLOWED");
+  expect(await tryWrite(tabB, `${base}/rooms/${room}/answerReplies/e1/r1`, { ...reply, text: "rewritten by B" }),
+    "a reply is not its author's alone: a roommate can still rewrite it").toBe("ALLOWED");
+  expect((await dbReadAsOwner(`${base}/rooms/${room}/answerReplies/e1/r1`)).text).toBe("rewritten by B");
 
   await ctxB.close();
 });

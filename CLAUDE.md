@@ -1864,8 +1864,9 @@ undoing it.
   somebody had thought of; "write-once" read as "safe". The unit test now
   DERIVES the list: it parses each `.write` (and the `.validate` beside it)
   into its `&&` / `||` structure and asks whether there is a way through that
-  never mentions `auth.uid`. **23 writes per tree have one**, each listed in
-  that file's `OPEN` map with its reason:
+  never mentions `auth.uid`. **16 writes per tree have one** (23 until
+  2026-10-14, when the seven room writes were given a writer — next section),
+  each listed in that file's `OPEN` map with its reason:
   - 5 that are creating a session (`created`, `adminPasswordHash`'s first
     write, and the three in-batch fields);
   - 10 that are open for a client id nobody has claimed yet (`pool`, `poll`,
@@ -1882,21 +1883,18 @@ undoing it.
     item 5 puts the question to the controller;
   - `_superadminReset`, whose DELETE branch names nobody: any signed-in
     visitor can remove a reset in progress on an open session. Not this
-    change's;
-  - and the 7 below.
+    change's.
 
   It answers "does every way through name the writer", not "is the tie
   enough": a first version matched ties by regex and counted the ten
   client-id nodes as bound (found in review).
-- ⚠️ **NOT FIXED, found by that derivation — a different defect.** Seven room
-  writes name nobody at all: `teamName`, `roleplayRound`, `callForHelp`,
-  `sections/$slot/revealed/$itemId`, `moduleA/revealed/$itemId`,
-  `events/$pushId` and `answerReplies/…` (the last was already recorded). Run
-  on the emulator on 2026-10-08: a visitor who never joined wrote all seven
-  into a room of an open session — ALLOWED each time. The `roomOf` gate their
-  neighbours have would bind a writer to the ONE room they joined; it would
-  not keep out somebody who has the code, because joining is three writes.
-  Each has a client call site to check first.
+- **Found by that derivation, and closed by a separate change (2026-10-14):**
+  seven room writes named nobody at all — `teamName`, `roleplayRound`,
+  `callForHelp`, `sections/$slot/revealed/$itemId`, `moduleA/revealed/$itemId`,
+  `events/$pushId` and `answerReplies/…`. What a visitor's write to each did,
+  the rule they now carry and what it does not do are the next section. (This
+  bullet used to say the `roomOf` gate their neighbours have was the fix. It
+  was not: the facilitator writes six of them with no claim on the room.)
 - ⚠️ **What the fix does not do.**
   (a) It does not repair a session that already carries a stranger's value,
   and nothing can tell one from the creator's — these nodes record no author.
@@ -1927,6 +1925,169 @@ emulator `PORT=8791 npm run test:e2e:rules -- session-config-creator-bound`.
 Those test the REPOSITORY. For the live rules: the deploy step is best-effort,
 so read its log — `gh run view <deploy run> --log | grep -F 'released
 successfully'` — and do not take a green Deploy as proof.
+
+### A room's seven open writes are the room's and the facilitator's (measured 2026-10-08, fixed 2026-10-14) — in the rules; confirm the deploy before calling it live
+
+Seven writes under `rooms/$roomId` (and the org mirror) named nobody:
+`teamName`, `roleplayRound`, `callForHelp`,
+`sections/$slot/revealed/$itemId`, `moduleA/revealed/$itemId`,
+`events/$pushId`, `answerReplies/$entryId/$replyId`. Each `.write` was
+`auth != null && !closed` (plus append-only on `events`, plus the
+one-call-at-a-time clause on `callForHelp`). Sign-in is automatic and
+anonymous, so the writer could be anyone who knew a session code — joined or
+not. Found by the derivation in `tests/session-config-creator-bound.test.js`
+(#452), which listed them as open and left them open.
+
+- **What a stranger's write did — measured on the emulator on 2026-10-08.**
+  The real client in every seat; the stranger a further browser CONTEXT that
+  never entered the code (no `members` entry, no client id, no `roomOf`,
+  before or after). The probes are not in the repository; the committed spec
+  holds the denials.
+
+  | written by the stranger | what followed |
+  | --- | --- |
+  | `revealed` — the MRI | a participant's OWN client wrote the 12-point penalty within a tenth of a second (and 4 points for a first test). The stranger then deleted the reveal: the penalty stayed, and no member can remove one. The default case has 16 such items |
+  | `callForHelp` | on the dashboard, with the stranger's 200 characters and a badge in the tab title. The thirty-second limit did not apply (delete, then call again). **A real call from the room was cancelled**: the dashboard went from calling to nothing, the room's button back to "Call a facilitator" |
+  | `roleplayRound` | every participant's client rotated its own role (physician → patient), showed "You've swapped seats", and rewrote its own `roleChoices`; set back to 1 and raised again, it rotated again |
+  | `answerReplies` | a reply forged under a participant's name; a real one rewritten; a real one deleted; a 200,000-character `cid` accepted |
+  | `teamName` | on the room's score chip and team-name field, and on the dashboard row |
+  | `events` | displayed nowhere; an entry signed as the facilitator stays with the session. Append-only held: it could not be rewritten or removed |
+  | `moduleA/revealed` | the dashboard's "findings 0/31" became 1/31 for a room that had found nothing. Participants saw nothing. No client writes this address any more; the dashboard and the exports read it for a room with no slot state |
+
+  All seven go to the nightly backup with the session, and the pseudonymised
+  export keeps them: a `by` is replaced by the pseudonym of whichever
+  participant the string NAMES, so a forged entry is attributed to that
+  participant; `text`, `msg`, `payload` and the team name pass as written
+  (read from `scripts/lib/pseudonymise.js`; not run).
+- **The rule now — one clause appended to each of the seven, both trees:**
+  `&& (roomOf/<auth.uid>/room == $roomId || (<the Phase 4a facilitator
+  predicate>))`. Nothing each rule had was taken away. `script.js` was not
+  changed.
+- ⚠️ **Why not "the room condition their neighbours have".** That was the
+  likely fix, and it would have broken the facilitator. Run before the rule
+  was written:
+  - `events` — every stage change from the dashboard logs one in the room it
+    moves (`setRoomStage()` → `logEvent()`), by a facilitator with no claim;
+  - `callForHelp` — "Resolve call" inside a room is a delete;
+  - `teamName`, `answerReplies`, `revealed`, `roleplayRound` — a facilitator
+    who opens a room gets "the exact student view", and none of those
+    controls checks `isRoomAdmin`. All four landed for the creator; the three
+    that were tried (not the round) landed for a co-facilitator.
+
+  And a facilitator DOES hold a claim — on the FIRST room it opens
+  (`startRoom()` claims for whoever enters; the claim rule's own facilitator
+  branch lets it through), and never another. So the room condition alone
+  would have meant: works in the first room visited, refused in every other
+  — and of these controls only Save name reports a failed write (see the
+  refusal table below; the handlers are the same for a facilitator).
+  `tests/room-writes-room-bound.test.js` pins each of those client facts. **Add
+  an `isRoomAdmin` guard to one of the four and its rule may lose the second
+  half; narrow the rule first and that test says what breaks.**
+- **`reveal()` is a transaction, and it commits under this rule — measured.**
+  This file records two rules that could not be written by transaction once
+  they read a node the client does not hold (#223 on `stage`; the room
+  claim). The rule on `revealed` now reads the room claim, or a proof no
+  client can read at all. On the emulator, through the real client: a
+  participant's click committed, and so did a co-facilitator's whose ONLY
+  title in that room was the proof (it had opened the other room first).
+  Scope of that statement: this node, compat SDK 12.17.1, the emulator. The
+  two older cases were not re-run.
+- **What a REFUSAL does.** The only participant refused is one who is in a
+  room view with no claim on that room — the claim failed, or the pool and
+  the claim disagree. They are already refused answers, hypotheses, votes and
+  the chat. When the claim WRITE fails they are told "We could not confirm
+  your place in this room"; when a claim exists and names another room,
+  nothing is attempted and nothing is said.
+  ⚠️ **There is a way into that state through the product — found by the
+  independent review, then measured (twice out of two).** Press Leave, join
+  again in the same browser: `leaveAndReload()` keeps the anonymous account,
+  and its write-once claim with it, while the room is chosen afresh by
+  `bestRoomFor()` — on a tie, the first by name. A participant who left
+  "Room 2" came back in "Room 1" holding a claim on "Room 2". There, BEFORE
+  this change: the answer was refused, the box kept its text, and a toast
+  said "+3 — First answer written"; the call for help and the reveal landed.
+  AFTER: those two are refused as well. So this change takes the last
+  working control from a participant in a state the product can put them in.
+  The repair is in the client — put a returning participant back in the room
+  they hold — and is not made here.
+  The six controls, measured by removing a participant's claim (owner bypass)
+  and using them:
+
+  | control | what the participant is left with |
+  | --- | --- |
+  | a workup button | the answer in a toast (it fires before the write); no finding logged; a console error |
+  | Save name | "Could not save the team name — check your connection and try again." |
+  | Call a facilitator | the button says "called", then goes back; no message |
+  | the "ready to move on" call | **"Facilitator called ✓" — and nothing was written.** That toast does not wait for the write |
+  | agree / disagree | the reply appears and vanishes; no message |
+  | Swap roles | refused, and that participant's client rotates its OWN role twice (once optimistically, once in the catch path) while the room stays where it was |
+
+  None of this is new code: it is what each control does on ANY failed write,
+  a dropped connection included. ⚠️ But until this change the call for help
+  was the one thing a participant with no claim could still do. They can still
+  ask aloud; the button no longer reaches the dashboard. Not changed here — it
+  is a client change (shell bump, and the eager budget has under 1 KB).
+- ⚠️ **What it does not do.**
+  (a) **It is not a boundary against somebody who has the code.** Joining is
+  three writes (`clientMapping`, `pool`, `roomOf`) and asks for nothing else.
+  Measured: refused before; allowed in the room joined; refused in the other;
+  and present in the facilitator's waiting list. Everything in the first table
+  can still be done by such a person — in ONE room, as a listed participant.
+  The spec has a test whose only purpose is to record this.
+  (b) **No ownership inside a room.** A roommate can still rewrite or delete
+  another's reply (the G9 emulator case now records that instead of the
+  missing gate), take back a reveal, cancel a call, rename the team.
+  (c) **Nothing is sealed.** No `$other` on any of the seven: extra children
+  are accepted, and `answerReplies`' `cid` has no length bound. The tracked
+  `$other` item, in both trees at once.
+  (d) It does not repair a session that already carries a stranger's value,
+  and nothing tells one from the room's — `by` is free text. Production was
+  not queried. The purge bounds it: 30 days after closing, 90 after creation.
+  (e) The ten writes open for an unclaimed client id are untouched.
+- ⚠️ **Four older defects met on the way — measured the same day, NOT fixed
+  here.** Each is a change of its own. The fourth is the Leave-and-rejoin
+  misplacement above: it leaves a participant in a room where none of their
+  work is saved, whatever this change does.
+  1. **The facilitator's acknowledgement of a call is refused.**
+     `openRoomAsAdmin()` re-sends the call with `ack: true` and its original
+     `at`; the one-call-at-a-time clause refuses it (`at` has not moved by
+     thirty seconds) — for the creator and a co-facilitator alike, before and
+     after this change. The room never sees "A facilitator is coming ✓".
+     "Resolve call" works. A rules fix; note the validator's 60-second window
+     would refuse the ack of an older call as well.
+  2. **"Reset this room's case" deletes nothing.** Shown to a facilitator
+     inside a room; it is a `remove()` on the parent `revealed` node, which has
+     no write rule. Silent.
+  3. **A dashboard stops updating once its facilitator has opened a room and
+     come back.** `teardownRoom()` calls `refLeaderboard.off()`, and that ref
+     is the SAME location as the dashboard's `refRooms` — `off()` with no
+     arguments drops every listener there. Measured: after one visit the
+     database held a second finding and a new call for help, and the dashboard
+     showed neither; the facilitator's own Advance moved the database and not
+     the row. Both lines are in this repository's first commit (2026-05-18).
+     A client fix.
+     ⚠️ In an emulator spec, read the creator's dashboard BEFORE the creator
+     opens a room.
+- **Why nothing caught it.** As in #452: every hardening pass worked from a
+  list somebody had thought of. Two tests pinned the open shape —
+  `tests/rules.test.js` required the `events` rule NOT to contain
+  `adminPasswordHash`, and the G9 emulator case asserted that a peer who had
+  joined nothing COULD write a reply (it said so, and said to update it). The
+  `OPEN` map in `tests/session-config-creator-bound.test.js` is down from 23
+  writes per tree to 16.
+- **The room subtree is now held to parity as a whole.**
+  `tests/rule-tree-parity.test.js` used to re-prefix three nodes. A session
+  has two addresses — its subtree and its `adminSecrets` branch — and with
+  both mapped EVERY room-level node is a pure re-prefix of its original. That
+  is asserted, with a check that no org rule reads the default tree's secret.
+
+`Verify:` `node --test tests/room-writes-room-bound.test.js
+tests/rule-tree-parity.test.js tests/session-config-creator-bound.test.js`,
+and on the emulator `PORT=8791 npm run test:e2e:rules -- room-writes-room-bound`
+(four tests; against the rules as they were, all four fail at their first
+denial). Those test the REPOSITORY. For the live rules: the deploy step is
+best-effort, so read its log — `gh run view <deploy run> --log | grep -F
+'released successfully'` — and do not take a green Deploy as proof.
 
 ### 2026-05-30 multi-agent security review — outcomes
 
@@ -2471,12 +2632,21 @@ observed — LOCAL mode models no rules — so these are static findings:**
   still addresses `root.child('sessions')` — a mis-copied prefix would fail
   **OPEN**, which is worse than the missing rule it replaced. A deliberate
   asymmetry must be declared in its `ASYMMETRIC` map with a reason.
-  ⚠️ **The mirror faithfully reproduces one weakness:** `answerReplies` has NO
+  ⚠️ ~~**The mirror faithfully reproduces one weakness:** `answerReplies` has NO
   ownership gate in EITHER tree (`auth != null && !closed`). The emulator case
-  asserts a peer CAN write one, so the real contract is recorded rather than
-  implied. Hardening belongs to the `$other`-sentinel item and must happen in
-  both trees at once — not smuggled into a parity change.
-  `Verify:` `node --test tests/rule-tree-parity.test.js`.
+  asserts a peer CAN write one~~ **HALF CLOSED 2026-10-14, in the rules — confirm
+  the deploy before calling it live.** That sentence ran two things together.
+  The node had no gate at ALL: the "peer" the emulator case allowed had joined
+  nothing. It now requires a participant of that room or the session's
+  facilitator, in both trees ("A room's seven open writes" above), and the
+  case asserts the outsider is refused. What it still lacks is OWNERSHIP: once
+  in the room, a participant can rewrite or delete another's reply — the case
+  now records THAT, with the same instruction to update it rather than delete
+  it. Hardening belongs to the `$other`-sentinel item and must happen in both
+  trees at once.
+  `Verify:` `node --test tests/rule-tree-parity.test.js`, which since the same
+  date holds EVERY room-level node to a pure re-prefix (the session subtree
+  and its `adminSecrets` branch), not three.
 - ~~`summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
   low value)~~ **WRONG ON BOTH COUNTS for `created.at` — ✅ FIXED IN CODE
   2026-10-07 (PR #438), together with `closed.at`. "In code" is the claim: the
