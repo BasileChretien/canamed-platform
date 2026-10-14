@@ -1879,20 +1879,34 @@ that could not be confirmed from the code is marked.*
   runs nightly on whatever the main branch holds and no calendar date marks
   the boundary. See Annex VI, R10.
 - **What it does NOT do — stated plainly.**
-  - **It does not erase a participant who declined research use.** Their pool
-    row is removed; so is every node keyed by their clientId or by an account
-    UID the `clientMapping` table ties to them — with one exception, the
-    membership list: an account that also stands behind a consenting row (two
-    tabs of one browser) keeps its entry there, under that row's pseudonym
-    (run); and, among ballots only, those keyed by the stableId in their own
-    row or by a stableId the mapping table ties to their account. A ballot
-    under a stableId that neither records stays (run). The choice has a
-    cost, also run: a declining row that records somebody else's stableId
-    removes that person's ballots — every vote, in every room. A row is its
-    writer's word, and between keeping ballots a person declined to give and
-    losing a consenting participant's, the export loses them. What they wrote
-    into a room's shared lists — answers, replies, hypotheses, deleted answers
-    — stays, with the name redacted. See Annex VI, G1 (corrected) and R10.
+  - **Who is in it — since transform version 3, an inclusion filter.** A
+    participant is *included* when their pool row records research consent,
+    a `clientMapping` row binds it to an account, and they have not
+    withdrawn. A record that names a person is kept only when it can be shown
+    to be an included participant's: by the clientId keying it, by its `cid`,
+    by the clientId in its `by` (a role assignment), or by a display name that
+    an included participant holds and nobody else in the session does
+    (events, reveals, triage choices, a call for help). Everything else
+    attributable to a person is removed and counted in the job's log (run).
+    An account UID the `clientMapping` table ties to a row that is not
+    included is removed wherever it appears as a key — with one exception,
+    the membership list: an account that also stands behind an included row
+    (two tabs of one browser) keeps its entry there, under that row's
+    pseudonym (run). Ballots are kept only under a key shown to be an
+    included participant's, and never under the stableId a non-included row
+    records; that has a cost, also run: a declining row that records somebody
+    else's stableId removes that person's ballots — every vote, in every room.
+    A row is its writer's word, and between keeping ballots a person declined
+    to give and losing a consenting participant's, the export loses them. The
+    same reasoning, applied to display names, costs an included participant
+    her events, reveals and triage choices when a participant who is not
+    included shares her name (run). A record written under an included
+    participant's name or `clientId` by somebody else is not detected: the
+    rules bind neither to the writer. **Files written by versions 1 and 2**
+    hold what a participant who declined wrote into a room's shared lists —
+    answers, edits, replies, hypotheses, deleted answers, events — with the
+    name redacted, and the rows and records of identities with no
+    participant-list entry. See Annex VI, G1 and R10.
   - **It does not remove `stableId`**, the study's join key. For a signed-in
     participant that *is* their account UID, the same in every session; for an
     anonymous one it is a random value kept in the browser, carried into the
@@ -3004,6 +3018,59 @@ a different lawful basis. The original finding follows.
 > DECIDE: whether "you may decline research use" must mean that nothing the
 > participant wrote reaches the research copy. Until decided, this item is
 > not closed in the sense its heading gives.]**
+>
+> **Transform version 3 — corrected in code; NOT yet in any stored file.**
+> The export became an *inclusion* filter (`scripts/lib/research-inclusion.js`):
+> a record that names a person is kept only when it can be shown to belong to
+> an *included* participant — one whose pool row records research consent, is
+> bound to an account by a `clientMapping` row, and has not withdrawn. Run on
+> a session written the way the application writes it (eight identities, each
+> writing an answer, an edit, a deleted answer, two hypotheses, a reply, a poll
+> answer, a ballot, a pre- and post-test, a questionnaire, a role choice,
+> presence, an event, a reveal and a triage choice): on version 2, everything a
+> decliner, a withdrawn participant or a signed-in decliner wrote into the shared
+> lists was in the file, under `REDACTED-NAME` with their `clientId`; so was every
+> row and record of an identity with **no** participant-list entry (poll, tests,
+> questionnaire, presence, ballot, answers, events), and one invented row that
+> recorded consent made a session exportable by itself. On version 3 none of
+> their text or identifiers is in the file and the consenting participants'
+> work is (run, `tests/pseudonymise-consent-scope.test.js`, and the real job,
+> `tests/pseudonymise-export-run.test.js`). What version 3 removes, from the
+> first file that carries `transformVersion: 3`:
+> - for a participant who declined, withdrew, or whose consenting row is bound
+>   to no account: every row keyed by their `clientId` (pool, poll, tests,
+>   questionnaire, presence, role choice, role assignment); their ballots; every
+>   answer, edit, deleted answer, hypothesis and reply whose `cid` is theirs;
+>   a role assignment they made; and every event, reveal, triage choice or call
+>   for help in their name;
+> - the same for an identity with no pool row at all;
+> - an included participant's event, reveal or triage choice when her display
+>   name is also held by somebody who is not included (the record names its
+>   author by display name only, so it cannot be shown to be hers);
+> - a facilitator's event, reveal or reply in a room (it cannot be told from
+>   one written in their name by somebody else); the facilitator's own records
+>   (`created`, `closed`, `audit`, manual scores, configuration) stay, name
+>   redacted;
+> - a room's team name (free text, no author recorded).
+>
+> What it does **not** do: it does not detect a record written under somebody
+> else's name or `clientId` (the rules bind neither to the writer); a reply an
+> included participant wrote to a removed entry stays; and it changes no file
+> already written — every file without `transformVersion: 3` holds what a
+> decliner wrote (R10, item 1). The job's log now counts each kind of removal.
+> [OPERATOR — DATE OF THE FIRST FILE CARRYING `transformVersion: 3`: ____ ]
+>
+> **[CONTROLLER TO DECIDE: (a) whether failing closed on a shared display name
+> is right — an included participant loses her events, reveals and triage
+> choices to a namesake who declined; the alternative keeps the record and
+> strips the name, which keeps a decliner's action in the file; (b) whether a
+> participant whose consenting row is bound to no account (a failed claim) is
+> rightly left out; (c) whether an included participant's reply to a removed
+> entry stays; (d) whether the facilitator's own records belong in the research
+> copy at all — the facilitator ticks no research consent.]** For a file that
+> carries `transformVersion: 3`, the "overstates it" correction above no longer
+> applies, except as stated in "what it does not do". The item stays open until
+> those decisions are taken and R10 item 1 is settled.
 **G1 — (historical) The research export ignores research consent entirely.**
 Verified: `scripts/pseudonymise-export.js` selects sessions with
 `codes.filter(c => sessions[c] && sessions[c].closed)` — **the only filter is
@@ -4972,6 +5039,19 @@ reviewed-release process.
 > written where an older session holds them. The session mail queue, which
 > held e-mail addresses, is the one such node that was an identifier; it is
 > dropped since transform version 2 (R10).
+>
+> **Transform version 3 narrows WHOSE free text passes, not how.** From the
+> first file carrying `transformVersion: 3`, the free text above is exported
+> only where the record can be shown to be an included participant's (G1): an
+> answer, edit, deleted answer, hypothesis, reply, poll answer or
+> questionnaire answer of a participant who declined, withdrew, or has no
+> account-bound participant-list entry is removed, and so is a call for help
+> in such a person's name. A room's `teamName` is removed outright — free text
+> with no author recorded. What an included participant wrote still passes
+> as written, and so does the facilitator's text (scenario, labels, score
+> tags, links). The legacy per-prompt reply lists are now filtered the same
+> way, by the `clientId` that keys each reply (run). This item is otherwise
+> unchanged.
 
 **R9 — No Art. 28 contract with GitHub, accepted by the Processor and put to
 the Controller (2026-09-02).** GitHub, Inc. processes personal data on the
@@ -5262,9 +5342,14 @@ data subjects of this export whom its Art. 30(1) record did not list
    in a version-2 file nothing links an anonymous participant's rows to a UID
    — only the identified backup's `clientMapping` does, for as long as that
    backup is kept.
-2. **A participant who declined research use is not erased from the file.**
-   What they wrote into a room's shared lists is still exported, with the name
-   redacted. Recorded, with what was run, under G1. Not changed here.
+2. **A participant who declined research use was not erased from the file —
+   corrected in transform version 3, not in the files version 2 wrote.** What
+   they wrote into a room's shared lists was exported, with the name redacted
+   and their `clientId` beside it, and so was everything written under an
+   identity with no participant-list entry. Version 3 keeps only what can be
+   shown to be an included participant's (G1, with what was run and what it
+   still does not do). A version-2 file holds what version 2 let through; R10
+   item 1's question covers those files too.
 3. **`stableId` is still exported, as written — and that is a choice still to
    be made, not a constraint.** It came through (run) in
    `pool/<clientId>/stableId`, in each test and questionnaire record, and as
@@ -5320,6 +5405,7 @@ data subjects of this export whom its Art. 30(1) record did not list
    same day.
 
 [OPERATOR — DATE OF THE FIRST FILE CARRYING `transformVersion: 2`: ____ ]
+[OPERATOR — DATE OF THE FIRST FILE CARRYING `transformVersion: 3`: ____ ]
 
 ---
 

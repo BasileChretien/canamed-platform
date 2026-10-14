@@ -2351,14 +2351,35 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       whether this is to be assessed as a breach, is the operator's decision
       as controller of the export — DPA Annex VI **R10** item 1. No tool
       rewrites a stored export.
-    - ⚠️ **A participant who DECLINED research use is NOT erased from the
-      export, and that is NOT fixed.** Their pool row and the nodes KEYED by
-      the ids the session records as theirs go; what they wrote into the shared lists (answers, replies,
-      hypotheses, deleted answers) is exported under `REDACTED-NAME` with
-      their `cid`. DPA G1 said "erased"; it now carries the correction and a
-      `[TO DECIDE]`. The export-run test pins the present behaviour AS OPEN —
-      if it goes red because the entry is gone, the decision was taken: update
-      G1 and R10. Same family, closed before version 2 shipped: a decliner's
+    - ✅ **in code (`TRANSFORM_VERSION = 3`); ⛔ in no stored file until the
+      first one that says `transformVersion: 3`. The export is an INCLUSION
+      filter now (`scripts/lib/research-inclusion.js`).** Until version 3 a
+      participant who DECLINED was not erased: what they wrote into shared
+      lists went out under `REDACTED-NAME` with their `cid`; rows and records
+      under an identity with NO pool row went out as written; one invented
+      consenting pool row made a session exportable; and a withdrawal with no
+      `clientMapping` row changed nothing yet was logged as applied (all run
+      on version 2). Now a participant is INCLUDED only when the row records
+      consent AND `clientMapping/<cid>` binds it AND they have not withdrawn,
+      and a record naming a person is kept only when it can be SHOWN to be an
+      included one's — by its container's key, its `cid`, the clientId in
+      roleAssign's `by` (assignRolesRandomly writes `by: clientId`, not a
+      name), or a display name no one else in the session holds (events,
+      reveals, triage, call for help). The rest is removed and counted in the
+      job's log. **Costs, each pinned by a test and put to the controller in
+      G1:** a namesake who declined costs an included participant her
+      name-only records; the facilitator's events/replies/reveals go (cannot be
+      told from forgeries) while `audit`/`score/manual`/`created`/`closed`
+      stay; `teamName` goes (free text, no author); a reveal by someone not
+      included disappears from the room's revealed set. **NOT closed:** a
+      record written under an included participant's name or `cid` by somebody
+      else (the rules bind neither); an included participant's reply to a
+      removed entry stays. `tests/pseudonymise-consent-coverage.test.js`
+      DERIVES from the rules every identity-keyed container and every record
+      with `by`/`cid` and runs the function on each — add a new one to the
+      lists in research-inclusion.js or that test goes red. The stock-client
+      fixture is `tests/fixtures/consent-scope-session.js`; fill a new record
+      kind there with what the CLIENT writes. Same family, closed before version 2 shipped: a decliner's
       ballot was removed only via `stableIdMapping`; it now also goes by the
       `stableId` in their own pool row. ⚠️ **Two wrong versions of that fix
       were caught in review, both run:** (1) the row's stableId was added to
@@ -2371,10 +2392,11 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       believed unconditionally; the cost — a declining row naming another's
       stableId removes ALL of that participant's ballots, every vote in every
       room — is pinned by a test. **A key deleted at
-      every depth must come from a source nobody else can write.** The
-      clientId and uid keys still are deleted at every depth, and a
-      consent-less pool row keyed `rooms` still removes the rooms tree (on
-      `main` too; for the consent-scope change).
+      every depth must come from a source nobody else can write.** Fixed in
+      version 3: a consent-less pool row keyed `rooms` removed the whole rooms
+      tree (run on version 2). A clientId is now removed only from containers
+      keyed by clientId; only account UIDs are still deleted at every depth,
+      because a `clientMapping` value must equal the writer's `auth.uid`.
     - ⚠️ **`stableId` is still exported as written — do NOT describe this
       export as free of cross-session identifiers, and do NOT repeat that the
       join needs it.** For a signed-in participant it IS the auth uid. I first

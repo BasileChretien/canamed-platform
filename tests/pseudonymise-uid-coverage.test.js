@@ -161,13 +161,15 @@ const CID = "c1";
  *  `sentinel` at `position`. With `boundToParticipant` the sentinel is also
  *  that participant's uid in `clientMapping`, so a uid-keyed map has a
  *  pseudonym to move to; without it the uid is nobody's in the pool, as a
- *  facilitator's is. The two take different branches of the rekeying. */
+ *  facilitator's is. The two take different branches of the rekeying. The
+ *  participant is bound to SOME account either way: since transform version 3
+ *  a row with no `clientMapping` row is not included at all. */
 function sessionWith(position, sentinel, boundToParticipant) {
   const body = {
     pool: { [CID]: { name: "Ann", university: "Caen", at: 10, consent: YES } },
     rooms: { r1: { answers: { moduleA: { a1: { by: "Ann", cid: CID, text: "kept", at: 20 } } } } }
   };
-  if (boundToParticipant) body.clientMapping = { [CID]: sentinel };
+  body.clientMapping = { [CID]: boundToParticipant ? sentinel : "AnnsOwnAccountUid00000000001" };
   let node = body;
   position.path.forEach((seg, i) => {
     const last = i === position.path.length - 1;

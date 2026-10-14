@@ -31,12 +31,17 @@
  *     from 2026-08-03 on);
  *   - e-mail addresses, where a session still held the queue of the mail
  *     function removed on 2026-09-24.
+ * A file written by version 1 or 2 also carries what a participant who
+ * declined wrote into the room's shared lists (answers, edits, replies,
+ * hypotheses, deleted answers, events, reveals, triage choices), and rows and
+ * records under identities with no pool entry. Version 3 keeps only what can
+ * be shown to be an included participant's (scripts/lib/research-inclusion.js).
  * Do not date this by the calendar: the job runs once a night on whatever
- * `main` holds, so the first file written by version 2 is the first one that
+ * `main` holds, so the first file written by a version is the first one that
  * says so. A fix to the transform does not rewrite a stored file; what is done
  * about the files already written is the decision of the controller of this
  * export (legal/dpa-draft.md, Annex VI R10).
- * `stableId` is NOT removed by either version: see the transform's header.
+ * `stableId` is NOT removed by any version: see the transform's header.
  * The `note` in the payload states all of this for whoever opens the file.
  *
  * tests/pseudonymise-export-run.test.js RUNS this script against an in-memory
@@ -84,7 +89,7 @@ const { getDatabase } = require("firebase-admin/database");
 const fs = require("fs");
 const path = require("path");
 const { chooseDestination, uploadArchive, describeDestination } = require("./lib/archive");
-const { pseudonymiseSession, sessionHasConsent, hasResearchConsent,
+const { pseudonymiseSession, sessionHasConsent, isIncluded,
         applyWithdrawals, TRANSFORM_VERSION } = require("./lib/pseudonymise");
 const { readSessionLocations } = require("./lib/session-trees");
 
@@ -141,7 +146,7 @@ async function main() {
      pseudonymiseSession() all honour it without any of them knowing this node
      exists. A parallel code path that had to be remembered is exactly how this
      export came to ignore consent altogether (Annex VI G1). */
-  let withdrawnParticipants = 0;
+  const withdrawals = { records: 0, rowsWithdrawn: 0, unmatched: 0 };
   for (const loc of locations) {
     let recs = {};
     try {
@@ -157,9 +162,9 @@ async function main() {
                     "exactly like nobody having withdrawn.");
       process.exit(4);
     }
-    const n = Object.keys(recs).filter(u => recs[u] && recs[u].research === false).length;
-    withdrawnParticipants += n;
-    sessions[loc.key] = n ? applyWithdrawals(loc.data, recs) : loc.data;
+    /* Counted by what each record CHANGED. A record whose uid no clientMapping
+       row ties to a pool row changed nothing, and was once counted as applied. */
+    sessions[loc.key] = applyWithdrawals(loc.data, recs, withdrawals);
   }
   const codes = Object.keys(sessions);
   const orgCount = locations.filter(l => l.orgSlug).length;
@@ -173,34 +178,54 @@ async function main() {
   console.log("Open (skipped):       " + openCount);
 
   // RESEARCH CONSENT gate (Phase-4e compliance gap 1). Participants tick an
-  // optional research box in the lobby; joining is not conditional on it. Only
-  // those who ticked it keep a row in this export — everyone else loses theirs,
-  // and the keyed nodes the note below lists, in pseudonymiseSession(), though
-  // not what they authored. A session where nobody opted in is skipped outright
-  // rather than exported as a participant-free husk.
+  // optional research box in the lobby; joining is not conditional on it. Since
+  // transform version 3 the export is an INCLUSION filter
+  // (scripts/lib/research-inclusion.js): a participant is included when their
+  // pool row records research consent AND a clientMapping row binds it to an
+  // account; a record that names a person is kept only when it can be shown
+  // to be an included participant's. A session with nobody included is skipped
+  // outright rather than exported as a participant-free husk.
+  // The counts below are the whole log: no code, name or identifier, because
+  // the log of a public repository's workflow is world-readable.
   const consentedCodes = closedCodes.filter(c => sessionHasConsent(sessions[c]));
   const noConsentCount = closedCodes.length - consentedCodes.length;
-  console.log("Withdrawn (Art. 7(3)): " + withdrawnParticipants +
-              " participant record(s) applied before the gate");
+  console.log("Withdrawn (Art. 7(3)): " + withdrawals.records + " record(s); " +
+              withdrawals.rowsWithdrawn + " pool row(s) marked withdrawn; " +
+              withdrawals.unmatched + " record(s) reached no pool row through clientMapping" +
+              " (such a record changed nothing: a row of that person's is left out only" +
+              " if it is bound to no account)");
 
   let participantsIn = 0;
   let participantsOut = 0;
   for (const code of closedCodes) {
     const pool = (sessions[code] && sessions[code].pool) || {};
     for (const cid of Object.keys(pool)) {
-      if (hasResearchConsent(pool[cid])) participantsIn++; else participantsOut++;
+      if (isIncluded(sessions[code], cid)) participantsIn++; else participantsOut++;
     }
   }
   console.log("Sessions w/ consent:  " + consentedCodes.length);
-  console.log("Sessions skipped (no participant consented): " + noConsentCount);
-  console.log("Participants included (research consent):    " + participantsIn);
-  console.log("Participants excluded (declined / no record): " + participantsOut);
+  console.log("Sessions skipped (no participant included): " + noConsentCount);
+  console.log("Participants included (consent, bound to an account): " + participantsIn);
+  console.log("Participants excluded (closed sessions):              " + participantsOut);
 
   const linkage = {};
   const pseudonymised = {};
+  const removed = {};
   for (const code of consentedCodes) {
-    pseudonymised[code] = pseudonymiseSession(sessions[code], code, linkage);
+    pseudonymised[code] = pseudonymiseSession(sessions[code], code, linkage, removed);
   }
+  const n = (k) => removed[k] || 0;
+  console.log("In the exported sessions:");
+  console.log("  participants included:                              " + n("participantsIncluded"));
+  console.log("  excluded, no research consent (or withdrawn):       " + n("participantsNoConsent"));
+  console.log("  excluded, consent recorded but no clientMapping row: " + n("participantsUnbound"));
+  console.log("  removed, rows keyed by an identity not included:    " + n("keyedRows"));
+  console.log("  removed, ballots not shown to be an included one's: " + n("ballots"));
+  console.log("  removed, records whose cid is not included:         " + n("cidNotIncluded"));
+  console.log("  removed, records with a cid and a by naming nobody included: " + n("byNamesNobodyIncluded"));
+  console.log("  removed, name-only records, name not included:      " + n("nameNotIncluded"));
+  console.log("  removed, name-only records, name also held by someone not included: " + n("nameShared"));
+  console.log("  removed, team names (free text, no author):         " + n("teamNames"));
 
   const pseudoPayload = {
     exportTakenAt: new Date().toISOString(),
@@ -210,19 +235,31 @@ async function main() {
     sessions: pseudonymised,
     note: "Pseudonymised export, written by transform version " + TRANSFORM_VERSION +
       " (the transformVersion field; scripts/lib/pseudonymise.js). " +
-      "WHO IS IN IT: sessions where nobody consented to research are omitted. In the " +
-      "others, only a participant with pool/<clientId>/consent.research === true has a " +
-      "pool row or a linkage entry. For a participant who declined, what is removed is: " +
-      "any node keyed by their clientId or by an account uid the clientMapping table ties " +
-      "to them (except a members entry of an account that also stands behind a consenting " +
-      "row, kept under that row's pseudonym); and, among ballots only, those keyed by the " +
-      "stableId in their own pool row or by a stableId the mapping table ties to their " +
-      "account. A ballot under a stableId that neither records is not removed; and a " +
-      "declining row that records another participant's stableId removes that " +
-      "participant's ballots. A participant " +
-      "who declined, or whose record predates the consent field, is NOT erased from " +
-      "the file: what they wrote into the room's shared lists (answers, replies, " +
-      "hypotheses, deleted answers) is still here, with the name redacted. " +
+      "WHO IS IN IT: a participant is INCLUDED when their pool row records " +
+      "consent.research === true, a clientMapping row binds it to an account, and they " +
+      "have not withdrawn. Sessions with nobody included are omitted. In the others, a " +
+      "record that names a person is kept only when it can be shown to be an included " +
+      "participant's: a row keyed by their clientId (pool, poll, tests, survey, presence, " +
+      "role choices, role assignments); a ballot keyed by their clientId, by the stableId " +
+      "their row records or by one the mapping table ties to their account, and by no " +
+      "stableId a row that is not included records; an answer, edit, deleted answer, " +
+      "hypothesis or reply whose cid is theirs and in which no name belongs to nobody " +
+      "included; a role assignment whose assigner clientId is theirs; an event, reveal, " +
+      "triage choice or call for help whose every name is held by an included participant " +
+      "and by nobody else the session records. Everything else attributable to a person " +
+      "is removed: what a participant who declined, withdrew or is bound to no account " +
+      "wrote; what an identity with no included pool row wrote; and a name-only record " +
+      "whose name an included participant shares with somebody who is not included (so " +
+      "an included participant can lose such records to a namesake). A room's team name " +
+      "is removed (free text, no author recorded); its stage, scores and committed votes " +
+      "stay. The facilitator's own records (created, closed, audit, manual scores, " +
+      "configuration) stay, name redacted; their entries in shared lists do not. A record " +
+      "is its writer's word: one written in an included participant's name or clientId " +
+      "by somebody else is not detected; and a reply an included participant wrote to a " +
+      "removed answer stays, under that answer's id. A file written by version 2 or " +
+      "earlier is NOT erased of participants who declined: it holds what they wrote into " +
+      "shared lists, under REDACTED-NAME with their clientId, and rows under identities " +
+      "with no pool entry. " +
       "NAMES: participant names -> Student-A/B/... per session, in name/by fields and " +
       "inside the JSON payload of room events; names that are not a consenting " +
       "participant's (facilitators, participants who declined) -> REDACTED-NAME; " +
