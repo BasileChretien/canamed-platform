@@ -25,13 +25,20 @@
  * writing ack == true onto the call that stands, with its `at` and `by`
  * unchanged and its `msg` unchanged or removed; and the validator takes a date
  * older than a minute on any record that is acknowledged and keeps the call's
- * `at` and `by`. That is the acknowledgement's shape, but the validator does
- * not ask who writes it: on an acknowledged call older than a minute, anyone
- * the `.write` admits (a room claim anywhere in the session) can rewrite `msg`
- * and keep the date — before, only by re-dating the call. Recorded in review,
- * not pinned here. Both only ADD a way through: nothing accepted before is
- * refused now. The rule accepts the payload the deployed client already
- * sends, so no browser needs a new shell for it.
+ * `at`, `by` and `msg` (or drops the `msg`). That is the acknowledgement's
+ * shape; the validator does not ask who writes it. Both only ADD a way
+ * through: nothing accepted before is refused now. The rule accepts the
+ * payload the deployed client already sends, so no browser needs a new shell
+ * for it.
+ *
+ * SEALED SINCE (review of #460 and #461). The validator's exception first
+ * checked `at` and `by` only, and the record had no `$other`: on a call
+ * acknowledged past the minute, anyone the `.write` admits (a room claim
+ * anywhere in the session) could rewrite its `msg` and keep the date, and add
+ * children of any name and size. Now `msg` must be unchanged or gone, and
+ * `by`, `at`, `ack`, `msg` are the only children. Section 1 runs both against
+ * an acknowledged call more than a minute old; section 4 runs the extra child
+ * on a fresh call.
  *
  * NEW TO STUDENTS. With the acknowledgement landing, a room sees a state no
  * production session has shown before — "A facilitator is coming ✓ (tap to
@@ -159,6 +166,21 @@ for (const [tree, baseOf, secretsOf] of TREES) {
     expect(await tryWrite(page, call, ACK_OLD), "acknowledged by the session's creator").toBe("ALLOWED");
     expect(await dbReadAsOwner(call)).toEqual(ACK_OLD);
 
+    /* ── 1b. the acknowledged call, past the minute, takes no edit ────────────
+       A participant of another room holds a claim in the session, which is
+       all the `.write` asks of a write onto an acknowledged call. Before the
+       seal both of these landed. */
+    expectDenied(await tryWrite(neighbour.page, call, Object.assign({}, ACK_OLD, { msg: "a message nobody sent" })),
+      "a message written onto the acknowledged call, its date kept");
+    expectDenied(await tryWrite(neighbour.page, call, Object.assign({}, ACK_OLD, { note: "x".repeat(5000) })),
+      "an extra child written onto the acknowledged call, its date kept");
+    expectDenied(await tryWrite(neighbour.page, `${call}/note`, "x"), "an extra child alone");
+    expect(await dbReadAsOwner(call), "the acknowledgement is as the creator wrote it").toEqual(ACK_OLD);
+    /* THE ALLOW LEG: the same writer, the same path, the record as it stands —
+       which the rule has always let through on an acknowledged call. */
+    expect(await tryWrite(neighbour.page, call, ACK_OLD), "the same participant re-sends the acknowledged call unchanged").toBe("ALLOWED");
+    expect(await dbReadAsOwner(call)).toEqual(ACK_OLD);
+
     /* ── 2. "tap to call again": a call may follow an acknowledged one at once ── */
     const AGAIN = { by: "Room One", at: Date.now() };
     expect(await tryWrite(member.page, call, AGAIN), "the room calls again after the acknowledgement").toBe("ALLOWED");
@@ -178,7 +200,10 @@ for (const [tree, baseOf, secretsOf] of TREES) {
        acknowledging. */
     expect(await tryDelete(member.page, call)).toBe("ALLOWED");
     const FRESH = { by: "Room One", at: Date.now(), msg: "stuck on the examination" };
-    expect(await tryWrite(member.page, call, FRESH)).toBe("ALLOWED");
+    expectDenied(await tryWrite(member.page, call, Object.assign({}, FRESH, { room: "Room 2" })),
+      "a fresh call with a child the record does not declare");
+    expect(await dbReadAsOwner(call)).toBeNull();
+    expect(await tryWrite(member.page, call, FRESH), "the same call without it").toBe("ALLOWED");
     expectDenied(await tryWrite(page, call, { by: "Somebody Else", at: FRESH.at, ack: true }),
       "the facilitator re-signs the call while acknowledging it");
     expectDenied(await tryWrite(page, call, { by: FRESH.by, at: FRESH.at, ack: true, msg: "a different message" }),
