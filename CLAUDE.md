@@ -2468,8 +2468,10 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       participant's → `REDACTED-NAME` (`system` and `Admin` kept),
       `creatorUid` / `ownerUid` / `roomOf` / both mapping tables dropped at
       any depth, root `mail` dropped, `members` / `uidMembers` rekeyed by
-      pseudonym. NOT done, deliberately: a consent filter (it is the
-      facilitator's own archive), `university` buckets, `stableId`. Live
+      pseudonym (a `roleAssign` `by` is a clientId, and kept). NOT done,
+      deliberately: a consent filter (it is the facilitator's own archive),
+      `university` buckets, `stableId`, and free text — `controller` and
+      `workshopLabel` often carry the facilitator's name. Live
       with the shell that carries it. `Verify:` `node --test tests/lib.test.js`.
     - **Also seen, not changed:** `members` is keyed by a uid's LAST pool
       row's pseudonym while names keep the FIRST, so one account behind two

@@ -1119,6 +1119,21 @@ test("pseudonymiseTree: no account uid survives, and the membership maps are key
   assert.ok(!json.includes("teacher@example.test"));
 });
 
+test("pseudonymiseTree: the `by` of a role assignment is a client id, and stays as written", () => {
+  /* shuffleRoles(): refRoleAssign.set({ assignments, by: clientId, at }) —
+     under moduleB and under a section; the sections may arrive as an array
+     (`.val()` renders an integer-keyed node as one). Found in review. */
+  const ra = () => ({ assignments: { c1: "patient", c2: "physician" }, by: "c2", at: 5 });
+  const tree = {
+    pool: { c1: { name: "Ann", at: 1 }, c2: { name: "Bea", at: 2 } },
+    rooms: { R: { moduleB: { roleAssign: ra() }, sections: [null, { roleAssign: ra() }] } }
+  };
+  const out = lib.pseudonymiseTree(tree).tree.rooms.R;
+  assert.strictEqual(out.moduleB.roleAssign.by, "c2");
+  assert.strictEqual(out.sections[1].roleAssign.by, "c2");
+  assert.deepStrictEqual(out.moduleB.roleAssign.assignments, { c1: "patient", c2: "physician" });
+});
+
 test("pseudonymiseTree: a node called `mail` below the root is content, and stays", () => {
   const tree = { pool: { c1: { name: "Ann", at: 1 } }, rooms: { R: { notes: { mail: "x" } } } };
   assert.strictEqual(lib.pseudonymiseTree(tree).tree.rooms.R.notes.mail, "x");

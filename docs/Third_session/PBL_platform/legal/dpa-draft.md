@@ -5435,8 +5435,12 @@ data subjects of this export whom its Art. 30(1) record did not list
    and the old mail queue, and keys `members` by pseudonym. **Still as it
    was:** a participant who declined keeps their row (the archive applies no
    consent filter: it is the Controller's own copy), `university` is not
-   bucketed, and `stableId` is carried as written — for a signed-in
-   participant, their account UID — as in the nightly export (item 3).
+   bucketed, the session's `controller` and `workshopLabel` (free text,
+   often the facilitator's name and institution) and every other free-text
+   field are carried as written, and `stableId` is carried as written — for a
+   signed-in participant, their account UID — as in the nightly export
+   (item 3). "Names" above means the `by` and `name` fields and the names
+   inside a payload, nothing wider.
 5. **`scenarioId` still says which scenario ran.** For a *shared* scenario the
    library lists it with its author's UID and display name or e-mail address —
    by the author's own choice to share it (read; not run).

@@ -437,8 +437,8 @@
   // The walker rewrites every string value matching a known real name,
   // wherever it appears in the tree — covers pool.name, answers.{}.by,
   // score.manual.{}.by, calls.{}.by, plus any future field that holds a
-  // participant name. It does not modify booleans, numbers, or object
-  // keys (only values), so cids (used as keys throughout) are untouched.
+  // participant name. Object keys are kept (cids key the tree), except
+  // that uid nodes are dropped and the membership maps rekeyed by pseudonym.
   function pseudoCode(i) {
     if (i < 26) return "Student-" + String.fromCharCode(65 + i);
     const a = Math.floor(i / 26) - 1;
@@ -505,12 +505,12 @@
       }
       return v;
     }
-    function walk(node) {
+    function walk(node, parent) {
       if (!node || typeof node !== "object") return;
       if (Array.isArray(node)) {
         for (let i = 0; i < node.length; i++) {
           node[i] = rewrite(node[i]);
-          if (node[i] && typeof node[i] === "object") walk(node[i]);
+          if (node[i] && typeof node[i] === "object") walk(node[i], parent);
         }
         return;
       }
@@ -525,11 +525,12 @@
         if (k === "payload" && typeof v === "string") {
           const s = scrubPayload(v);
           if (s === null) delete node[k]; else node[k] = s;
-        } else if ((k === "by" || k === "name") && typeof v === "string") {
+        } else if ((k === "by" || k === "name") && typeof v === "string" &&
+                   !(k === "by" && parent === "roleAssign")) { // that `by` is a clientId
           node[k] = nameOf(v);
         } else {
           node[k] = rewrite(node[k]);
-          if (node[k] && typeof node[k] === "object") walk(node[k]);
+          if (node[k] && typeof node[k] === "object") walk(node[k], k);
         }
       }
     }
