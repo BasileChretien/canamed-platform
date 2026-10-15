@@ -5426,6 +5426,21 @@ data subjects of this export whom its Art. 30(1) record did not list
    be shareable", and a facilitator who ticks the box has every reason to
    believe it. Not changed here: it is part of the application the browser
    caches, and needs its own release.
+   **Corrected in the application (2026-10-15), for names and account
+   identifiers only; it reaches a facilitator's browser with the release
+   that carries it.** The archive now opens an event's payload and replaces
+   the names in it, writes `REDACTED-NAME` for a `by` or `name` that is no
+   participant's (the facilitator's own, or a participant whose row is gone),
+   drops `creatorUid`, `scenarioRef.ownerUid`, `roomOf`, both mapping tables
+   and the old mail queue, and keys `members` by pseudonym. **Still as it
+   was:** a participant who declined keeps their row (the archive applies no
+   consent filter: it is the Controller's own copy), `university` is not
+   bucketed, the session's `controller` and `workshopLabel` (free text,
+   often the facilitator's name and institution) and every other free-text
+   field are carried as written, and `stableId` is carried as written — for a
+   signed-in participant, their account UID — as in the nightly export
+   (item 3). "Names" above means the `by` and `name` fields and the names
+   inside a payload, nothing wider.
 5. **`scenarioId` still says which scenario ran.** For a *shared* scenario the
    library lists it with its author's UID and display name or e-mail address —
    by the author's own choice to share it (read; not run).

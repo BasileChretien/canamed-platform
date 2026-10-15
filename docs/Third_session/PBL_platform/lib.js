@@ -426,9 +426,9 @@
   // only affect the .txt download. The full JSON archive shipped raw names.
   // This walker pseudonymises a session subtree (the same shape /sessions/
   // {code} has in RTDB) using deterministic Student-A / Student-B / ...
-  // codes ordered by /pool/{cid}.at (join order). Matches the strategy
-  // used by scripts/pseudonymise-export.js for the daily research export
-  // so the on-demand archive and the cron-export are interchangeable.
+  // codes ordered by /pool/{cid}.at (join order). On names and account
+  // uids it does what the nightly export's version 2 does; it applies no
+  // consent filter and no university buckets (tests/lib.test.js says why).
   //
   // Pure: no DOM, no Firebase, no mutation of the input. Returns a new
   // tree plus the realName -> pseudonym map (linkage table) so callers
@@ -437,8 +437,8 @@
   // The walker rewrites every string value matching a known real name,
   // wherever it appears in the tree — covers pool.name, answers.{}.by,
   // score.manual.{}.by, calls.{}.by, plus any future field that holds a
-  // participant name. It does not modify booleans, numbers, or object
-  // keys (only values), so cids (used as keys throughout) are untouched.
+  // participant name. Object keys are kept (cids key the tree), except
+  // that uid nodes are dropped and the membership maps rekeyed by pseudonym.
   function pseudoCode(i) {
     if (i < 26) return "Student-" + String.fromCharCode(65 + i);
     const a = Math.floor(i / 26) - 1;
@@ -467,9 +467,20 @@
         nameToPseudo[name] = pseudoCode(Object.keys(nameToPseudo).length);
       }
     });
+    // uid -> the pseudonym of its first pool row; none for the facilitator.
+    const mapping = (tree.clientMapping && typeof tree.clientMapping === "object") ? tree.clientMapping : {};
+    const uidToPseudo = Object.create(null);
+    cids.forEach(cid => {
+      const uid = mapping[cid], name = pool[cid] && pool[cid].name;
+      if (typeof uid === "string" && !uidToPseudo[uid] &&
+          Object.prototype.hasOwnProperty.call(nameToPseudo, name)) {
+        uidToPseudo[uid] = nameToPseudo[name];
+      }
+    });
     // Deep clone via JSON so the input tree is never mutated. Functions /
     // undefined / cycles are not expected in a Firebase RTDB tree.
     const out = JSON.parse(JSON.stringify(tree));
+    delete out.mail; // the removed mail queue; root only (a content id may be "mail")
     // Strip the admin password hash defence-in-depth — a pseudonymised
     // export is meant to be shareable; the hash never should be in it.
     if (out && Object.prototype.hasOwnProperty.call(out, "adminPasswordHash")) {
@@ -487,18 +498,6 @@
     if (out && Object.prototype.hasOwnProperty.call(out, "_adminPresence")) {
       delete out._adminPresence;
     }
-    // R3-A1 — operator-name leaks in session.created.by and session.closed.by
-    // would survive the pool-derived walker (operator usually never joins as
-    // a student). Replace the operator name with a generic "Admin" so the
-    // archive's audit trail is preserved (the timestamps stay) without
-    // re-identifying the facilitator.
-    ["created", "closed"].forEach(k => {
-      if (out && out[k] && typeof out[k] === "object" &&
-          typeof out[k].by === "string") {
-        out[k].by = "Admin";
-      }
-    });
-
     function rewrite(v) {
       if (typeof v === "string" &&
           Object.prototype.hasOwnProperty.call(nameToPseudo, v)) {
@@ -506,23 +505,68 @@
       }
       return v;
     }
-    function walk(node) {
+    function walk(node, parent) {
       if (!node || typeof node !== "object") return;
       if (Array.isArray(node)) {
         for (let i = 0; i < node.length; i++) {
           node[i] = rewrite(node[i]);
-          if (node[i] && typeof node[i] === "object") walk(node[i]);
+          if (node[i] && typeof node[i] === "object") walk(node[i], parent);
         }
         return;
       }
       for (const k of Object.keys(node)) {
-        node[k] = rewrite(node[k]);
-        if (node[k] && typeof node[k] === "object") walk(node[k]);
+        if (PSEUDO_UID_DROP.indexOf(k) !== -1) { delete node[k]; continue; }
+        const v = node[k];
+        if (PSEUDO_UID_KEYED.indexOf(k) !== -1 && v && typeof v === "object") {
+          const rekeyed = {};
+          Object.keys(v).forEach(uid => { if (uidToPseudo[uid]) rekeyed[uidToPseudo[uid]] = v[uid]; });
+          node[k] = rekeyed;
+        }
+        if (k === "payload" && typeof v === "string") {
+          const s = scrubPayload(v);
+          if (s === null) delete node[k]; else node[k] = s;
+        } else if ((k === "by" || k === "name") && typeof v === "string" &&
+                   !(k === "by" && parent === "roleAssign")) { // that `by` is a clientId
+          node[k] = nameOf(v);
+        } else {
+          node[k] = rewrite(node[k]);
+          if (node[k] && typeof node[k] === "object") walk(node[k], k);
+        }
+      }
+    }
+    // "system" and "Admin" are what the client writes for no name.
+    function nameOf(v) {
+      if (Object.prototype.hasOwnProperty.call(nameToPseudo, v)) return nameToPseudo[v];
+      return (!v || v === "system" || v === "Admin") ? v : "REDACTED-NAME";
+    }
+    // logEvent / logAdminAction: a JSON object in a string, ≤ 500 chars.
+    function scrubPayload(s) {
+      if (s.length > 500) return null;
+      try {
+        const p = JSON.parse(s);
+        if (!p || typeof p !== "object" || Array.isArray(p)) return null;
+        walk(p);
+        return JSON.stringify(p);
+      } catch (e) {
+        return null;
       }
     }
     walk(out);
+    // R3-A1 — operator-name leaks in session.created.by and session.closed.by
+    // would survive the pool-derived walker (operator usually never joins as
+    // a student). Replace the operator name with a generic "Admin" so the
+    // archive's audit trail is preserved (the timestamps stay) without
+    // re-identifying the facilitator. After the walk (it would redact it).
+    ["created", "closed"].forEach(k => {
+      if (out[k] && typeof out[k] === "object" && typeof out[k].by === "string") {
+        out[k].by = "Admin";
+      }
+    });
     return { tree: out, linkage: nameToPseudo };
   }
+  // Account uids: dropped at any depth, or (membership maps) rekeyed.
+  const PSEUDO_UID_DROP = ["creatorUid", "ownerUid", "roomOf", "clientMapping", "stableIdMapping"];
+  const PSEUDO_UID_KEYED = ["members", "uidMembers"];
 
   // ---------------------------------------------------------------
   // dedupeBallotsByStableId — collapse split-personality ballots
