@@ -301,12 +301,21 @@
             },
             "callForHelp": {
               ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!data.exists() || data.child('ack').val() == true || newData.val() == null || newData.child('at').val() >= data.child('at').val() + 30000 || ((root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val())) && newData.child('ack').val() == true && newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val() && (!newData.child('msg').exists() || newData.child('msg').val() == data.child('msg').val()))) && (root.child('sessions').child($sessionId).child('roomOf').child(auth.uid).exists() || (root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val())))",
-              ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && (newData.child('at').val() >= now - 60000 || newData.child('ack').val() == true && newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val()))",
+              ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && (newData.child('at').val() >= now - 60000 || newData.child('ack').val() == true && newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val() && (!newData.child('msg').exists() || newData.child('msg').val() == data.child('msg').val())))",
+              "by": {
+                ".validate": "newData.isString()"
+              },
+              "at": {
+                ".validate": "newData.isNumber()"
+              },
               "ack": {
                 ".validate": "newData.val() == null || newData.isBoolean()"
               },
               "msg": {
                 ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 200)"
+              },
+              "$other": {
+                ".validate": false
               }
             },
             "presence": {
@@ -1144,12 +1153,21 @@
                 },
                 "callForHelp": {
                   ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!data.exists() || data.child('ack').val() == true || newData.val() == null || newData.child('at').val() >= data.child('at').val() + 30000 || ((root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val())) && newData.child('ack').val() == true && newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val() && (!newData.child('msg').exists() || newData.child('msg').val() == data.child('msg').val()))) && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('roomOf').child(auth.uid).exists() || (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val())))",
-                  ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && (newData.child('at').val() >= now - 60000 || newData.child('ack').val() == true && newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val()))",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && (newData.child('at').val() >= now - 60000 || newData.child('ack').val() == true && newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val() && (!newData.child('msg').exists() || newData.child('msg').val() == data.child('msg').val())))",
+                  "by": {
+                    ".validate": "newData.isString()"
+                  },
+                  "at": {
+                    ".validate": "newData.isNumber()"
+                  },
                   "ack": {
                     ".validate": "newData.val() == null || newData.isBoolean()"
                   },
                   "msg": {
                     ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 200)"
+                  },
+                  "$other": {
+                    ".validate": false
                   }
                 },
                 "presence": {
