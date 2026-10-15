@@ -438,13 +438,17 @@ OR null (not set yet)
   for a claim on any room, so can a participant of another room — who can
   also simply cancel it. Pinned as open in
   `tests-e2e/emulator/call-for-help-ack.spec.js`.
-  ⚠️ **Also open, and NEW since 2026-10-14 (not pinned by a test):** the
-  validator's exception for an old date (below) does not ask who writes or
-  look at `msg`, and the "last one acknowledged" way through admits any claim
-  holder. So once a call older than a minute is acknowledged, a participant
-  can rewrite its `msg` and KEEP its date; before, only by re-dating it. The
-  dashboard does not show `msg` on an acknowledged call. Found in the review
-  of #460; closing it would add `msg` unchanged-or-removed to the exception.
+  **Closed (2026-10-15): the acknowledged record is sealed.** The validator's
+  exception for an old date (below) first looked at `at` and `by` only, and
+  the record had no `$other`, while the "last one acknowledged" way through
+  admits any claim holder. So once a call older than a minute was
+  acknowledged, a participant could rewrite its `msg` and keep its date, and
+  add children of any name and size; the participant's own data download
+  copies the whole record into `helpCallsByMe`. Found in the reviews of #460
+  and #461. The exception now asks for `msg` unchanged or removed, and `by`,
+  `at`, `ack`, `msg` are the only children (`$other` false), in both trees.
+  The client has only ever written those four. Pinned with allow legs in
+  `tests-e2e/emulator/call-for-help-ack.spec.js` (section 1b).
 
 **Schema:**
 ```json
@@ -468,11 +472,16 @@ OR null (no call active).
   (newData.child('at').val() >= now - 60000 ||
    newData.child('ack').val() == true &&
    newData.child('at').val() == data.child('at').val() &&
-   newData.child('by').val() == data.child('by').val())
+   newData.child('by').val() == data.child('by').val() &&
+   (!newData.child('msg').exists() ||
+    newData.child('msg').val() == data.child('msg').val()))
 )"
 
 msg: ".validate: newData.val() == null || 
   (newData.isString() && newData.val().length <= 200)"
+by: ".validate: newData.isString()"
+at: ".validate: newData.isNumber()"
+$other: ".validate: false"   (sealed: by, at, ack, msg only)
 
 ack: ".validate: newData.val() == null || newData.isBoolean()"
 ```

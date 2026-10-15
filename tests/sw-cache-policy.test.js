@@ -556,3 +556,103 @@ test("handleSameOrigin still works when called with no event at all", async () =
   await drain();
   assert.deepStrictEqual(calls.put, ["/privacy.html"]);
 });
+
+// ==========================================================================
+// 6. a response that cannot be the file its URL names is never kept
+// ==========================================================================
+/* sw.js keeps a copy of every same-origin 2xx it fetches, and a cache-first
+   URL is then answered from that copy, without the network, until the next
+   SHELL_VERSION. An HTML page answering for a script, a stylesheet or an
+   image was kept like any other — Hosting's `/o/**` rewrite answers every
+   path under it with index.html, and a network that intercepts traffic
+   answers with its own login or block page — and that file was then broken
+   in that browser until the next release. The page still gets what the
+   network sent; only the copy is refused. */
+const TYPE_OF = {
+  html: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  json: "application/json",
+  webmanifest: "application/manifest+json",
+  svg: "image/svg+xml",
+  png: "image/png",
+  woff2: "font/woff2"
+};
+/** body(), with the Content-Type header a real response carries. */
+function typed(text, contentType) {
+  const b = body(text);
+  b.headers = { get: (h) => (String(h).toLowerCase() === "content-type" ? contentType : null) };
+  return b;
+}
+/** What Hosting sends for a path: by its extension, a page when it has none. */
+function typeFor(p) {
+  const last = p.split("?")[0].split("/").pop();
+  const dot = last.lastIndexOf(".");
+  return (dot > 0 && TYPE_OF[last.slice(dot + 1).toLowerCase()]) || TYPE_OF.html;
+}
+
+test("an HTML page that answers for a script, a stylesheet or an image is returned to the page but not kept", async () => {
+  for (const p of ["/script-admin.js?v=v197", "/room.css", "/admin-tools.js?v=v143", "/icons/icon-192.png", "/privacy.css"]) {
+    const { calls } = fakeCaches({});
+    global.fetch = () => Promise.resolve(typed("<!doctype html><title>Sign in to the network</title>", TYPE_OF.html));
+    const req = request(p);
+    const ev = fakeEvent(req);
+    const resp = await handleSameOrigin(req, ev);
+    assert.match(resp._text, /Sign in to the network/, p + ": the page still gets what the network sent");
+    await ev.settled();
+    await drain();
+    assert.deepStrictEqual(calls.put, [], p + ": an HTML page was kept under a URL that names no page");
+  }
+});
+
+test("the same HTML is kept under a URL that names a page", async () => {
+  for (const [p, extra] of [
+    ["/privacy.html", {}],
+    ["/", { mode: "navigate" }],
+    ["/o/caen-nagoya/", { mode: "navigate" }],
+    ["/v", { mode: "navigate" }]
+  ]) {
+    const { calls } = fakeCaches({});
+    global.fetch = () => Promise.resolve(typed("<!doctype html>", TYPE_OF.html));
+    const req = request(p, extra);
+    const ev = fakeEvent(req);
+    await handleSameOrigin(req, ev);
+    await ev.settled();
+    assert.deepStrictEqual(calls.put, [p], p + ": a page must still be kept for offline use");
+  }
+});
+
+test("a file of the kind its URL names is kept, whatever the case of its type", async () => {
+  for (const [p, type] of [
+    ["/script-admin.js?v=v197", TYPE_OF.js],
+    ["/room.css", "TEXT/CSS"],
+    ["/manifest.webmanifest", TYPE_OF.webmanifest],
+    ["/icons/icon-192.png", TYPE_OF.png],
+    ["/admin-tools.js?v=v143", null]   // no Content-Type at all: not shown to be HTML
+  ]) {
+    const { calls } = fakeCaches({});
+    global.fetch = () => Promise.resolve(typed("file", type));
+    const req = request(p);
+    const ev = fakeEvent(req);
+    await handleSameOrigin(req, ev);
+    await ev.settled();
+    assert.deepStrictEqual(calls.put, [p], p + " (" + type + "): must be kept");
+  }
+});
+
+test("the install precache keeps no HTML page under an asset that is not one, and goes on with the rest", async () => {
+  const scriptKey = SHELL_ASSETS.find((a) => a.split("?")[0] === "/script.js");
+  assert.ok(scriptKey, "SHELL_ASSETS lists no /script.js — pick another non-page asset for this test");
+  const { calls } = fakeCaches({});
+  global.fetch = (r) => {
+    const p = String(typeof r === "string" ? r : r.url).replace(ORIGIN, "");
+    return Promise.resolve(p === scriptKey ? typed("<!doctype html>", TYPE_OF.html) : typed("file", typeFor(p)));
+  };
+  const kept = [];
+  swListeners.install({ waitUntil(p) { kept.push(p); } });
+  assert.strictEqual(kept.length, 1, "install must hold its event open");
+  await kept[0];
+  assert.ok(!calls.put.includes(scriptKey), "the HTML page answering for " + scriptKey + " was precached");
+  assert.deepStrictEqual(calls.put.slice().sort(), SHELL_ASSETS.filter((a) => a !== scriptKey).sort(),
+    "every other shell asset — the pages included — is precached");
+});

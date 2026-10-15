@@ -2165,11 +2165,13 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
   (b) **No ownership inside a room.** A roommate can still rewrite or delete
   another's reply (the G9 emulator case now records that instead of the
   missing gate), take back a reveal, cancel a call, rename the team.
-  (c) **Five of the seven are not sealed.** `teamName` must be a string and
-  `roleplayRound` a number, so neither can carry anything else; the other five
-  have no `$other`, so extra children are accepted, and `answerReplies`' `cid`
-  has no length bound. The tracked `$other` item, in both trees at once.
-  (This said "no `$other` on any of the seven" until the review counted.)
+  (c) **Four of the seven are not sealed.** `teamName` must be a string and
+  `roleplayRound` a number, so neither can carry anything else, and
+  `callForHelp` is sealed since 2026-10-15 (`by`, `at`, `ack`, `msg`; next
+  item); the other four have no `$other`, so extra children are accepted,
+  and `answerReplies`' `cid` has no length bound. The tracked `$other` item,
+  in both trees at once. (This said "no `$other` on any of the seven" until
+  the review counted, then "five" until `callForHelp` was sealed.)
   (d) It does not repair a session that already carries a stranger's value,
   and nothing tells one from the room's — `by` is free text. Production was
   not queried. The purge bounds it: 30 days after closing, 90 after creation.
@@ -2193,17 +2195,25 @@ not. Found by the derivation in `tests/session-config-creator-bound.test.js`
      clause has a fifth way through, the facilitator's (the Phase 4a
      predicate) writing `ack == true` onto the call that stands with `at` and
      `by` unchanged and `msg` unchanged or gone; the validator takes an older
-     date on any ACKNOWLEDGED record that keeps `at` and `by` — that shape,
-     not that writer (it checks neither the writer nor `msg`). Both edits
+     date on any ACKNOWLEDGED record that keeps `at`, `by` and `msg` (or
+     drops `msg`) — that shape, not that writer. Both edits
      only ADD a way through, and the
      rule accepts the payload the deployed client already sends, so no
      browser needs a new shell for it. **New to students:** the acknowledged
      state, and "tap to call again" from it. Still open, pinned as such: a
      participant can make a call read as acknowledged by re-dating it after
      thirty seconds — and, under the any-room claim, so can one of another
-     room, who can also cancel it. Also open, NEW with the fix and not
-     pinned: once a call older than a minute is acknowledged, a claim holder
-     can rewrite its `msg` and keep the date (before, only by re-dating it).
+     room, who can also cancel it. **Closed since (2026-10-15), in the
+     rules:** the fix first left the acknowledged record open — past the
+     minute, a claim holder could rewrite its `msg` and keep the date, and
+     add children of any name and size, and the participant's data download
+     copies the whole record into `helpCallsByMe`. The validator's exception
+     now asks for `msg` unchanged or gone, and the record is sealed (`by`,
+     `at`, `ack`, `msg`; `$other` false). Live only once a deploy has
+     released the rules (`released successfully`). `Verify:` `node --test
+     tests/call-for-help-ack.test.js`; on the emulator `PORT=8791 npm run
+     test:e2e:rules -- call-for-help-ack` (section 1b fails on the rules
+     before the seal, in both trees).
   2. **"Reset this room's case" deleted nothing** — since the first commit. A
      facilitator-only `remove()` of the whole `revealed` list, which no rule
      grants; silent. **REMOVED, by decision (2026-10-14), not repaired:** a

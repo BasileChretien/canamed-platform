@@ -872,11 +872,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     same way; reveal() and the save now wait on _afterClaim too, writing
 //     where they were clicked. Same method, against main at v196:
 //     script.js +197 B, first-party 322.22 -> 322.41 KB. MARGIN ~3.6 KB.
+//   2026-10-15 (fourteenth entry): CAP UNCHANGED (326). sw.js no longer
+//     keeps an HTML page under a URL that names a script, a stylesheet or an
+//     image (the `/o/**` rewrite, an intercepting network's login page).
+//     sw.js is registered, not loaded by a tag, so it is not a first-party
+//     splash byte. Same method, against main at v197: 322.40 KB before and
+//     after (the version markers only). MARGIN ~3.6 KB.
 //   2026-10-15 (fifteenth entry): CAP UNCHANGED (326). The dashboard's
 //     "Pseudonymise names in export" (pseudonymiseTree in lib.js) now opens
 //     event payloads, redacts names that are no participant's and drops or
 //     rekeys account uids, as the nightly export does. Same method, against
-//     main at v197: lib.js +677 B, first-party 322.40 -> 323.07 KB. lib.js
+//     main at v198: lib.js +677 B, first-party 322.40 -> 323.07 KB. lib.js
 //     is eager and the function's only caller is the lazy dashboard; moving
 //     it out would be a reclaim of its own. The explanation lives in
 //     tests/lib.test.js, not lib.js. MARGIN ~2.9 KB.
