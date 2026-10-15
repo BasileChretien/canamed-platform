@@ -872,6 +872,12 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     same way; reveal() and the save now wait on _afterClaim too, writing
 //     where they were clicked. Same method, against main at v196:
 //     script.js +197 B, first-party 322.22 -> 322.41 KB. MARGIN ~3.6 KB.
+//   2026-10-15 (fourteenth entry): CAP UNCHANGED (326). sw.js no longer
+//     keeps an HTML page under a URL that names a script, a stylesheet or an
+//     image (the `/o/**` rewrite, an intercepting network's login page).
+//     sw.js is registered, not loaded by a tag, so it is not a first-party
+//     splash byte. Same method, against main at v197: 322.40 KB before and
+//     after (the version markers only). MARGIN ~3.6 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

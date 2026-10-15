@@ -38,7 +38,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v197";
+const SHELL_VERSION = "canamed-shell-v198";
 
 const SHELL_ASSETS = [
   "/",
@@ -184,7 +184,7 @@ self.addEventListener("install", (event) => {
       // Cache each asset individually so a single 404 doesn't abort the install
       return Promise.all(
         SHELL_ASSETS.map((url) =>
-          cache.add(url).catch((e) => {
+          precache(cache, url).catch((e) => {
             console.warn("[sw] shell asset failed to cache: " + url, e);
           })
         )
@@ -263,10 +263,57 @@ async function networkFirst(req, event) {
 /** Fetch, and keep a copy of a cacheable 200 so the page survives offline. */
 async function fromNetwork(req, event) {
   const resp = await fetch(req);
-  if (resp.ok && (resp.type === "basic" || resp.type === "default")) {
+  if (isKeepable(req.url, resp)) {
     keepAlive(event, storeInCache(req, resp.clone()));
   }
   return resp;
+}
+
+/** cache.add(), with the check every other write gets: a response that may
+ *  not be kept is refused, and the install goes on with the other assets. */
+async function precache(cache, url) {
+  const resp = await fetch(url);
+  if (!isKeepable(url, resp)) {
+    throw new Error("not kept: HTTP " + resp.status + ", " + (contentTypeOf(resp) || "no content type"));
+  }
+  await cache.put(url, resp);
+}
+
+/**
+ * Whether a response may be kept. A same-origin 2xx, as before — and not an
+ * HTML page under a URL that names some other kind of file.
+ *
+ * What is kept under a cache-first URL answers that URL, without the network,
+ * until the next SHELL_VERSION. Hosting's `/o/**` rewrite answers every path
+ * under it with index.html, and a network that intercepts traffic answers
+ * with its own login or block page; kept, either broke that script or
+ * stylesheet in that browser until the next release. The page still gets
+ * what the network sent — only the copy is refused, so the next load asks
+ * again. A response with no Content-Type is not shown to be HTML, and is kept.
+ */
+function isKeepable(url, resp) {
+  if (!resp || !resp.ok || !(resp.type === "basic" || resp.type === "default")) return false;
+  return !(isHtml(resp) && namesAnotherKindOfFile(new URL(url, self.location.origin).pathname));
+}
+
+/** A last path segment with an extension that is not a page's: "/room.css",
+ *  "/icons/icon-192.png". "/", "/v" and "/o/<slug>/" name pages. */
+function namesAnotherKindOfFile(pathname) {
+  const last = pathname.slice(pathname.lastIndexOf("/") + 1);
+  const dot = last.lastIndexOf(".");
+  if (dot <= 0) return false;
+  const ext = last.slice(dot + 1).toLowerCase();
+  return ext !== "html" && ext !== "htm";
+}
+
+function contentTypeOf(resp) {
+  const h = resp && resp.headers;
+  const v = h && typeof h.get === "function" ? h.get("content-type") : null;
+  return typeof v === "string" ? v : "";
+}
+
+function isHtml(resp) {
+  return contentTypeOf(resp).trim().toLowerCase().startsWith("text/html");
 }
 
 /** Put a response in the shell cache. Never rejects — quota/opaque are fine. */
