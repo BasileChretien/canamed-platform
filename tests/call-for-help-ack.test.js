@@ -24,15 +24,25 @@
  *        with its `at` and its `by` unchanged and its `msg` unchanged or gone
  *
  *    and the validator accepts a date older than a minute on any record that
- *    is acknowledged with `at` and `by` unchanged — the acknowledgement's
- *    shape, though the validator does not ask who writes it: a participant
- *    the `.write` admits can rewrite an acknowledged call's `msg` and keep its
- *    old date (before, only by re-dating it; recorded in review on #460, not
- *    closed). Nothing that was accepted
+ *    is acknowledged with `at` and `by` unchanged and `msg` unchanged or
+ *    gone — the acknowledgement's shape, though the validator does not ask
+ *    who writes it. Nothing that was accepted
  *    before is refused now — both edits only add a way through — and the
  *    rule accepts what the DEPLOYED client already sends, so no shell has to
  *    change for the acknowledgement to work (rules deploy at once; browsers
  *    keep a cached shell for a while).
+ *
+ * 1b. THE ACKNOWLEDGED RECORD WAS OPEN TO EDITS (review of #460 and #461).
+ *    That exception first checked `at` and `by` only, and the record had no
+ *    `$other`. So on a call acknowledged more than a minute after it was
+ *    raised, anyone the `.write` admits — a room claim anywhere in the
+ *    session — could rewrite its `msg` and keep its date, and add children of
+ *    any name and size. The participant's own data download copies the whole
+ *    record (data-rights.js, `helpCallsByMe`), so a rewritten `msg` read there
+ *    as a call they raised. Closed in the rules, both trees: the exception
+ *    asks for `msg` unchanged or gone, and the record is sealed (`by`, `at`,
+ *    `ack`, `msg`; `$other` false). The client has only ever written those
+ *    four (pinned below), so the seal refuses nothing a browser sends.
  *
  * 2. "RESET THIS ROOM'S CASE" DELETED NOTHING. The facilitator-only button
  *    did `refRevealed.remove()`: a delete of the PARENT `revealed` node, where
@@ -100,7 +110,8 @@ const whoInSession = (node, p) => "(" + p + ".child('roomOf').child(auth.uid).ex
 const VALIDATE = "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && " +
   "newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && " +
   "(newData.child('at').val() >= now - 60000 || newData.child('ack').val() == true && " +
-  "newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val()))";
+  "newData.child('at').val() == data.child('at').val() && newData.child('by').val() == data.child('by').val() && " +
+  "(!newData.child('msg').exists() || newData.child('msg').val() == data.child('msg').val())))";
 
 function bodyOf(src, name) {
   const start = src.indexOf("\nfunction " + name + "(");
@@ -124,13 +135,14 @@ test("the call for help: the facilitator may acknowledge the call that stands, a
   }
 });
 
-test("the validator takes a date older than a minute only on an acknowledged record that keeps its date and author", () => {
+test("the validator takes a date older than a minute only on an acknowledged record that keeps its date, author and message", () => {
   /* `at >= now - 60000` keeps a NEW call from being back-dated. The
      acknowledgement re-sends the call's own date, and a facilitator usually
      arrives more than a minute after the call — so the window applies to
-     every record except one that is acknowledged and keeps its date and its
-     author. Whoever writes it: the validator does not look at the writer or
-     at `msg` (see this file's header). */
+     every record except one that is acknowledged and keeps its date, its
+     author and its message (or drops the message, as the client's
+     acknowledgement does). Whoever writes it: the validator does not look at
+     the writer (see this file's header). */
   for (const [label, node] of TREES) {
     const cfh = node.rooms.$roomId.callForHelp;
     assert.strictEqual(cfh[".validate"], VALIDATE, `${label}/rooms/$roomId/callForHelp .validate`);
@@ -153,6 +165,32 @@ test("the rule accepts what the deployed client sends — the call it read, with
   const render = code(bodyOf(SCRIPT, "renderCallProf"));
   assert.match(render, /else if \(callForHelp\.ack\)/);
   assert.match(render, /A facilitator is coming ✓ \(tap to call again\)/);
+});
+
+test("the record is sealed to the four fields the client writes", () => {
+  for (const [label, node] of TREES) {
+    const cfh = node.rooms.$roomId.callForHelp;
+    const children = Object.keys(cfh).filter((k) => !k.startsWith("."));
+    assert.deepStrictEqual(children.sort(), ["$other", "ack", "at", "by", "msg"],
+      `${label}/rooms/$roomId/callForHelp declares other children than by/at/ack/msg/$other`);
+    assert.deepStrictEqual(cfh.$other, { ".validate": false }, `${label}: the record is not sealed`);
+    assert.strictEqual(cfh.by[".validate"], "newData.isString()");
+    assert.strictEqual(cfh.at[".validate"], "newData.isNumber()");
+    assert.strictEqual(cfh.msg[".validate"], "newData.val() == null || (newData.isString() && newData.val().length <= 200)");
+  }
+  /* Every object the client writes there, by either handle, carries only those
+     four. A key added to one of them is refused by the seal: declare it in
+     both trees first. */
+  const writes = [];
+  for (const src of [code(SCRIPT), code(ADMIN)]) {
+    for (const m of src.matchAll(/\b(?:refCallForHelp|cfh)\.(set|update)\(\{([^}]*)\}/g)) {
+      writes.push(m[2].split(",").map((kv) => kv.split(":")[0].trim()).filter(Boolean));
+    }
+  }
+  assert.ok(writes.length >= 4, "fewer client writes to callForHelp than expected — the scan matches nothing: " + writes.length);
+  for (const keys of writes) {
+    for (const k of keys) assert.ok(["by", "at", "msg", "ack"].includes(k), "the client writes `" + k + "` into callForHelp");
+  }
 });
 
 test("\"Reset this room's case\" is gone, and nothing deletes a room's whole list of findings", () => {
