@@ -894,9 +894,10 @@ test("computeCohortCounts: defensive — bad inputs do not throw", () => {
 // =============================================================
 // The full JSON archive download used to ship raw participant names.
 // pseudonymiseTree() is the shared walker that the admin checkbox
-// invokes when the "Pseudonymise names in export" toggle is on, and
-// mirrors scripts/pseudonymise-export.js (the cron research export)
-// so the two outputs are interchangeable.
+// invokes when the "Pseudonymise names in export" toggle is on. It follows
+// the nightly research export (scripts/lib/pseudonymise.js) on names and
+// account uids, and on nothing else: no consent filter, no university
+// buckets. The two outputs are NOT interchangeable.
 test("pseudoCode: deterministic Student-A..Z then AA, AB, ...", () => {
   assert.equal(lib.pseudoCode(0), "Student-A");
   assert.equal(lib.pseudoCode(1), "Student-B");
@@ -1016,6 +1017,111 @@ test("pseudonymiseTree: no real name survives a deep walk", () => {
   // and the pseudonyms ARE present
   assert.ok(json.includes("Student-A"));
   assert.ok(json.includes("Student-B"));
+});
+
+// The archive stopped matching the nightly research export when that export
+// changed (2026-05-30, then version 2 on 2026-10-14). Three things it kept,
+// each run here on what the client writes:
+//   - names inside an event's `payload`, a JSON object in a string — the
+//     walk replaced whole string values only;
+//   - a `by` / `name` that is no participant's: the facilitator's (stage
+//     events, manual scores, audit) and a participant's whose pool row is
+//     gone (Leave removes it);
+//   - account uids: creatorUid, scenarioRef.ownerUid, roomOf, both mapping
+//     tables, the keys of members / uidMembers, and the root `mail` queue of
+//     the mail function removed on 2026-09-24.
+// What it still does NOT do, unlike that export, on purpose: apply a consent
+// filter (this is the facilitator's own archive of their session, not a
+// research dataset), bucket `university`, or rewrite `stableId` (nor does
+// that export: it is the study's join key — DPA R8/R10). The explanation
+// lives here rather than in lib.js because lib.js is on the splash budget.
+const PSEUDO_LEAK_TREE = () => ({
+  creatorUid: "uidFacilitator",
+  scenarioRef: { id: "s1", source: "shared", ownerUid: "uidAuthor" },
+  pool: {
+    c1: { name: "Marie-Laure Dupont", university: "Caen", at: 100 },
+    c2: { name: "Yamada Hiroshi", university: "Nagoya", at: 200 },
+    c3: { name: "Yamada Hiroshi", university: "Nagoya", at: 300 }   // the same student, a second tab
+  },
+  clientMapping: { c1: "uidMarie", c2: "uidYamada", c3: "uidYamada" },
+  stableIdMapping: { sMarie: "uidMarie" },
+  members: { uidMarie: true, uidYamada: true, uidFacilitator: true },
+  roomOf: { uidMarie: { room: "Room 1", cid: "c1" } },
+  mail: { m1: { to: "teacher@example.test", subject: "Room 1", text: "Marie-Laure Dupont asked" } },
+  rooms: {
+    "Room 1": {
+      uidMembers: { uidMarie: true },
+      // logEvent(): { kind, by: myName, at, payload: JSON.stringify({…}).slice(0, 500) }
+      events: {
+        e1: { kind: "answer", by: "Marie-Laure Dupont", at: 150,
+          payload: JSON.stringify({ by: "Marie-Laure Dupont", university: "Caen", len: 24 }) },
+        // logAdminAction(): the FACILITATOR's name, outside and inside the payload
+        e2: { kind: "score", by: "Dr Claire Martin", at: 160,
+          payload: JSON.stringify({ room: "Room 1", points: 5, by: "Dr Claire Martin" }) },
+        e3: { kind: "x", by: "system", at: 161, payload: "not json {" },
+        e4: { kind: "x", by: "system", at: 162, payload: "[\"Marie-Laure Dupont\"]" },
+        e5: { kind: "x", by: "Admin", at: 163, payload: "[".repeat(240) + "]".repeat(240) },
+        e6: { kind: "x", by: "system", at: 164, payload: JSON.stringify({ t: "y".repeat(600) }) }
+      },
+      answers: {
+        moduleA: {
+          // a participant whose pool row is gone (Leave removes it)
+          a1: { by: "Pierre Leroy", cid: "c9", text: "red flags first", at: 170 }
+        }
+      }
+    }
+  },
+  created: { by: "Dr Claire Martin", at: 1 },
+  closed: { by: "Dr Claire Martin", at: 2 }
+});
+
+test("pseudonymiseTree: names inside an event's payload are replaced, and a payload that is not a client's is removed", () => {
+  const { tree: out } = lib.pseudonymiseTree(PSEUDO_LEAK_TREE());
+  const ev = out.rooms["Room 1"].events;
+  assert.deepStrictEqual(JSON.parse(ev.e1.payload), { by: "Student-A", university: "Caen", len: 24 });
+  assert.deepStrictEqual(JSON.parse(ev.e2.payload), { room: "Room 1", points: 5, by: "REDACTED-NAME" });
+  for (const id of ["e3", "e4", "e5", "e6"]) {
+    assert.ok(!("payload" in ev[id]), id + ": a payload that is not a JSON object of at most 500 characters must go");
+    assert.ok("kind" in ev[id], id + ": the event itself stays");
+  }
+});
+
+test("pseudonymiseTree: a `by` or `name` that is no participant's is redacted; `system` and `Admin` are not names", () => {
+  const { tree: out } = lib.pseudonymiseTree(PSEUDO_LEAK_TREE());
+  const room = out.rooms["Room 1"];
+  assert.strictEqual(room.events.e2.by, "REDACTED-NAME", "the facilitator's name on a manual score");
+  assert.strictEqual(room.answers.moduleA.a1.by, "REDACTED-NAME", "a participant whose pool row is gone");
+  assert.strictEqual(room.events.e3.by, "system");
+  assert.strictEqual(room.events.e5.by, "Admin");
+  assert.strictEqual(out.created.by, "Admin");
+  assert.strictEqual(out.closed.by, "Admin");
+  const json = JSON.stringify(out);
+  for (const real of ["Marie-Laure", "Yamada", "Claire Martin", "Pierre Leroy"]) {
+    assert.ok(!json.includes(real), "a real name survived: " + real);
+  }
+});
+
+test("pseudonymiseTree: no account uid survives, and the membership maps are keyed by pseudonym", () => {
+  const { tree: out } = lib.pseudonymiseTree(PSEUDO_LEAK_TREE());
+  const json = JSON.stringify(out);
+  for (const uid of ["uidFacilitator", "uidAuthor", "uidMarie", "uidYamada"]) {
+    assert.ok(!json.includes(uid), "an account uid survived: " + uid);
+  }
+  for (const k of ["creatorUid", "clientMapping", "stableIdMapping", "roomOf", "mail"]) {
+    assert.ok(!(k in out), k + " must not be in the archive");
+  }
+  assert.ok(!("ownerUid" in out.scenarioRef));
+  assert.strictEqual(out.scenarioRef.id, "s1", "the rest of scenarioRef stays");
+  // one account, two rows with one name: one pseudonym. The facilitator's
+  // account has no pool row, so it has no pseudonym, and goes.
+  assert.deepStrictEqual(out.members, { "Student-A": true, "Student-B": true });
+  assert.deepStrictEqual(out.rooms["Room 1"].uidMembers, { "Student-A": true });
+  assert.ok(!json.includes("teacher@example.test"));
+});
+
+test("pseudonymiseTree: a node called `mail` below the root is content, and stays", () => {
+  const tree = { pool: { c1: { name: "Ann", at: 1 } }, rooms: { R: { notes: { mail: "x" } } } };
+  assert.strictEqual(lib.pseudonymiseTree(tree).tree.rooms.R.notes.mail, "x");
 });
 
 test("pseudonymiseTree: defensive — null / non-object inputs return safely", () => {

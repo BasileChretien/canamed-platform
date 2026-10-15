@@ -2460,11 +2460,17 @@ best-effort, so read its log — `gh run view <deploy run> --log | grep -F
       client does not show. Not changed: it is the study's join key, so it is
       Basile's call (R8, R10 item 3). The coverage test lists every place it
       is carried so the list cannot grow unnoticed.
-    - ⚠️ **NOT fixed, separate change: the dashboard's "Pseudonymise names in
-      export"** (`pseudonymiseTree()` in `lib.js`) has the SAME name leak in
-      event payloads and removes no uid at all (run). Its comment says it
-      matches the nightly export; it stopped matching 2026-05-30. `lib.js` is
-      a shell asset, so that fix carries a shell bump.
+    - **Fixed in a separate change (2026-10-15): the dashboard's "Pseudonymise
+      names in export"** (`pseudonymiseTree()` in `lib.js`) had the SAME name
+      leak in event payloads and removed no uid at all (run). It now does
+      what version 2 does about names and uids: payloads opened (≤ 500
+      chars, a JSON object, else removed), a `by` / `name` that is no
+      participant's → `REDACTED-NAME` (`system` and `Admin` kept),
+      `creatorUid` / `ownerUid` / `roomOf` / both mapping tables dropped at
+      any depth, root `mail` dropped, `members` / `uidMembers` rekeyed by
+      pseudonym. NOT done, deliberately: a consent filter (it is the
+      facilitator's own archive), `university` buckets, `stableId`. Live
+      with the shell that carries it. `Verify:` `node --test tests/lib.test.js`.
     - **Also seen, not changed:** `members` is keyed by a uid's LAST pool
       row's pseudonym while names keep the FIRST, so one account behind two
       rows with one name is `Student-A` in the pool and `Student-B` in
