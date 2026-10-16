@@ -47,6 +47,7 @@ jobs:
   functions:
     name: functions (load + require)
     runs-on: ubuntu-latest
+    timeout-minutes: 5 # slowest healthy run ~0.3 min
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
