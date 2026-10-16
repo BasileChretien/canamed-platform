@@ -27,6 +27,7 @@ jobs:
   test:
     name: node --test
     runs-on: ubuntu-latest
+    timeout-minutes: 5 # slowest healthy run ~1.3 min
     steps:
       - uses: actions/checkout@v7
         with:
