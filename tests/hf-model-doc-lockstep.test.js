@@ -5,7 +5,8 @@
  *   - functions/index.js        HF_DEFAULT_MODEL / HF_DEFAULT_MODEL_JA (the truth)
  *   - functions/.env.example    the template operators copy
  *   - functions/README.md       the ".env file" setup block operators copy-paste
- *   - CLAUDE.md                 item 4's record of the deployed config
+ *   - docs/STATUS.md            item 4's record of the deployed config
+ *                               (in CLAUDE.md until 2026-11-04)
  *
  * CLAUDE.md and the README both said `mistralai/Mistral-7B-Instruct-v0.3` while
  * the code default and the live deployment used `meta-llama/Llama-3.1-8B-Instruct`
@@ -31,7 +32,7 @@ const read = p => fs.readFileSync(p, "utf8");
 const INDEX = read(path.join(FN, "index.js"));
 const ENV_EXAMPLE = read(path.join(FN, ".env.example"));
 const README = read(path.join(FN, "README.md"));
-const CLAUDE_MD = read(path.join(ROOT, "CLAUDE.md"));
+const STATUS_MD = read(path.join(ROOT, "docs", "STATUS.md"));
 
 /* The truth: the defaults baked into the function. */
 function codeDefault(constName) {
@@ -53,7 +54,7 @@ function assignments(src, key) {
 const SOURCES = [
   [".env.example", ENV_EXAMPLE],
   ["functions/README.md", README],
-  ["CLAUDE.md", CLAUDE_MD]
+  ["docs/STATUS.md", STATUS_MD]
 ];
 
 for (const [key, constName] of [["HF_MODEL", "HF_DEFAULT_MODEL"],
@@ -72,7 +73,7 @@ for (const [key, constName] of [["HF_MODEL", "HF_DEFAULT_MODEL"],
 
   test(`${key}: the guard is not vacuous — EVERY source states it`, () => {
     /* Per source, not a total. A total lets one file go silent while the others
-       carry the count: drop HF_MODEL from CLAUDE.md and a `>= 2` check still
+       carry the count: drop HF_MODEL from docs/STATUS.md and a `>= 2` check still
        passes, so the doc stops stating the deployed model and nothing complains
        — the exact failure this file exists to catch. Each source is a place an
        operator reads, so each must answer the question. */

@@ -257,7 +257,7 @@ A reset is refused once the session has been **closed**.
   Nothing is written under the session. **This is true once the
   database rules of that change have been released** — a step that can
   fail on its own after the site has been published; how to check is in
-  the repository's `CLAUDE.md`, under "A session's recovery code".
+  the repository's `docs/security-follow-ups.md`, under "A session's recovery code".
   (Before that it was written to `sessions/<code>/_superadminReset`,
   which every participant of the session could read while the reset was
   in progress, and a browser still running the earlier client goes on
